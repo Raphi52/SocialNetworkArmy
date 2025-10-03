@@ -562,3 +562,8 @@
 [2025-10-03 23:09:42][INFO] Profils chargés : 2.
 [2025-10-03 23:09:46][INFO] Test Fingerprint: "Score: Unique (Low Risk) | Canvas: data:image/png;base6 | Audio: AAAAAAAAAAAAAAAAAAAA"
 [2025-10-03 23:09:46][INFO] WebView2 prêt. TargetService initialisé.
+[2025-10-03 23:52:00][INFO] Profils chargés : 2.
+[2025-10-03 23:52:04][INFO] Test Fingerprint: "Score: Unique (Low Risk) | Canvas: data:image/png;base6 | Audio: AAAAAAAAAAAAAAAAAAAA"
+[2025-10-03 23:52:04][INFO] WebView2 prêt. TargetService initialisé.
+[2025-10-03 23:52:44][INFO] Test Fingerprint: "Score: Unique (Low Risk) | Canvas: data:image/png;base6 | Audio: AAAAAAAAAAAAAAAAAAAA"
+[2025-10-03 23:52:44][INFO] WebView2 prêt. TargetService initialisé.
