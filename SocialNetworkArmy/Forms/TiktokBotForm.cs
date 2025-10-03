@@ -18,9 +18,6 @@ namespace SocialNetworkArmy.Forms
         private readonly Profile profile;
         private readonly AutomationService automationService;
         private readonly LimitsService limitsService;
-        private readonly CleanupService cleanupService;
-        private readonly MonitoringService monitoringService;
-        private readonly ListBox profilesListBox;
         private WebView2 webView;
         private Button targetButton;
         private Button scrollButton;
@@ -28,26 +25,20 @@ namespace SocialNetworkArmy.Forms
         private Button stopButton;
         private TextBox logTextBox;
         private bool isScriptRunning = false;
-        private bool isCleaning = false; // Nouveau : Flag pour éviter double-cleanup
 
         public TikTokBotForm(Profile profile)
         {
             this.profile = profile;
             limitsService = new LimitsService(profile.Name);
-            cleanupService = new CleanupService();
-            monitoringService = new MonitoringService();
-            automationService = new AutomationService(new FingerprintService(), new ProxyService(), limitsService, cleanupService, monitoringService, profile);
+            automationService = new AutomationService(new FingerprintService(), new ProxyService(), limitsService, null, null, profile);
             InitializeComponent();
-            this.FormClosing += (s, args) => {
+            this.FormClosing += (s, e) => {
                 if (isScriptRunning)
                 {
                     StopScript();
-                    args.Cancel = true;
-                    Task.Delay(2000).ContinueWith(t => this.Close());
-                    return;
+                    e.Cancel = true;
+                    Task.Delay(1000).ContinueWith(t => this.Close());
                 }
-                // Clean collections avant close
-                profilesListBox?.Items.Clear(); // Si référence à MainForm ListBox, ou skip
             };
         }
 
@@ -110,7 +101,6 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
             }
 
-            await monitoringService.TestFingerprintAsync(webView);
             Logger.LogInfo("WebView TikTok focused and interactions enabled.");
         }
 
@@ -129,15 +119,15 @@ namespace SocialNetworkArmy.Forms
             publishButton.Enabled = false;
             logTextBox.AppendText($"Démarrage {actionName}...\r\n");
 
-            await webView.ExecuteScriptAsync("window.isRunning = true; console.log('Script démarré');");
+            if (webView?.CoreWebView2 != null)
+                await webView.ExecuteScriptAsync("window.isRunning = true; console.log('Script démarré');");
         }
 
-        private async void StopScript()
+        private void StopScript()
         {
-            if (!isScriptRunning || isCleaning) return;
+            if (!isScriptRunning) return;
 
             isScriptRunning = false;
-            isCleaning = true; // Lock pour éviter double-cleanup
             stopButton.Enabled = false;
             targetButton.Enabled = true;
             scrollButton.Enabled = true;
@@ -146,38 +136,14 @@ namespace SocialNetworkArmy.Forms
 
             try
             {
-                if (webView?.CoreWebView2 != null && !webView.IsDisposed)
-                {
-                    await webView.ExecuteScriptAsync("window.isRunning = false; console.log('Script arrêté');");
-                    logTextBox.AppendText("Flag JS envoyé.\r\n");
-
-                    if (webView.CoreWebView2.Source != null)
-                    {
-                        webView.CoreWebView2.Stop();
-                        logTextBox.AppendText("Navigation arrêtée.\r\n");
-                        await Task.Delay(200); // Stabilise avant cleanup
-                    }
-                }
-
-                if (webView != null)
-                {
-                    await automationService.CleanupAsync(webView, profile);
-                    logTextBox.AppendText("Cleanup terminé – Script arrêté avec succès.\r\n");
-                }
-            }
-            catch (InvalidOperationException ex)
-            {
-                logTextBox.AppendText($"Avertissement (ignoré) : Contrôle invalide – {ex.Message}\r\n");
-                Logger.LogWarning($"Stop ignoré : {ex.Message}");
+                if (webView?.CoreWebView2 != null)
+                    webView.ExecuteScriptAsync("window.isRunning = false; console.log('Script arrêté');");
+                logTextBox.AppendText("Flag JS envoyé – Script arrêté avec succès.\r\n");
             }
             catch (Exception ex)
             {
-                logTextBox.AppendText($"Erreur arrêt : {ex.Message}\r\n");
+                logTextBox.AppendText($"Erreur Stop (ignorée) : {ex.Message}\r\n");
                 Logger.LogError($"Erreur StopScript : {ex}");
-            }
-            finally
-            {
-                isCleaning = false; // Unlock
             }
         }
 
@@ -222,7 +188,7 @@ namespace SocialNetworkArmy.Forms
 
             var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "tiktok", "scroll.js");
 
-            await automationService.ExecuteActionWithLimitsAsync(webView, "scroll", "likes", async () => {
+            await automationService.ExecuteActionWithLimitsAsync(webView, "scroll", "views", async () => {
                 await automationService.ExecuteScriptAsync(webView, scriptPath);
                 await automationService.SimulateHumanScrollAsync(webView, Config.GetConfig().ScrollDurationMin * 60);
             });
@@ -254,7 +220,7 @@ namespace SocialNetworkArmy.Forms
                 var scriptContent = File.ReadAllText(scriptPath);
                 var fullScript = $"var data = {jsonData}; {scriptContent}";
 
-                await automationService.ExecuteActionWithLimitsAsync(webView, "publish", "posts", async () => {
+                await automationService.ExecuteActionWithLimitsAsync(webView, "publish", "videos", async () => {
                     await webView.ExecuteScriptAsync(fullScript);
                 });
 

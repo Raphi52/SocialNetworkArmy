@@ -1,4 +1,5 @@
-﻿// Utils/Config.cs - Ajouts limites (sans rotation)
+﻿// Utils/Config.cs
+using System;
 using System.IO;
 using Newtonsoft.Json;
 
@@ -22,24 +23,62 @@ namespace SocialNetworkArmy.Utils
         public int MaxPostsPerDay { get; set; } = 10;
         public double InteractionVariance { get; set; } = 0.2; // Pour random avancé
 
-        private static readonly string ConfigFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "config.json");
+        private static readonly string ConfigFile =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "config.json");
 
         public static Config GetConfig()
         {
-            if (File.Exists(ConfigFile))
+            try
             {
-                var json = File.ReadAllText(ConfigFile);
-                return JsonConvert.DeserializeObject<Config>(json) ?? new Config();
+                if (!File.Exists(ConfigFile))
+                {
+                    // si pas de fichier → on génère une config par défaut
+                    var defaultConfig = new Config();
+                    defaultConfig.SaveConfig();
+                    return defaultConfig;
+                }
+
+                string json = File.ReadAllText(ConfigFile);
+                var cfg = JsonConvert.DeserializeObject<Config>(json) ?? new Config();
+
+                // sécurise les bornes min/max
+                cfg.Normalize();
+
+                return cfg;
             }
-            var config = new Config();
-            config.SaveConfig();
-            return config;
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Config] Erreur lecture config : {ex.Message}");
+                // fallback : retourne une config par défaut
+                return new Config();
+            }
         }
 
         public void SaveConfig()
         {
-            var json = JsonConvert.SerializeObject(this, Formatting.Indented);
-            File.WriteAllText(ConfigFile, json);
+            try
+            {
+                string json = JsonConvert.SerializeObject(this, Formatting.Indented);
+                File.WriteAllText(ConfigFile, json);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Config] Erreur écriture config : {ex.Message}");
+            }
+        }
+
+        public void Normalize()
+        {
+            if (ViewDurationMin > ViewDurationMax)
+                (ViewDurationMin, ViewDurationMax) = (ViewDurationMax, ViewDurationMin);
+
+            if (ActionDelayMin > ActionDelayMax)
+                (ActionDelayMin, ActionDelayMax) = (ActionDelayMax, ActionDelayMin);
+
+            if (ScrollDurationMin > ScrollDurationMax)
+                (ScrollDurationMin, ScrollDurationMax) = (ScrollDurationMax, ScrollDurationMin);
+
+            // On peut ajouter d’autres corrections ici si nécessaire
         }
     }
 }
