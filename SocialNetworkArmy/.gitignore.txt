@@ -1,0 +1,15 @@
+# Visual Studio
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.sln.docstates
+
+# .NET
+packages/
+*.csproj.user
+
+# Data sensibles
+Data/Logs/
+Data/profiles.json

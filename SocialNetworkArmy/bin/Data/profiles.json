@@ -1,0 +1,9 @@
+[
+  {
+    "name": "precious.milaa",
+    "platform": "Instagram",
+    "proxy": "",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0\",\"Timezone\":\"Europe/Paris\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1536x864\",\"Viewport\":\"1366x705\",\"WebGLVendor\":\"NVIDIA Corporation\",\"WebGLRenderer\":\"Apple M1 Pro\",\"AudioContext\":\"noise_5138_0,44\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\"],\"HardwareConcurrency\":5,\"Platform\":\"Win32\",\"Vendor\":\"Google Inc.\",\"ScreenDepth\":32,\"MaxTouchPoints\":0}",
+    "cookies": ""
+  }
+]
