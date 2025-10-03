@@ -1,9 +1,9 @@
-﻿// target.js - Instagram Target Action (version simplifiée : clic direct premier ._aajz)
+﻿// target.js - Instagram Target Action (log URL + wait renforcé ._aajz)
 (async function () {
     const config = {
         viewDurationMin: 5, viewDurationMax: 10,
         likePercent: 20, commentPercent: 30,
-        maxReels: 10,
+        maxReels: 1,
         delayMin: 2000, delayMax: 5000
     };
 
@@ -25,11 +25,17 @@
 
     function simulateHumanClick(element) {
         if (!element) return false;
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await new Promise(resolve => setTimeout(resolve, 1000));
         const rect = element.getBoundingClientRect();
         const x = rect.left + rect.width / 2 + (Math.random() - 0.5) * 10;
         const y = rect.top + rect.height / 2 + (Math.random() - 0.5) * 10;
-        const event = new MouseEvent('click', { bubbles: true, clientX: x, clientY: y });
-        element.dispatchEvent(event);
+        const down = new MouseEvent('mousedown', { bubbles: true, clientX: x, clientY: y });
+        const up = new MouseEvent('mouseup', { bubbles: true, clientX: x, clientY: y });
+        const click = new MouseEvent('click', { bubbles: true, clientX: x, clientY: y });
+        element.dispatchEvent(down);
+        element.dispatchEvent(up);
+        element.dispatchEvent(click);
         console.log('Clic simulé sur Reel : ', element.href || element.className.substring(0, 20));
         return true;
     }
@@ -64,20 +70,36 @@
         }
     }
 
-    // Wait simple pour premier ._aajz (poll 2s, max 10s)
-    async function waitForFirstReel(maxWait = 10000) {
-        console.log('Attente premier Reel via a ._aajz...');
+    // Wait renforcé pour premier ._aajz (poll 500ms, scroll si 0, max 30s)
+    async function waitForFirstReel(maxWait = 30000) {
+        console.log('Wait renforcé pour a ._aajz...');
         const start = Date.now();
+        let scrollCount = 0;
         while (Date.now() - start < maxWait) {
-            const firstReel = document.querySelector('a ._aajz');
-            if (firstReel) {
-                console.log('Premier Reel trouvé ! Href: ' + (firstReel.href || 'N/A'));
-                return firstReel;
+            const allReels = document.querySelectorAll('a ._aajz');
+            console.log(`Éléments a ._aajz trouvés : ${allReels.length}`);
+            if (allReels.length > 0) {
+                const firstReel = allReels[0];
+                const rect = firstReel.getBoundingClientRect();
+                console.log('Premier Reel – Top: ' + rect.top + ', Href: ' + (firstReel.href || 'N/A'));
+                if (rect.top >= -100) {
+                    console.log('Premier Reel visible – prêt pour clic !');
+                    return firstReel;
+                } else {
+                    console.log('Premier Reel hors viewport – scroll auto...');
+                    firstReel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                }
+            } else {
+                console.log('Pas d\'a ._aajz – scroll pour charger...');
+                window.scrollBy(0, window.innerHeight);
+                scrollCount++;
+                if (scrollCount > 5) break; // Max 5 scrolls
+                await new Promise(resolve => setTimeout(resolve, 2000));
             }
-            console.log('Pas encore trouvé – wait 2s...');
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 500)); // Poll 0.5s
         }
-        console.error('Timeout – Pas de Reel après ' + maxWait + 'ms');
+        console.error('Timeout – Pas de Reel après ' + maxWait + 'ms et ' + scrollCount + ' scrolls');
         return null;
     }
 
@@ -87,28 +109,32 @@
         try {
             console.log('Navigation vers ' + username + '/reels/');
             window.location.href = `https://www.instagram.com/${username}/reels/`;
-            await new Promise(resolve => setTimeout(resolve, randomDelay(5000, 7000)));
+            await new Promise(resolve => setTimeout(resolve, randomDelay(6000, 9000))); // Wait load étendu
 
             if (shouldStop()) return 'STOPPED';
 
-            // Scroll forcé pour charger (5x hauteur)
-            console.log('Scroll forcé pour charger Reels...');
+            // Log URL pour check navigation
+            console.log('URL après nav : ' + window.location.href);
+
+            // Scroll forcé upfront (5x)
+            console.log('Scroll forcé pour Reels...');
             for (let i = 0; i < 5; i++) {
                 window.scrollBy(0, window.innerHeight);
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => setTimeout(resolve, 1500));
             }
 
             if (shouldStop()) return 'STOPPED';
 
             // Wait et clic
-            const firstReel = await waitForFirstReel(10000);
+            const firstReel = await waitForFirstReel(30000);
             if (!firstReel) {
-                console.error('Premier Reel non trouvé – skip profil.');
-                throw new Error('No Reel found');
+                console.error('Premier Reel non trouvé – skip.');
+                throw new Error('No Reel');
             }
 
+            console.log('Premier Reel prêt – Clic !');
             simulateHumanClick(firstReel);
-            await new Promise(resolve => setTimeout(resolve, randomDelay(2000, 4000)));
+            await new Promise(resolve => setTimeout(resolve, randomDelay(3000, 5000)));
 
             if (shouldStop()) return 'STOPPED';
 
@@ -117,27 +143,11 @@
             const comment = generateRandomComment();
             await addComment(comment);
 
-            // Visionne 1-2 suivants (pour test)
-            let reelsViewed = 1;
-            for (let i = 0; i < 1; i++) {  // Seulement 1 next pour test
-                if (shouldStop()) return 'STOPPED';
-                const nextBtn = document.querySelector('button[aria-label="Next"]') || document.querySelector('div[role="button"][tabindex="0"]');
-                if (nextBtn) {
-                    simulateHumanClick(nextBtn);
-                    console.log('Next Reel vu.');
-                    await new Promise(resolve => setTimeout(resolve, randomDelay(3000, 5000)));
-                    likePost();
-                    reelsViewed++;
-                } else {
-                    break;
-                }
-            }
-
-            console.log(`Target ${username} OK (${reelsViewed} Reels vus).`);
+            console.log(`Target ${username} OK.`);
             return 'SUCCESS';
         } catch (error) {
             if (shouldStop()) return 'STOPPED';
-            console.error(`Erreur ${username}: ${error.message} – Skip.`);
+            console.error(`Erreur ${username}: ${error.message}`);
             return 'ERROR: ' + error.message;
         }
     }

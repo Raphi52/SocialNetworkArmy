@@ -30,6 +30,8 @@ namespace SocialNetworkArmy.Forms
 
         private Font yaheiBold12 = new Font("Microsoft YaHei", 12f, FontStyle.Bold); // Police globale YaHei 12 gras
 
+        private System.Windows.Forms.Timer closeTimer; // Timer pour delay safe sans re-entrancy
+
         public InstagramBotForm(Profile profile)
         {
             this.profile = profile;
@@ -38,14 +40,30 @@ namespace SocialNetworkArmy.Forms
             monitoringService = new MonitoringService();
             automationService = new AutomationService(new FingerprintService(), new ProxyService(), limitsService, cleanupService, monitoringService, profile);
             InitializeComponent();
-            this.FormClosing += (s, e) => {
-                if (isScriptRunning)
-                {
-                    StopScript();
-                    e.Cancel = true;
-                    Task.Delay(1000).ContinueWith(t => this.Close());
-                }
+
+            // Timer pour retry close safe
+            closeTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            closeTimer.Tick += (s, e) =>
+            {
+                closeTimer.Stop();
+                this.Close(); // Safe après delay
             };
+
+            this.FormClosing += OnFormClosing; // Handler nommé pour éviter re-entrancy
+        }
+
+        private void OnFormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (isScriptRunning)
+            {
+                e.Cancel = true;
+                StopScript(); // Sync stop
+
+                // Delay via timer au lieu de Task (évite cancel op)
+                closeTimer.Interval = 1000;
+                closeTimer.Start();
+                return;
+            }
         }
 
         private void InitializeComponent()
@@ -177,47 +195,165 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
+        // InstagramBotForm.cs
+        // InstagramBotForm.cs
+        // InstagramBotForm.cs
         private async void TargetButton_Click(object sender, EventArgs e)
         {
+            // 0) Démarrage « Target » (UI + flag JS)
             await StartScriptAsync("Target");
 
-            var targetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "targets.txt");
-            var targets = Helpers.LoadTargets(targetsPath);
-            if (!targets.Any())
+            try
             {
-                logTextBox.AppendText("Aucun target trouvé dans targets.txt !\r\n");
-                StopScript();
-                return;
+                // 1) Charger la liste des cibles
+                var targetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "targets.txt");
+                var targets = Helpers.LoadTargets(targetsPath);
+                if (!targets.Any())
+                {
+                    logTextBox.AppendText("Aucun target trouvé dans targets.txt !\r\n");
+                    StopScript();
+                    return;
+                }
+
+                // 2) (Optionnel) ouvrir DevTools pour voir console.log/erreurs
+                try { webView.CoreWebView2?.OpenDevToolsWindow(); } catch { /* ignore */ }
+
+                // 3) Aller sur la page Reels du 1er target
+                var firstTarget = targets.First().Trim();
+                var targetUrl = $"https://www.instagram.com/{firstTarget}/reels/";
+                logTextBox.AppendText($"[NAV] Vers {targetUrl}\r\n");
+                webView.CoreWebView2.Navigate(targetUrl);
+
+                // 4) Attendre un peu que la navigation se stabilise
+                await Task.Delay(3000);
+
+                // 5) Lire l’URL et le titre (diagnostic)
+                var url = await webView.ExecuteScriptAsync("window.location.href");
+                var title = await webView.ExecuteScriptAsync("document.title");
+                logTextBox.AppendText($"[NAV] url={url}, title={title}\r\n");
+
+                // 6) Vérifier login (mur de connexion)
+                var loginWall = await webView.ExecuteScriptAsync(@"
+(function(){
+  return !!document.querySelector('[href*=""/accounts/login/""], .login-button');
+})()");
+                if (string.Equals(loginWall, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    logTextBox.AppendText("[CHECK] Login requis : connecte-toi dans la WebView puis relance.\r\n");
+                    StopScript();
+                    return;
+                }
+
+                // 7) Sélecteur 1er Reel (priorité au grid <article>)
+                var findReelScript = @"
+(function(){
+  const a = document.querySelector('article a[href*=""/reel/""]')
+        || document.querySelector('a[href*=""/reel/""]');
+  return a ? a.href : null;
+})()";
+
+                var reelHref = await webView.ExecuteScriptAsync(findReelScript);
+                logTextBox.AppendText($"[SELECTOR] 1er reel href (avant scroll) = {reelHref}\r\n");
+
+                // 8) Lazy-load par scroll si rien
+                if (reelHref == "null")
+                {
+                    logTextBox.AppendText("[SCROLL] Lazy-load…\r\n");
+                    await webView.ExecuteScriptAsync(@"
+(async function(){
+  for(let i=0;i<6;i++){
+    window.scrollBy(0, window.innerHeight);
+    await new Promise(r => setTimeout(r, 800));
+  }
+  return true;
+})()");
+                    await Task.Delay(1000);
+
+                    reelHref = await webView.ExecuteScriptAsync(findReelScript);
+                    logTextBox.AppendText($"[SELECTOR] 1er reel href (après scroll) = {reelHref}\r\n");
+                }
+
+                // 9) Si toujours rien → abandon propre
+                if (reelHref == "null")
+                {
+                    logTextBox.AppendText("[ERREUR] Aucun Reel détecté sur la page du profil.\r\n");
+                    StopScript();
+                    return;
+                }
+
+                // 10) Tentative 1 : click simple
+                var clickSimple = await webView.ExecuteScriptAsync(@"
+(function(){
+  const el = document.querySelector('article a[href*=""/reel/""]')
+          || document.querySelector('a[href*=""/reel/""]');
+  if(!el) return 'NO_EL';
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  el.click();
+  return 'CLICKED';
+})()");
+                logTextBox.AppendText($"[CLICK_SIMPLE] résultat={clickSimple}\r\n");
+
+                // 11) Check ouverture (URL / modal / vidéo)
+                var openedCheck = await webView.ExecuteScriptAsync(@"
+(function(){
+  const urlHasReel = window.location.href.includes(""/reel/"");
+  const hasDialog  = !!document.querySelector('div[role=""dialog""]');
+  const hasOverlay = !!document.querySelector('[data-visualcompletion=""ignore""] video, video');
+  return (urlHasReel || hasDialog || hasOverlay).toString();
+})()");
+                logTextBox.AppendText($"[CHECK_OPENED] après click simple => {openedCheck}\r\n");
+
+                // 12) Si pas ouvert, MouseEvents SANS 'click' pour privilégier le MODAL
+                if (!string.Equals(openedCheck, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    var clickMouseEvents = await webView.ExecuteScriptAsync(@"
+(async function(){
+  const el = document.querySelector('article a[href*=""/reel/""]')
+          || document.querySelector('a[href*=""/reel/""]');
+  if(!el) return 'NO_EL';
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  await new Promise(r=>setTimeout(r,500));
+  const r = el.getBoundingClientRect();
+  const x = r.left + r.width/2, y = r.top + r.height/2;
+  el.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:x,clientY:y}));
+  el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:x,clientY:y}));
+  return 'MOUSE_EVENTS_SENT';
+})()");
+                    logTextBox.AppendText($"[CLICK_MOUSE] résultat={clickMouseEvents}\r\n");
+
+                    // 🔁 Re-vérifier ouverture (recalcul !)
+                    openedCheck = await webView.ExecuteScriptAsync(@"
+(function(){
+  const urlHasReel = window.location.href.includes(""/reel/"");
+  const hasDialog  = !!document.querySelector('div[role=""dialog""]');
+  const hasOverlay = !!document.querySelector('[data-visualcompletion=""ignore""] video, video');
+  return (urlHasReel || hasDialog || hasOverlay).toString();
+})()");
+                    logTextBox.AppendText($"[CHECK_OPENED] après mouse events => {openedCheck}\r\n");
+                }
+
+                // 13) Fin : log de succès / échec
+                if (string.Equals(openedCheck, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    logTextBox.AppendText("[OK] Premier Reel ouvert avec succès ✅\r\n");
+                }
+                else
+                {
+                    logTextBox.AppendText("[KO] Impossible d’ouvrir le 1er Reel (sélecteur/clic).❌\r\n");
+                }
             }
-
-            var jsonData = JsonConvert.SerializeObject(targets);
-            var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "instagram", "target.js");
-
-            if (File.Exists(scriptPath))
+            catch (Exception ex)
             {
-                var scriptContent = File.ReadAllText(scriptPath);
-                var fullScript = $"var data = {jsonData}; {scriptContent}";
-
-                await automationService.ExecuteActionWithLimitsAsync(webView, "target", "likes", async () => {
-                    try
-                    {
-                        await webView.ExecuteScriptAsync(fullScript);
-                    }
-                    catch (Exception scriptEx)
-                    {
-                        logTextBox.AppendText($"Erreur script JS : {scriptEx.Message}\r\n");
-                        Logger.LogError($"JS Error in Target : {scriptEx}");
-                    }
-                });
-
-                logTextBox.AppendText($"Target lancé sur {targets.Count} profils.\r\n");
+                logTextBox.AppendText($"[EXCEPTION] {ex.Message}\r\n");
+                Logger.LogError($"TargetButton_Click: {ex}");
             }
-            else
+            finally
             {
-                logTextBox.AppendText("Script target.js introuvable !\r\n");
+                // Remet l’UI proprement (conforme à ton flux actuel)
                 StopScript();
             }
         }
+
 
         private async void ScrollButton_Click(object sender, EventArgs e)
         {
@@ -226,7 +362,8 @@ namespace SocialNetworkArmy.Forms
 
             var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "instagram", "scroll.js");
 
-            await automationService.ExecuteActionWithLimitsAsync(webView, "scroll", "likes", async () => {
+            await automationService.ExecuteActionWithLimitsAsync(webView, "scroll", "likes", async () =>
+            {
                 await automationService.ExecuteScriptAsync(webView, scriptPath);
                 await automationService.SimulateHumanScrollAsync(webView, Config.GetConfig().ScrollDurationMin * 60);
             });
@@ -258,7 +395,8 @@ namespace SocialNetworkArmy.Forms
                 var scriptContent = File.ReadAllText(scriptPath);
                 var fullScript = $"var data = {jsonData}; {scriptContent}";
 
-                await automationService.ExecuteActionWithLimitsAsync(webView, "publish", "posts", async () => {
+                await automationService.ExecuteActionWithLimitsAsync(webView, "publish", "posts", async () =>
+                {
                     await webView.ExecuteScriptAsync(fullScript);
                 });
 
@@ -281,6 +419,7 @@ namespace SocialNetworkArmy.Forms
             if (disposing)
             {
                 yaheiBold12.Dispose(); // Clean font
+                closeTimer?.Dispose();
             }
             base.Dispose(disposing);
         }

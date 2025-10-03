@@ -30,6 +30,8 @@ namespace SocialNetworkArmy.Forms
 
         private Font yaheiBold12 = new Font("Microsoft YaHei", 12f, FontStyle.Bold); // Police globale YaHei 12 gras
 
+        private System.Windows.Forms.Timer closeTimer; // Timer pour delay safe sans re-entrancy
+
         public TikTokBotForm(Profile profile)
         {
             this.profile = profile;
@@ -38,14 +40,29 @@ namespace SocialNetworkArmy.Forms
             monitoringService = new MonitoringService();
             automationService = new AutomationService(new FingerprintService(), new ProxyService(), limitsService, cleanupService, monitoringService, profile);
             InitializeComponent();
-            this.FormClosing += (s, e) => {
-                if (isScriptRunning)
-                {
-                    StopScript();
-                    e.Cancel = true;
-                    Task.Delay(1000).ContinueWith(t => this.Close());
-                }
+
+            // Timer pour retry close safe
+            closeTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            closeTimer.Tick += (s, e) => {
+                closeTimer.Stop();
+                this.Close(); // Safe après delay
             };
+
+            this.FormClosing += OnFormClosing; // Handler nommé pour éviter re-entrancy
+        }
+
+        private void OnFormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (isScriptRunning)
+            {
+                e.Cancel = true;
+                StopScript(); // Sync stop
+
+                // Delay via timer au lieu de Task (évite cancel op)
+                closeTimer.Interval = 1000;
+                closeTimer.Start();
+                return;
+            }
         }
 
         private void InitializeComponent()
