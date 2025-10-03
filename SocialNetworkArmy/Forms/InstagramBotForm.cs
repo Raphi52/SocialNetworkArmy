@@ -20,6 +20,7 @@ namespace SocialNetworkArmy.Forms
         private readonly LimitsService limitsService;
         private readonly CleanupService cleanupService;
         private readonly MonitoringService monitoringService;
+        private readonly ListBox profilesListBox;
         private WebView2 webView;
         private Button targetButton;
         private Button scrollButton;
@@ -27,6 +28,7 @@ namespace SocialNetworkArmy.Forms
         private Button stopButton;
         private TextBox logTextBox;
         private bool isScriptRunning = false;
+        private bool isCleaning = false; // Nouveau : Flag pour éviter double-cleanup
 
         public InstagramBotForm(Profile profile)
         {
@@ -36,15 +38,25 @@ namespace SocialNetworkArmy.Forms
             monitoringService = new MonitoringService();
             automationService = new AutomationService(new FingerprintService(), new ProxyService(), limitsService, cleanupService, monitoringService, profile);
             InitializeComponent();
+            this.FormClosing += (s, args) => {
+                if (isScriptRunning)
+                {
+                    StopScript();
+                    args.Cancel = true;
+                    Task.Delay(2000).ContinueWith(t => this.Close());
+                    return;
+                }
+                // Clean collections avant close
+                profilesListBox?.Items.Clear(); // Si référence à MainForm ListBox, ou skip
+            };
         }
 
         private void InitializeComponent()
         {
-            this.ClientSize = new Size(900, 650);  // Augmenté en hauteur pour accommoder la textbox plus grande
+            this.ClientSize = new Size(900, 650);
             this.Text = $"Instagram Bot - {profile.Name}";
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // Crée le panel en premier, hauteur augmentée à 150 pour plus d'espace logs
             var panel = new Panel { Dock = DockStyle.Bottom, Height = 150 };
             targetButton = new Button { Text = "Target", Location = new Point(10, 10), Size = new Size(100, 30) };
             targetButton.Click += TargetButton_Click;
@@ -53,7 +65,6 @@ namespace SocialNetworkArmy.Forms
             publishButton = new Button { Text = "Publish", Location = new Point(230, 10), Size = new Size(100, 30) };
             publishButton.Click += PublishButton_Click;
 
-            // Bouton Stop
             stopButton = new Button
             {
                 Text = "Stop",
@@ -65,7 +76,6 @@ namespace SocialNetworkArmy.Forms
             };
             stopButton.Click += StopButton_Click;
 
-            // TextBox logs agrandie : plus haute (90 au lieu de 40), même x mais y ajusté si besoin
             logTextBox = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Location = new Point(10, 50), Size = new Size(880, 90), ReadOnly = true };
 
             panel.Controls.Add(targetButton);
@@ -73,10 +83,10 @@ namespace SocialNetworkArmy.Forms
             panel.Controls.Add(publishButton);
             panel.Controls.Add(stopButton);
             panel.Controls.Add(logTextBox);
-            this.Controls.Add(panel);  // Panel en premier
+            this.Controls.Add(panel);
 
-            webView = new WebView2 { Dock = DockStyle.Fill };  // WebView2 après, s'ajuste automatiquement
-            this.Controls.Add(webView);  // Ajouté en dernier
+            webView = new WebView2 { Dock = DockStyle.Fill };
+            this.Controls.Add(webView);
 
             LoadBrowserAsync();
         }
@@ -89,26 +99,21 @@ namespace SocialNetworkArmy.Forms
             this.Controls.Add(webView);
             webView.CoreWebView2.Navigate("https://www.instagram.com/");
 
-            // Ajouts pour activer les clics/focus
-            await Task.Delay(2000);  // Délai pour que la page charge
-            webView.Focus();  // Force le focus sur WebView
-            webView.BringToFront();  // Met au premier plan
-            webView.DefaultBackgroundColor = System.Drawing.Color.White;  // Force un redraw
+            await Task.Delay(2000);
+            webView.Focus();
+            webView.BringToFront();
+            webView.DefaultBackgroundColor = System.Drawing.Color.White;
 
-            // Active menu contextuel et scripts
             if (webView.CoreWebView2 != null)
             {
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
             }
 
-            // Intégration : Test fingerprint après init
             await monitoringService.TestFingerprintAsync(webView);
-
             Logger.LogInfo("WebView Instagram focused and interactions enabled.");
         }
 
-        // Méthodes pour démarrer un script (ajoute le flag isRunning)
         private async Task StartScriptAsync(string actionName)
         {
             if (isScriptRunning)
@@ -118,51 +123,74 @@ namespace SocialNetworkArmy.Forms
             }
 
             isScriptRunning = true;
-            stopButton.Enabled = true;  // Active le bouton Stop
-            targetButton.Enabled = false;  // Désactive les autres boutons pendant exécution
+            stopButton.Enabled = true;
+            targetButton.Enabled = false;
             scrollButton.Enabled = false;
             publishButton.Enabled = false;
             logTextBox.AppendText($"Démarrage {actionName}...\r\n");
 
-            // Injecte le flag JS pour démarrer
             await webView.ExecuteScriptAsync("window.isRunning = true; console.log('Script démarré');");
         }
 
-        private void StopScript()
+        private async void StopScript()
         {
-            if (!isScriptRunning) return;
+            if (!isScriptRunning || isCleaning) return;
 
             isScriptRunning = false;
+            isCleaning = true; // Lock pour éviter double-cleanup
             stopButton.Enabled = false;
             targetButton.Enabled = true;
             scrollButton.Enabled = true;
             publishButton.Enabled = true;
             logTextBox.AppendText("Arrêt du script en cours...\r\n");
 
-            // Set le flag JS à false pour stopper les boucles
-            _ = Task.Run(async () => {
-                if (webView?.CoreWebView2 != null)
+            try
+            {
+                if (webView?.CoreWebView2 != null && !webView.IsDisposed)
                 {
-                    await webView.ExecuteScriptAsync("window.isRunning = false; console.log('Script arrêté par l\'utilisateur');");
-                    // Optionnel : Arrête toute navigation en cours
-                    webView.CoreWebView2.Stop();
+                    await webView.ExecuteScriptAsync("window.isRunning = false; console.log('Script arrêté');");
+                    logTextBox.AppendText("Flag JS envoyé.\r\n");
+
+                    if (webView.CoreWebView2.Source != null)
+                    {
+                        webView.CoreWebView2.Stop();
+                        logTextBox.AppendText("Navigation arrêtée.\r\n");
+                        await Task.Delay(200); // Stabilise avant cleanup
+                    }
                 }
-                // Intégration : Cleanup après arrêt
-                await automationService.CleanupAsync(webView, profile);
-            });
+
+                if (webView != null)
+                {
+                    await automationService.CleanupAsync(webView, profile);
+                    logTextBox.AppendText("Cleanup terminé – Script arrêté avec succès.\r\n");
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                logTextBox.AppendText($"Avertissement (ignoré) : Contrôle invalide – {ex.Message}\r\n");
+                Logger.LogWarning($"Stop ignoré : {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"Erreur arrêt : {ex.Message}\r\n");
+                Logger.LogError($"Erreur StopScript : {ex}");
+            }
+            finally
+            {
+                isCleaning = false; // Unlock
+            }
         }
 
         private async void TargetButton_Click(object sender, EventArgs e)
         {
             await StartScriptAsync("Target");
 
-            // Charge les targets depuis targets.txt
             var targetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "targets.txt");
             var targets = Helpers.LoadTargets(targetsPath);
             if (!targets.Any())
             {
                 logTextBox.AppendText("Aucun target trouvé dans targets.txt !\r\n");
-                StopScript();  // Reset si erreur
+                StopScript();
                 return;
             }
 
@@ -174,7 +202,6 @@ namespace SocialNetworkArmy.Forms
                 var scriptContent = File.ReadAllText(scriptPath);
                 var fullScript = $"var data = {jsonData}; {scriptContent}";
 
-                // Intégration : Wrap avec limits et CAPTCHA check
                 await automationService.ExecuteActionWithLimitsAsync(webView, "target", "likes", async () => {
                     await webView.ExecuteScriptAsync(fullScript);
                 });
@@ -195,7 +222,6 @@ namespace SocialNetworkArmy.Forms
 
             var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "instagram", "scroll.js");
 
-            // Intégration : Wrap avec limits
             await automationService.ExecuteActionWithLimitsAsync(webView, "scroll", "likes", async () => {
                 await automationService.ExecuteScriptAsync(webView, scriptPath);
                 await automationService.SimulateHumanScrollAsync(webView, Config.GetConfig().ScrollDurationMin * 60);
@@ -206,7 +232,6 @@ namespace SocialNetworkArmy.Forms
         {
             await StartScriptAsync("Publish");
 
-            // Charge et filtre le schedule (aujourd'hui + profil + plateforme)
             var today = DateTime.Today;
             var schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "schedule.csv");
             var allSchedule = Helpers.LoadSchedule(schedulePath);
@@ -229,7 +254,6 @@ namespace SocialNetworkArmy.Forms
                 var scriptContent = File.ReadAllText(scriptPath);
                 var fullScript = $"var data = {jsonData}; {scriptContent}";
 
-                // Intégration : Wrap avec limits pour posts
                 await automationService.ExecuteActionWithLimitsAsync(webView, "publish", "posts", async () => {
                     await webView.ExecuteScriptAsync(fullScript);
                 });

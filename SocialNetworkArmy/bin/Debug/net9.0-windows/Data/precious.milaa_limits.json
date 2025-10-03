@@ -1,0 +1,11 @@
+{
+  "likes": {
+    "MaxLikes": 50,
+    "MaxComments": 20,
+    "MaxPosts": 10,
+    "MaxFollows": 20,
+    "ResetDate": "2025-10-03T00:00:00+02:00",
+    "LikesCount": 9,
+    "CommentsCount": 0
+  }
+}

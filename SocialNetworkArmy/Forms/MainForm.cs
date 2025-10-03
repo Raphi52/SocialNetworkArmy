@@ -40,15 +40,17 @@ namespace SocialNetworkArmy.Forms
             this.AutoScaleDimensions = new SizeF(8F, 20F);
             this.AutoScaleMode = AutoScaleMode.Font;
 
-            profilesListBox = new ListBox { Location = new Point(12, 12), Size = new Size(400, 200) };
+            profilesListBox = new ListBox { Location = new Point(12, 12), Size = new Size(300, 200) };
             profilesListBox.SelectedIndexChanged += ProfilesListBox_SelectedIndexChanged;
 
             platformComboBox = new ComboBox { Location = new Point(12, 220), Size = new Size(100, 23), DropDownStyle = ComboBoxStyle.DropDownList };
             platformComboBox.Items.AddRange(new object[] { "Instagram", "TikTok" });
 
-            profileNameTextBox = new TextBox { Location = new Point(120, 220), Size = new Size(100, 23), PlaceholderText = "Nom" };
+            profileNameTextBox = new TextBox { Location = new Point(120, 220), Size = new Size(100, 23) };
+            profileNameTextBox.PlaceholderText = "Nom";
 
-            proxyTextBox = new TextBox { Location = new Point(230, 220), Size = new Size(150, 23), PlaceholderText = "Proxy (optionnel)" };
+            proxyTextBox = new TextBox { Location = new Point(230, 220), Size = new Size(150, 23) };
+            proxyTextBox.PlaceholderText = "Proxy (optionnel)";
 
             createButton = new Button { Text = "Créer", Location = new Point(12, 250), Size = new Size(100, 30), UseVisualStyleBackColor = true };
             createButton.Click += CreateButton_Click;
@@ -127,7 +129,7 @@ namespace SocialNetworkArmy.Forms
 
         private void DeleteButton_Click(object sender, EventArgs e)
         {
-            if (profilesListBox.SelectedIndex == -1)
+            if (profilesListBox.SelectedIndex < 0) // Corrigé : Check index pour éviter OutOfRange
             {
                 MessageBox.Show("Sélectionne un profil !");
                 return;
@@ -148,7 +150,7 @@ namespace SocialNetworkArmy.Forms
 
         private async void LaunchButton_Click(object sender, EventArgs e)
         {
-            if (profilesListBox.SelectedIndex == -1)
+            if (profilesListBox.SelectedIndex < 0) // Corrigé : Check index pour éviter OutOfRange
             {
                 MessageBox.Show("Sélectionne un profil !");
                 return;
@@ -170,7 +172,8 @@ namespace SocialNetworkArmy.Forms
 
         private void ProfilesListBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            // Optionnel
+            if (profilesListBox.SelectedIndex < 0) return; // Corrigé : Skip si pas sélectionné (évite OutOfRange)
+            // Optionnel : Log ou load details selected
         }
     }
 }
