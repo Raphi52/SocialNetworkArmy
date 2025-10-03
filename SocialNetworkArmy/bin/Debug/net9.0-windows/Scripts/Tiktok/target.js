@@ -1,4 +1,4 @@
-﻿// target.js - Instagram Target Action (final pour Reel clic, basé sur DOM screenshot)
+﻿// target.js - Instagram Target Action (version simplifiée : clic direct premier ._aajz)
 (async function () {
     const config = {
         viewDurationMin: 5, viewDurationMax: 10,
@@ -30,7 +30,7 @@
         const y = rect.top + rect.height / 2 + (Math.random() - 0.5) * 10;
         const event = new MouseEvent('click', { bubbles: true, clientX: x, clientY: y });
         element.dispatchEvent(event);
-        console.log('Clic simulé sur Reel : href=' + (element.href || 'no href') + ', class=' + element.className.substring(0, 30));
+        console.log('Clic simulé sur Reel : ', element.href || element.className.substring(0, 20));
         return true;
     }
 
@@ -64,19 +64,20 @@
         }
     }
 
-    // Wait poll (2s intervals, max 15s)
-    async function waitForElement(selector, maxWait = 15000) {
-        console.log('Attente : ' + selector);
+    // Wait simple pour premier ._aajz (poll 2s, max 10s)
+    async function waitForFirstReel(maxWait = 10000) {
+        console.log('Attente premier Reel via a ._aajz...');
         const start = Date.now();
         while (Date.now() - start < maxWait) {
-            const element = document.querySelector(selector);
-            if (element) {
-                console.log('Trouvé : ' + selector + ' (href: ' + element.href + ')');
-                return element;
+            const firstReel = document.querySelector('a ._aajz');
+            if (firstReel) {
+                console.log('Premier Reel trouvé ! Href: ' + (firstReel.href || 'N/A'));
+                return firstReel;
             }
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Poll 2s
+            console.log('Pas encore trouvé – wait 2s...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
-        console.error('Timeout : ' + selector);
+        console.error('Timeout – Pas de Reel après ' + maxWait + 'ms');
         return null;
     }
 
@@ -84,40 +85,28 @@
         if (shouldStop()) return 'STOPPED';
 
         try {
-            console.log('Nav vers ' + username + '/reels/');
+            console.log('Navigation vers ' + username + '/reels/');
             window.location.href = `https://www.instagram.com/${username}/reels/`;
-            await new Promise(resolve => setTimeout(resolve, randomDelay(5000, 8000))); // Wait long
+            await new Promise(resolve => setTimeout(resolve, randomDelay(5000, 7000)));
 
             if (shouldStop()) return 'STOPPED';
 
-            // Scroll initial pour load grid Reels (lazy-load)
-            console.log('Scroll pour charger grid...');
-            window.scrollBy(0, window.innerHeight * 4); // Scroll 4x
-            await new Promise(resolve => setTimeout(resolve, 4000));
-
-            if (shouldStop()) return 'STOPPED';
-
-            // Wait premier Reel (sélecteur screenshot-based : feed a reel first)
-            let firstReel = await waitForElement('div[role="feed"] a[href^="/reel/"]:first-of-type', 10000) ||
-                await waitForElement('section a[href^="/reel/"]:first-of-type', 5000) ||
-                await waitForElement('div[role="article"] a[href^="/reel/"]:first-of-type', 5000) ||
-                await waitForElement('a[href^="/reel/"]:first-of-type', 5000); // Fallback
-
-            if (!firstReel) {
-                console.error('Reel non trouvé – retry scroll');
-                window.scrollBy(0, window.innerHeight * 3);
-                await new Promise(resolve => setTimeout(resolve, 5000));
-
-                firstReel = document.querySelector('div[role="feed"] a[href^="/reel/"]:first-of-type') ||
-                    document.querySelector('a[href^="/reel/"]:first-of-type');
-
-                if (!firstReel) {
-                    console.error('Pas de Reel – profil vide/privé ?');
-                    return 'ERROR: No Reels';
-                }
+            // Scroll forcé pour charger (5x hauteur)
+            console.log('Scroll forcé pour charger Reels...');
+            for (let i = 0; i < 5; i++) {
+                window.scrollBy(0, window.innerHeight);
+                await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
-            console.log('Premier Reel trouvé : ' + firstReel.href);
+            if (shouldStop()) return 'STOPPED';
+
+            // Wait et clic
+            const firstReel = await waitForFirstReel(10000);
+            if (!firstReel) {
+                console.error('Premier Reel non trouvé – skip profil.');
+                throw new Error('No Reel found');
+            }
+
             simulateHumanClick(firstReel);
             await new Promise(resolve => setTimeout(resolve, randomDelay(2000, 4000)));
 
@@ -128,45 +117,44 @@
             const comment = generateRandomComment();
             await addComment(comment);
 
-            // Visionne suivants
+            // Visionne 1-2 suivants (pour test)
             let reelsViewed = 1;
-            const numReelsToView = Math.floor(Math.random() * 6) + 5;
-            while (reelsViewed < config.maxReels && reelsViewed < numReelsToView) {
+            for (let i = 0; i < 1; i++) {  // Seulement 1 next pour test
                 if (shouldStop()) return 'STOPPED';
-                const nextBtn = document.querySelector('button[aria-label="Next"]') ||
-                    document.querySelector('div[role="button"][tabindex="0"]') ||
-                    document.querySelector('svg[aria-label="Next"]')?.closest('button');
+                const nextBtn = document.querySelector('button[aria-label="Next"]') || document.querySelector('div[role="button"][tabindex="0"]');
                 if (nextBtn) {
                     simulateHumanClick(nextBtn);
-                    console.log('Next Reel #' + reelsViewed);
-                    await new Promise(resolve => setTimeout(resolve, randomDelay(config.viewDurationMin * 1000, config.viewDurationMax * 1000)));
+                    console.log('Next Reel vu.');
+                    await new Promise(resolve => setTimeout(resolve, randomDelay(3000, 5000)));
                     likePost();
+                    reelsViewed++;
                 } else {
-                    window.scrollBy(0, window.innerHeight);
-                    await new Promise(resolve => setTimeout(resolve, 5000));
+                    break;
                 }
-                reelsViewed++;
             }
 
-            console.log(`Target ${username} OK (${reelsViewed} Reels).`);
+            console.log(`Target ${username} OK (${reelsViewed} Reels vus).`);
             return 'SUCCESS';
         } catch (error) {
             if (shouldStop()) return 'STOPPED';
-            console.error(`Erreur ${username}: ${error.message}`);
+            console.error(`Erreur ${username}: ${error.message} – Skip.`);
             return 'ERROR: ' + error.message;
         }
     }
 
-    // Boucle
+    // Boucle targets
     if (typeof data === 'undefined' || !Array.isArray(data)) {
-        console.error('No data');
+        console.error('Données targets manquantes !');
         return JSON.stringify({ status: 'ERROR', message: 'No data', reelsClicked: 0 });
     }
 
     let results = [];
     let reelsClicked = 0;
     for (let i = 0; i < data.length; i++) {
-        if (shouldStop()) break;
+        if (shouldStop()) {
+            results.push('STOPPED');
+            break;
+        }
         const result = await processTarget(data[i]);
         results.push(result);
         if (result === 'SUCCESS') reelsClicked++;
@@ -177,6 +165,6 @@
     }
 
     const status = shouldStop() ? 'STOPPED' : 'SUCCESS';
-    console.log(`Target terminé : ${status}, Reels cliqués: ${reelsClicked}`);
+    console.log(`Target terminé – Status: ${status}, Targets traités: ${results.length}, Reels cliqués: ${reelsClicked}.`);
     return JSON.stringify({ status, results, reelsClicked });
 })();

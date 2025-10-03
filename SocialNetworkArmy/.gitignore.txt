@@ -13,4 +13,3 @@ packages/
 # Data sensibles
 Data/Logs/
 Data/profiles.json
-README.md

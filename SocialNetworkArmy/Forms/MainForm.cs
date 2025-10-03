@@ -26,6 +26,8 @@ namespace SocialNetworkArmy.Forms
         private Button launchButton;
         private Label statusLabel;
 
+        private Font yaheiBold12 = new Font("Microsoft YaHei", 11f, FontStyle.Bold); // Police globale YaHei 12 gras
+
         public MainForm()
         {
             InitializeComponent();
@@ -37,31 +39,52 @@ namespace SocialNetworkArmy.Forms
 
         private void InitializeComponent()
         {
+            // Dark mode : Fond sombre pour la form
+            this.BackColor = Color.FromArgb(30, 30, 30);
+            this.ForeColor = Color.White;
+            this.Font = yaheiBold12; // Police globale sur la form (propagé aux enfants)
+
             this.AutoScaleDimensions = new SizeF(8F, 20F);
             this.AutoScaleMode = AutoScaleMode.Font;
 
-            profilesListBox = new ListBox { Location = new Point(12, 12), Size = new Size(300, 200) };
+            // ListBox élargie pour quasi toute la largeur (460 sur 500)
+            profilesListBox = new ListBox { Location = new Point(12, 12), Size = new Size(460, 250), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, Font = yaheiBold12 };
             profilesListBox.SelectedIndexChanged += ProfilesListBox_SelectedIndexChanged;
 
-            platformComboBox = new ComboBox { Location = new Point(12, 220), Size = new Size(100, 23), DropDownStyle = ComboBoxStyle.DropDownList };
+            platformComboBox = new ComboBox { Location = new Point(12, 280), Size = new Size(120, 30), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, Font = yaheiBold12 };
             platformComboBox.Items.AddRange(new object[] { "Instagram", "TikTok" });
 
-            profileNameTextBox = new TextBox { Location = new Point(120, 220), Size = new Size(100, 23) };
+            profileNameTextBox = new TextBox { Location = new Point(140, 280), Size = new Size(120, 30), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = yaheiBold12 };
+            profileNameTextBox.PlaceholderText = "Nom";
 
-            proxyTextBox = new TextBox { Location = new Point(230, 220), Size = new Size(150, 23) };
+            proxyTextBox = new TextBox { Location = new Point(270, 280), Size = new Size(200, 30), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = yaheiBold12 };
+            proxyTextBox.PlaceholderText = "Proxy (optionnel)";
 
-            createButton = new Button { Text = "Créer", Location = new Point(12, 250), Size = new Size(100, 30), UseVisualStyleBackColor = true };
+            // Boutons agrandis (110x35)
+            // Bouton Créer : Fond sombre, bordure bleue
+            createButton = new Button { Text = "Créer", Location = new Point(12, 320), Size = new Size(110, 35), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, UseVisualStyleBackColor = false, Font = yaheiBold12 };
+            createButton.FlatAppearance.BorderSize = 2;
+            createButton.FlatAppearance.BorderColor = Color.FromArgb(33, 150, 243);
+            createButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             createButton.Click += CreateButton_Click;
 
-            deleteButton = new Button { Text = "Supprimer", Location = new Point(120, 250), Size = new Size(100, 30), UseVisualStyleBackColor = true };
+            // Bouton Supprimer : Fond sombre, bordure rouge
+            deleteButton = new Button { Text = "Supprimer", Location = new Point(132, 320), Size = new Size(110, 35), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, UseVisualStyleBackColor = false, Font = yaheiBold12 };
+            deleteButton.FlatAppearance.BorderSize = 2;
+            deleteButton.FlatAppearance.BorderColor = Color.FromArgb(244, 67, 54);
+            deleteButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             deleteButton.Click += DeleteButton_Click;
 
-            launchButton = new Button { Text = "Lancer", Location = new Point(230, 250), Size = new Size(100, 30), UseVisualStyleBackColor = true };
+            // Bouton Lancer : Fond sombre, bordure verte
+            launchButton = new Button { Text = "Lancer", Location = new Point(252, 320), Size = new Size(110, 35), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, UseVisualStyleBackColor = false, Font = yaheiBold12 };
+            launchButton.FlatAppearance.BorderSize = 2;
+            launchButton.FlatAppearance.BorderColor = Color.FromArgb(76, 175, 80);
+            launchButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             launchButton.Click += LaunchButton_Click;
 
-            statusLabel = new Label { Location = new Point(12, 290), Size = new Size(400, 20), Text = "Prêt", AutoSize = true };
+            statusLabel = new Label { Location = new Point(12, 370), Size = new Size(400, 20), Text = "Prêt", AutoSize = true, ForeColor = Color.LightGray, Font = yaheiBold12 };
 
-            this.ClientSize = new Size(430, 330);
+            this.ClientSize = new Size(500, 420); // Form agrandie
             this.Text = "SocialNetworkArmy";
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -171,6 +194,15 @@ namespace SocialNetworkArmy.Forms
         private void ProfilesListBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             // Optionnel : Log ou load details selected
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                yaheiBold12.Dispose(); // Clean font
+            }
+            base.Dispose(disposing);
         }
     }
 }

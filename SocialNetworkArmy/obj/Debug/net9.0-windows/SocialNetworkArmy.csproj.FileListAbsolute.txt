@@ -1,6 +1,4 @@
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.csproj.AssemblyReference.cache
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.Forms.MainForm.resources
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.csproj.GenerateResource.cache
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.GeneratedMSBuildEditorConfig.editorconfig
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.AssemblyInfoInputs.cache
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.AssemblyInfo.cs
