@@ -1,10 +1,12 @@
-﻿using System;
-using System.IO;
-using System.Threading.Tasks;
+﻿// Services/AutomationService.cs - Correction constructeur (ajoute Profile) et cleanup data kinds
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Newtonsoft.Json;
 using SocialNetworkArmy.Models;
 using SocialNetworkArmy.Utils;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 
 namespace SocialNetworkArmy.Services
 {
@@ -12,11 +14,20 @@ namespace SocialNetworkArmy.Services
     {
         private readonly FingerprintService fingerprintService;
         private readonly ProxyService proxyService;
+        private readonly LimitsService limitsService;
+        private readonly CleanupService cleanupService;
+        private readonly MonitoringService monitoringService;
+        private readonly Profile profile; // Ajouté pour constructeur
 
-        public AutomationService(FingerprintService fingerprintService, ProxyService proxyService)
+        // Constructeur corrigé : Ajoute Profile en paramètre
+        public AutomationService(FingerprintService fingerprintService, ProxyService proxyService, LimitsService limitsService, CleanupService cleanupService, MonitoringService monitoringService, Profile profile)
         {
             this.fingerprintService = fingerprintService;
             this.proxyService = proxyService;
+            this.limitsService = limitsService;
+            this.cleanupService = cleanupService;
+            this.monitoringService = monitoringService;
+            this.profile = profile; // Stocké pour cleanup
         }
 
         public async Task<WebView2> InitializeBrowserAsync(Profile profile, string userDataDir)
@@ -24,31 +35,48 @@ namespace SocialNetworkArmy.Services
             var webView = new WebView2();
             var envOptions = new CoreWebView2EnvironmentOptions();
 
-            // Apply proxy if present
+            // Proxy fixe du profil
             if (!string.IsNullOrEmpty(profile.Proxy))
             {
                 proxyService.ApplyProxy(envOptions, profile.Proxy);
             }
 
+            // Anti-CDP et autres args stealth
+            envOptions.AdditionalBrowserArguments = "--disable-dev-shm-usage --no-sandbox --disable-gpu-sandbox --disable-web-security";
+
             var environment = await CoreWebView2Environment.CreateAsync(null, userDataDir, envOptions);
             await webView.EnsureCoreWebView2Async(environment);
 
-            // Deserialize fingerprint
-            var fingerprint = Newtonsoft.Json.JsonConvert.DeserializeObject<Fingerprint>(profile.Fingerprint);
-
-            // Inject spoofing script
+            // Fingerprint spoof
+            var fingerprint = JsonConvert.DeserializeObject<Fingerprint>(profile.Fingerprint);
             var spoofScript = fingerprintService.GenerateJSSpoof(fingerprint);
             await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(spoofScript);
 
-            // Disable webdriver flag and other anti-detection
-            await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });");
+            // Test initial fingerprint
+            await monitoringService.TestFingerprintAsync(webView);
 
-            // Mask WebRTC
-            await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync("window.RTCPeerConnection = undefined;");
-
-            Logger.LogInfo($"Browser initialized for profile '{profile.Name}' with proxy '{profile.Proxy ?? "Local"}'.");
-
+            Logger.LogInfo($"Browser initialized for '{profile.Name}' with full anti-detection.");
             return webView;
+        }
+
+        public async Task<bool> ExecuteActionWithLimitsAsync(WebView2 webView, string actionType, string subAction, Func<Task> actionFunc)
+        {
+            if (!limitsService.CanPerformAction(actionType, subAction))
+            {
+                Logger.LogWarning($"Limite atteinte pour {subAction}. Skip.");
+                return false;
+            }
+
+            // Check CAPTCHA
+            if (await monitoringService.DetectCaptchaAsync(webView))
+            {
+                Logger.LogWarning("CAPTCHA détecté - Pause manuelle.");
+                return false;
+            }
+
+            await actionFunc();
+            limitsService.IncrementAction(actionType, subAction);
+            return true;
         }
 
         public async Task ExecuteScriptAsync(WebView2 webView, string scriptPath)
@@ -57,7 +85,7 @@ namespace SocialNetworkArmy.Services
             {
                 var script = File.ReadAllText(scriptPath);
                 await webView.ExecuteScriptAsync(script);
-                Logger.LogInfo($"Executed script: {scriptPath}");
+                Logger.LogInfo($"Executed: {Path.GetFileName(scriptPath)}");
             }
             else
             {
@@ -65,25 +93,25 @@ namespace SocialNetworkArmy.Services
             }
         }
 
-        // Add human-like interactions (mouse, scroll, etc.)
         public async Task SimulateHumanScrollAsync(WebView2 webView, int durationSeconds)
         {
-            // Example: Inject JS for smooth scroll with pauses
             var scrollScript = $@"
                 let startTime = Date.now();
                 let endTime = startTime + {durationSeconds * 1000};
                 function smoothScroll() {{
-                    if (Date.now() > endTime) return;
-                    window.scrollBy(0, Math.random() * 50 + 20); // Random scroll amount
-                    setTimeout(smoothScroll, Math.random() * 500 + 200); // Random pause
+                    if (Date.now() > endTime || !window.isRunning) return;
+                    window.scrollBy(0, Math.random() * 50 + 20);
+                    setTimeout(smoothScroll, Math.random() * 500 + 200);
                 }}
                 smoothScroll();
             ";
             await webView.ExecuteScriptAsync(scrollScript);
         }
 
-        // More methods for like, comment, etc. can be added as JS injections
+        public async Task CleanupAsync(WebView2 webView, Profile profile)
+        {
+            await cleanupService.CleanupBrowserAsync(webView);
+            cleanupService.PruneMemory(profile);
+        }
     }
 }
-
-// Services/ProxyService.cs

@@ -17,6 +17,9 @@ namespace SocialNetworkArmy.Forms
     {
         private readonly Profile profile;
         private readonly AutomationService automationService;
+        private readonly LimitsService limitsService;
+        private readonly CleanupService cleanupService;
+        private readonly MonitoringService monitoringService;
         private WebView2 webView;
         private Button targetButton;
         private Button scrollButton;
@@ -28,7 +31,10 @@ namespace SocialNetworkArmy.Forms
         public InstagramBotForm(Profile profile)
         {
             this.profile = profile;
-            automationService = new AutomationService(new FingerprintService(), new ProxyService());
+            limitsService = new LimitsService(profile.Name);
+            cleanupService = new CleanupService();
+            monitoringService = new MonitoringService();
+            automationService = new AutomationService(new FingerprintService(), new ProxyService(), limitsService, cleanupService, monitoringService, profile);
             InitializeComponent();
         }
 
@@ -96,6 +102,9 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
             }
 
+            // Intégration : Test fingerprint après init
+            await monitoringService.TestFingerprintAsync(webView);
+
             Logger.LogInfo("WebView Instagram focused and interactions enabled.");
         }
 
@@ -138,6 +147,8 @@ namespace SocialNetworkArmy.Forms
                     // Optionnel : Arrête toute navigation en cours
                     webView.CoreWebView2.Stop();
                 }
+                // Intégration : Cleanup après arrêt
+                await automationService.CleanupAsync(webView, profile);
             });
         }
 
@@ -162,7 +173,12 @@ namespace SocialNetworkArmy.Forms
             {
                 var scriptContent = File.ReadAllText(scriptPath);
                 var fullScript = $"var data = {jsonData}; {scriptContent}";
-                await webView.ExecuteScriptAsync(fullScript);
+
+                // Intégration : Wrap avec limits et CAPTCHA check
+                await automationService.ExecuteActionWithLimitsAsync(webView, "target", "likes", async () => {
+                    await webView.ExecuteScriptAsync(fullScript);
+                });
+
                 logTextBox.AppendText($"Target lancé sur {targets.Count} profils.\r\n");
             }
             else
@@ -178,8 +194,12 @@ namespace SocialNetworkArmy.Forms
             webView.CoreWebView2.Navigate("https://www.instagram.com/reels/");
 
             var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "instagram", "scroll.js");
-            await automationService.ExecuteScriptAsync(webView, scriptPath);
-            await automationService.SimulateHumanScrollAsync(webView, Config.GetConfig().ScrollDurationMin * 60);
+
+            // Intégration : Wrap avec limits
+            await automationService.ExecuteActionWithLimitsAsync(webView, "scroll", "likes", async () => {
+                await automationService.ExecuteScriptAsync(webView, scriptPath);
+                await automationService.SimulateHumanScrollAsync(webView, Config.GetConfig().ScrollDurationMin * 60);
+            });
         }
 
         private async void PublishButton_Click(object sender, EventArgs e)
@@ -208,7 +228,12 @@ namespace SocialNetworkArmy.Forms
             {
                 var scriptContent = File.ReadAllText(scriptPath);
                 var fullScript = $"var data = {jsonData}; {scriptContent}";
-                await webView.ExecuteScriptAsync(fullScript);
+
+                // Intégration : Wrap avec limits pour posts
+                await automationService.ExecuteActionWithLimitsAsync(webView, "publish", "posts", async () => {
+                    await webView.ExecuteScriptAsync(fullScript);
+                });
+
                 logTextBox.AppendText($"Publish lancé sur {filteredSchedule.Count} entrées.\r\n");
             }
             else

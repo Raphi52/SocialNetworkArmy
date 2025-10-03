@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿// Utils/Config.cs - Ajouts limites (sans rotation)
+using System.IO;
 using Newtonsoft.Json;
 
 namespace SocialNetworkArmy.Utils
@@ -15,6 +16,12 @@ namespace SocialNetworkArmy.Utils
         public int ScrollDurationMin { get; set; } = 20;
         public int ScrollDurationMax { get; set; } = 40;
 
+        // Limites quotidiennes
+        public int MaxLikesPerDay { get; set; } = 50;
+        public int MaxCommentsPerDay { get; set; } = 20;
+        public int MaxPostsPerDay { get; set; } = 10;
+        public double InteractionVariance { get; set; } = 0.2; // Pour random avancé
+
         private static readonly string ConfigFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "config.json");
 
         public static Config GetConfig()
@@ -24,7 +31,9 @@ namespace SocialNetworkArmy.Utils
                 var json = File.ReadAllText(ConfigFile);
                 return JsonConvert.DeserializeObject<Config>(json) ?? new Config();
             }
-            return new Config();
+            var config = new Config();
+            config.SaveConfig();
+            return config;
         }
 
         public void SaveConfig()

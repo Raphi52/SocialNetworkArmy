@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿// Models/Fingerprint.cs - Ajout Plugins pour spoof
+using System.Collections.Generic;
 
 namespace SocialNetworkArmy.Models
 {
@@ -18,5 +19,6 @@ namespace SocialNetworkArmy.Models
         public string Vendor { get; set; }
         public int ScreenDepth { get; set; }
         public int MaxTouchPoints { get; set; }
+        public List<object> Plugins { get; set; } // Nouveau
     }
 }

@@ -1,4 +1,4 @@
-﻿// Services/FingerprintService.cs
+﻿// Services/FingerprintService.cs - Mise à jour avec audio et plugins spoof
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -49,7 +49,18 @@ namespace SocialNetworkArmy.Services
                 Platform = platforms[rand.Next(platforms.Length)],
                 Vendor = vendorsUA[rand.Next(vendorsUA.Length)],
                 ScreenDepth = rand.Next(2) == 0 ? 24 : 32,
-                MaxTouchPoints = 0
+                MaxTouchPoints = 0,
+                Plugins = GeneratePlugins() // Spoof plugins
+            };
+        }
+
+        private List<object> GeneratePlugins()
+        {
+            return new List<object>
+            {
+                new { name = "Chrome PDF Plugin", filename = "internal-pdf-viewer", description = "Portable Document Format" },
+                new { name = "Chrome PDF Viewer", filename = "mhjfbmdgcfjbbpaeojofohoefgiehjai", description = "PDF Viewer" },
+                new { name = "Native Client", filename = "internal-nacl-plugin", description = "Native Client Executable" }
             };
         }
 
@@ -57,6 +68,7 @@ namespace SocialNetworkArmy.Services
         {
             var languagesJson = JsonConvert.SerializeObject(fingerprint.Languages ?? new List<string>());
             var fontsJson = JsonConvert.SerializeObject(fingerprint.Fonts ?? new List<string>());
+            var pluginsJson = JsonConvert.SerializeObject(fingerprint.Plugins ?? new List<object>());
 
             return $@"
                 Object.defineProperty(navigator, 'userAgent', {{ get: () => '{fingerprint.UserAgent}' }});
@@ -97,6 +109,24 @@ namespace SocialNetworkArmy.Services
                     return originalToDataURL.apply(this, args);
                 }};
 
+                // Audio spoofing avec bruit aléatoire
+                const originalAudioContext = window.AudioContext || window.webkitAudioContext;
+                window.AudioContext = window.webkitAudioContext = function() {{
+                    const ctx = new originalAudioContext();
+                    const originalCreateOscillator = ctx.createOscillator;
+                    ctx.createOscillator = function() {{
+                        const osc = originalCreateOscillator.call(this);
+                        osc.frequency.setValueAtTime(440 + Math.random() * 20, ctx.currentTime); // Bruit freq
+                        return osc;
+                    }};
+                    return ctx;
+                }};
+
+                // Plugins spoof
+                Object.defineProperty(navigator, 'plugins', {{
+                    get: () => {pluginsJson}
+                }});
+
                 Object.defineProperty(navigator, 'fonts', {{
                     get: () => ({{
                         size: {fingerprint.Fonts.Count},
@@ -110,6 +140,13 @@ namespace SocialNetworkArmy.Services
                 const [width, height] = '{fingerprint.ScreenResolution}'.split('x').map(Number);
                 Object.defineProperty(screen, 'width', {{ get: () => width }});
                 Object.defineProperty(screen, 'height', {{ get: () => height }});
+
+                // Masquage CDP (block devtools WS)
+                const originalWebSocket = window.WebSocket;
+                window.WebSocket = function(url, protocols) {{
+                    if (url.includes('devtools') || url.includes('cdp')) return null;
+                    return new originalWebSocket(url, protocols);
+                }};
             ";
         }
     }

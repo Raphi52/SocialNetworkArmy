@@ -46,3 +46,4 @@ C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Microsoft.Web.WebView2.Core.xml
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Microsoft.Web.WebView2.WinForms.xml
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Microsoft.Web.WebView2.Wpf.xml
+C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.sourcelink.json
