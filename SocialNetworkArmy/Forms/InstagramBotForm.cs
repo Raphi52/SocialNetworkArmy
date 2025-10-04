@@ -74,25 +74,86 @@ namespace SocialNetworkArmy.Forms
             this.ForeColor = Color.White;
             this.Font = yaheiBold12;
 
-            this.ClientSize = new Size(900, 650);
+            // Fenêtre plus grande et cohérente
+            this.ClientSize = new Size(1200, 800);
+            this.MinimumSize = new Size(1000, 700);
             this.Text = $"Instagram Bot - {profile.Name}";
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            var panel = new Panel { Dock = DockStyle.Bottom, Height = 150, BackColor = Color.FromArgb(30, 30, 30) };
+            // ===== WebView en plein écran (ajouté AVANT le panneau bas pour la bonne z-order) =====
+            webView = new WebView2 { Dock = DockStyle.Fill };
+            webView.DefaultBackgroundColor = Color.Black;
+            this.Controls.Add(webView);
 
-            targetButton = new Button { Text = "Target", Location = new Point(10, 10), Size = new Size(110, 35), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, UseVisualStyleBackColor = false, Font = yaheiBold12 };
+            // ===== Panneau bas (plus haut) =====
+            var bottomPanel = new Panel
+            {
+                Dock = DockStyle.Bottom,
+                Height = 240, // <-- plus grand qu'avant (150)
+                BackColor = Color.FromArgb(30, 30, 30),
+                Padding = new Padding(8)
+            };
+
+            // Bandeau des boutons en haut du panneau
+            var buttonsPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Top,
+                Height = 48,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Padding = new Padding(0),
+                Margin = new Padding(0),
+                BackColor = Color.FromArgb(30, 30, 30)
+            };
+
+            // Styles communs
+            Size btnSize = new Size(120, 36);
+            Padding btnMargin = new Padding(0, 0, 10, 0);
+
+            targetButton = new Button
+            {
+                Text = "Target",
+                Size = btnSize,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold12,
+                Margin = btnMargin,
+                Enabled = false // activé après init WebView
+            };
             targetButton.FlatAppearance.BorderSize = 2;
             targetButton.FlatAppearance.BorderColor = Color.FromArgb(76, 175, 80);
             targetButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             targetButton.Click += TargetButton_Click;
 
-            scrollButton = new Button { Text = "Scroll", Location = new Point(130, 10), Size = new Size(110, 35), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, UseVisualStyleBackColor = false, Font = yaheiBold12 };
+            scrollButton = new Button
+            {
+                Text = "Scroll",
+                Size = btnSize,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold12,
+                Margin = btnMargin
+            };
             scrollButton.FlatAppearance.BorderSize = 2;
             scrollButton.FlatAppearance.BorderColor = Color.FromArgb(33, 150, 243);
             scrollButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             scrollButton.Click += ScrollButton_Click;
 
-            publishButton = new Button { Text = "Publish", Location = new Point(250, 10), Size = new Size(110, 35), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, UseVisualStyleBackColor = false, Font = yaheiBold12 };
+            publishButton = new Button
+            {
+                Text = "Publish",
+                Size = btnSize,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold12,
+                Margin = btnMargin
+            };
             publishButton.FlatAppearance.BorderSize = 2;
             publishButton.FlatAppearance.BorderColor = Color.FromArgb(255, 152, 0);
             publishButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
@@ -101,33 +162,45 @@ namespace SocialNetworkArmy.Forms
             stopButton = new Button
             {
                 Text = "Stop",
-                Location = new Point(370, 10),
-                Size = new Size(110, 35),
+                Size = btnSize,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
                 UseVisualStyleBackColor = false,
                 Enabled = false,
-                Font = yaheiBold12
+                Font = yaheiBold12,
+                Margin = btnMargin
             };
             stopButton.FlatAppearance.BorderSize = 2;
             stopButton.FlatAppearance.BorderColor = Color.FromArgb(244, 67, 54);
             stopButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             stopButton.Click += StopButton_Click;
 
-            logTextBox = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, Location = new Point(10, 50), Size = new Size(880, 90), ReadOnly = true, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = yaheiBold12 };
+            buttonsPanel.Controls.Add(targetButton);
+            buttonsPanel.Controls.Add(scrollButton);
+            buttonsPanel.Controls.Add(publishButton);
+            buttonsPanel.Controls.Add(stopButton);
 
-            panel.Controls.Add(targetButton);
-            panel.Controls.Add(scrollButton);
-            panel.Controls.Add(publishButton);
-            panel.Controls.Add(stopButton);
-            panel.Controls.Add(logTextBox);
-            this.Controls.Add(panel);
+            // Zone de logs qui prend tout le reste du panneau
+            logTextBox = new TextBox
+            {
+                Multiline = true,
+                ScrollBars = ScrollBars.Vertical,
+                Dock = DockStyle.Fill,           // <-- remplace le positionnement absolu
+                ReadOnly = true,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = yaheiBold12
+            };
 
-            webView = new WebView2 { Dock = DockStyle.Fill };
-            webView.DefaultBackgroundColor = Color.Black;
-            this.Controls.Add(webView);
+            bottomPanel.Controls.Add(logTextBox);
+            bottomPanel.Controls.Add(buttonsPanel);
+
+            // IMPORTANT : ajouter le panneau bas APRÈS le webView pour qu'il reste visible
+            this.Controls.Add(bottomPanel);
         }
+
 
         private async void LoadBrowserAsync()
         {
@@ -176,6 +249,7 @@ namespace SocialNetworkArmy.Forms
 
         public async Task StartScriptAsync(string actionName)
         {
+            _cts = new CancellationTokenSource();
             if (isScriptRunning)
             {
                 logTextBox.AppendText($"Script {actionName} déjà en cours ! Arrêtez d'abord.\r\n");
@@ -197,24 +271,33 @@ namespace SocialNetworkArmy.Forms
         {
             if (!isScriptRunning) return;
 
-            isScriptRunning = false;
-            stopButton.Enabled = false;
-            targetButton.Enabled = true;
-            scrollButton.Enabled = true;
-            publishButton.Enabled = true;
             logTextBox.AppendText("Arrêt du script en cours...\r\n");
 
             try
             {
-                if (webView?.CoreWebView2 != null)
-                    webView.ExecuteScriptAsync("window.isRunning = false; console.log('Script arrêté');");
-                logTextBox.AppendText("Flag JS envoyé – Script arrêté avec succès.\r\n");
+                _cts?.Cancel();
             }
             catch (Exception ex)
             {
                 logTextBox.AppendText($"Erreur Stop (ignorée) : {ex.Message}\r\n");
                 Logger.LogError($"Erreur StopScript : {ex}");
             }
+        }
+        private CancellationTokenSource _cts;
+
+        public CancellationToken GetCancellationToken()
+        {
+            return _cts?.Token ?? CancellationToken.None;
+        }
+
+        public void ScriptCompleted()
+        {
+            isScriptRunning = false;
+            stopButton.Enabled = false;
+            targetButton.Enabled = true;
+            scrollButton.Enabled = true;
+            publishButton.Enabled = true;
+            logTextBox.AppendText("Script arrêté avec succès.\r\n");
         }
 
         // ========================= TARGET =========================

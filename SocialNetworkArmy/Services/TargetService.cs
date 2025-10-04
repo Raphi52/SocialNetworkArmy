@@ -5,6 +5,8 @@ using SocialNetworkArmy.Utils;
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -34,7 +36,7 @@ namespace SocialNetworkArmy.Services
             return s.Equals("true", StringComparison.OrdinalIgnoreCase);
         }
 
-        public async Task RunAsync()
+        public async Task RunAsync(CancellationToken token = default)
         {
             // Sécurité : s’assurer que CoreWebView2 est prêt même si on est appelé tôt
             await webView.EnsureCoreWebView2Async(null);
@@ -42,6 +44,8 @@ namespace SocialNetworkArmy.Services
             try
             {
                 await form.StartScriptAsync("Target");
+                var localToken = form.GetCancellationToken(); // Récupérer le token depuis le form
+                token = localToken; // Utiliser ce token pour la cancellation
 
                 try
                 {
@@ -68,47 +72,56 @@ namespace SocialNetworkArmy.Services
                     // 2) (Optionnel) ouvrir DevTools
                     try { webView.CoreWebView2?.OpenDevToolsWindow(); } catch { /* ignore */ }
 
-                    // 3) Aller sur la page Reels du 1er target
-                    var firstTarget = targets.First().Trim();
-                    var targetUrl = $"https://www.instagram.com/{firstTarget}/reels/";
-                    logTextBox.AppendText($"[NAV] Vers {targetUrl}\r\n");
-                    webView.CoreWebView2.Navigate(targetUrl);
+                    Random rand = new Random();
+                    int maxReels = 5; // Augmenté pour croiser plus de posts
 
-                    // 4) Attendre un peu que la navigation se stabilise
-                    await Task.Delay(3000);
+                    foreach (var target in targets)
+                    {
+                        token.ThrowIfCancellationRequested();
 
-                    // 5) Lire l’URL et le titre (diagnostic)
-                    var url = await webView.ExecuteScriptAsync("window.location.href");
-                    var title = await webView.ExecuteScriptAsync("document.title");
-                    logTextBox.AppendText($"[NAV] url={url}, title={title}\r\n");
+                        var currentTarget = target.Trim();
+                        logTextBox.AppendText($"[TARGET] Processing {currentTarget}\r\n");
 
-                    // 6) Vérifier login (mur de connexion)
-                    var loginWall = await webView.ExecuteScriptAsync(@"
+                        // 3) Aller sur la page Reels du target
+                        var targetUrl = $"https://www.instagram.com/{currentTarget}/reels/";
+                        logTextBox.AppendText($"[NAV] Vers {targetUrl}\r\n");
+                        webView.CoreWebView2.Navigate(targetUrl);
+
+                        // 4) Attendre un peu que la navigation se stabilise
+                        await Task.Delay(3000, token);
+
+                        // 5) Lire l’URL et le titre (diagnostic)
+                        var url = await webView.ExecuteScriptAsync("window.location.href");
+                        var title = await webView.ExecuteScriptAsync("document.title");
+                        logTextBox.AppendText($"[NAV] url={url}, title={title}\r\n");
+
+                        // 6) Vérifier login (mur de connexion)
+                        var loginWall = await webView.ExecuteScriptAsync(@"
 (function(){
   return !!document.querySelector('[href*=""/accounts/login/""], .login-button');
 })()");
-                    if (string.Equals(loginWall, "true", StringComparison.OrdinalIgnoreCase))
-                    {
-                        logTextBox.AppendText("[CHECK] Login requis : connecte-toi dans la WebView puis relance.\r\n");
-                        form.StopScript();
-                        return;
-                    }
+                        if (string.Equals(loginWall, "true", StringComparison.OrdinalIgnoreCase))
+                        {
+                            logTextBox.AppendText("[CHECK] Login requis : connecte-toi dans la WebView puis relance.\r\n");
+                            form.StopScript();
+                            return;
+                        }
 
-                    // 7) Sélecteur 1er Reel (priorité grid <article>)
-                    var findReelScript = @"
+                        // 7) Sélecteur 1er Reel (priorité grid <article>)
+                        var findReelScript = @"
 (function(){
   const a = document.querySelector('article a[href*=""/reel/""]')
         || document.querySelector('a[href*=""/reel/""]');
   return a ? a.href : null;
 })()";
-                    var reelHref = await webView.ExecuteScriptAsync(findReelScript);
-                    logTextBox.AppendText($"[SELECTOR] 1er reel href (avant scroll) = {reelHref}\r\n");
+                        var reelHref = await webView.ExecuteScriptAsync(findReelScript);
+                        logTextBox.AppendText($"[SELECTOR] 1er reel href (avant scroll) = {reelHref}\r\n");
 
-                    // 8) Lazy-load par scroll si rien
-                    if (reelHref == "null")
-                    {
-                        logTextBox.AppendText("[SCROLL] Lazy-load…\r\n");
-                        await webView.ExecuteScriptAsync(@"
+                        // 8) Lazy-load par scroll si rien
+                        if (reelHref == "null")
+                        {
+                            logTextBox.AppendText("[SCROLL] Lazy-load…\r\n");
+                            await webView.ExecuteScriptAsync(@"
 (async function(){
   for(let i=0;i<6;i++){
     window.scrollBy(0, window.innerHeight);
@@ -116,22 +129,21 @@ namespace SocialNetworkArmy.Services
   }
   return true;
 })()");
-                        await Task.Delay(1000);
+                            await Task.Delay(1000, token);
 
-                        reelHref = await webView.ExecuteScriptAsync(findReelScript);
-                        logTextBox.AppendText($"[SELECTOR] 1er reel href (après scroll) = {reelHref}\r\n");
-                    }
+                            reelHref = await webView.ExecuteScriptAsync(findReelScript);
+                            logTextBox.AppendText($"[SELECTOR] 1er reel href (après scroll) = {reelHref}\r\n");
+                        }
 
-                    // 9) Si toujours rien ? abort propre
-                    if (reelHref == "null")
-                    {
-                        logTextBox.AppendText("[ERREUR] Aucun Reel détecté sur la page du profil.\r\n");
-                        form.StopScript();
-                        return;
-                    }
+                        // 9) Si toujours rien ? abort propre
+                        if (reelHref == "null")
+                        {
+                            logTextBox.AppendText("[ERREUR] Aucun Reel détecté sur la page du profil.\r\n");
+                            continue; // Passer au target suivant
+                        }
 
-                    // 10) Tentative 1 : click simple (peut suffire à ouvrir le MODAL)
-                    var clickSimple = await webView.ExecuteScriptAsync(@"
+                        // 10) Tentative 1 : click simple (peut suffire à ouvrir le MODAL)
+                        var clickSimple = await webView.ExecuteScriptAsync(@"
 (function(){
   const el = document.querySelector('article a[href*=""/reel/""]')
           || document.querySelector('a[href*=""/reel/""]');
@@ -140,23 +152,23 @@ namespace SocialNetworkArmy.Services
   el.click();
   return 'CLICKED';
 })()");
-                    logTextBox.AppendText($"[CLICK_SIMPLE] résultat={clickSimple}\r\n");
+                        logTextBox.AppendText($"[CLICK_SIMPLE] résultat={clickSimple}\r\n");
 
-                    // 11) Check ouverture (URL / modal / vidéo)
-                    await Task.Delay(3000); // Délai augmenté pour chargement
-                    var openedCheck = await webView.ExecuteScriptAsync(@"
+                        // 11) Check ouverture (URL / modal / vidéo)
+                        await Task.Delay(3000, token); // Délai augmenté pour chargement
+                        var openedCheck = await webView.ExecuteScriptAsync(@"
 (function(){
   const urlHasReel = window.location.href.includes(""/reel/"");
   const hasDialog  = !!document.querySelector('div[role=""dialog""]');
   const hasOverlay = !!document.querySelector('[data-visualcompletion=""ignore""] video, video');
   return (urlHasReel || hasDialog || hasOverlay).toString();
 })()");
-                    logTextBox.AppendText($"[CHECK_OPENED] après click simple => {openedCheck}\r\n");
+                        logTextBox.AppendText($"[CHECK_OPENED] après click simple => {openedCheck}\r\n");
 
-                    if (!JsBoolIsTrue(openedCheck))
-                    {
-                        // 12bis) Sinon, MouseEvents SANS 'click' (comportement qui t’allait bien)
-                        var clickMouseEvents = await webView.ExecuteScriptAsync(@"
+                        if (!JsBoolIsTrue(openedCheck))
+                        {
+                            // 12bis) Sinon, MouseEvents SANS 'click' (comportement qui t’allait bien)
+                            var clickMouseEvents = await webView.ExecuteScriptAsync(@"
 (async function(){
   const el = document.querySelector('article a[href*=""/reel/""]')
           || document.querySelector('a[href*=""/reel/""]');
@@ -169,41 +181,60 @@ namespace SocialNetworkArmy.Services
   el.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,clientX:x,clientY:y}));
   return 'MOUSE_EVENTS_SENT';
 })()");
-                        logTextBox.AppendText($"[CLICK_MOUSE] résultat={clickMouseEvents}\r\n");
+                            logTextBox.AppendText($"[CLICK_MOUSE] résultat={clickMouseEvents}\r\n");
 
-                        // Re-vérifier ouverture
-                        await Task.Delay(3000); // Délai augmenté
-                        openedCheck = await webView.ExecuteScriptAsync(@"
+                            // Re-vérifier ouverture
+                            await Task.Delay(3000, token); // Délai augmenté
+                            openedCheck = await webView.ExecuteScriptAsync(@"
 (function(){
   const urlHasReel = window.location.href.includes(""/reel/"");
   const hasDialog  = !!document.querySelector('div[role=""dialog""]');
   const hasOverlay = !!document.querySelector('[data-visualcompletion=""ignore""] video, video');
   return (urlHasReel || hasDialog || hasOverlay).toString();
 })()");
-                        logTextBox.AppendText($"[CHECK_OPENED] après mouse events => {openedCheck}\r\n");
-                    }
+                            logTextBox.AppendText($"[CHECK_OPENED] après mouse events => {openedCheck}\r\n");
+                        }
 
-                    if (!JsBoolIsTrue(openedCheck))
-                    {
-                        logTextBox.AppendText("[KO] Impossible d’ouvrir le 1er Reel (sélecteur/clic).\r\n");
-                        form.StopScript();
-                        return;
-                    }
+                        if (!JsBoolIsTrue(openedCheck))
+                        {
+                            logTextBox.AppendText("[KO] Impossible d’ouvrir le 1er Reel (sélecteur/clic).\r\n");
+                            continue; // Passer au target suivant
+                        }
 
-                    // ======================= 12) BOUCLE POUR REELS (LIKE + COMMENT + NEXT) =======================
-                    // Refactorisé en boucle C# pour plus de contrôle et logs par étape (moins fragile)
-                    int maxReels = 2; // But ultime : 1er (like+comment) + nav vers 2ème
-                    Random rand = new Random();
-                    for (int reel = 1; reel <= maxReels; reel++)
-                    {
-                        logTextBox.AppendText($"[REEL {reel}/{maxReels}] Début interaction...\r\n");
+                        // ======================= 12) BOUCLE POUR REELS (LIKE + COMMENT + NEXT) =======================
+                        // Refactorisé en boucle C# pour plus de contrôle et logs par étape (moins fragile)
+                        for (int reelNum = 1; reelNum <= maxReels; reelNum++)
+                        {
+                            token.ThrowIfCancellationRequested();
 
-                        // Watch delay (5-10s random)
-                        await Task.Delay(rand.Next(5000, 10001));
+                            logTextBox.AppendText($"[REEL {reelNum}/{maxReels}] Début interaction...\r\n");
 
-                        // LIKE (greffé du code qui marche)
-                        logTextBox.AppendText("[LIKE] DIAG candidats…\r\n");
-                        var likeDiag = await webView.ExecuteScriptAsync(@"
+                            // Extraction de la date
+                            var dateScript = @"
+(function(){
+  const timeEl = document.querySelector('time.x1p4m5qa');
+  if (timeEl) {
+    const datetime = timeEl.getAttribute('datetime') || 'NO_DATETIME';
+    const text = timeEl.textContent || 'NO_TEXT';
+    return JSON.stringify({datetime: datetime, text: text});
+  } else {
+    return 'NO_DATE_FOUND';
+  }
+})()";
+                            var reelDateRaw = await webView.ExecuteScriptAsync(dateScript);
+                            var reelDate = reelDateRaw.Trim('"');
+                            logTextBox.AppendText($"[DATE] {reelDate}\r\n");
+
+                            // Watch delay (5-10s random)
+                            await Task.Delay(rand.Next(5000, 10001), token);
+
+                            // Décider si liker (9% de chance)
+                            bool shouldLike = rand.NextDouble() < 0.09;
+                            if (shouldLike)
+                            {
+                                // LIKE (greffé du code qui marche)
+                                logTextBox.AppendText("[LIKE] DIAG candidats…\r\n");
+                                var likeDiag = await webView.ExecuteScriptAsync(@"
 (function(){
   try{
     var scope = document.querySelector('div[role=""dialog""]') || document;
@@ -262,9 +293,9 @@ namespace SocialNetworkArmy.Services
     return JSON.stringify({error: String(e && e.message || e)});
   }
 })()");
-                        logTextBox.AppendText($"[LIKE][DIAG] {likeDiag}\r\n");
+                                logTextBox.AppendText($"[LIKE][DIAG] {likeDiag}\r\n");
 
-                        var likeTry = await webView.ExecuteScriptAsync(@"
+                                var likeTry = await webView.ExecuteScriptAsync(@"
 (function(){
   try {
     var scope = document.querySelector('div[role=""dialog""]') || document;
@@ -320,24 +351,58 @@ namespace SocialNetworkArmy.Services
     return 'JSERR: ' + (e && e.message ? e.message : String(e));
   }
 })()");
-                        logTextBox.AppendText($"[LIKE][TRY] {likeTry}\r\n");
+                                logTextBox.AppendText($"[LIKE][TRY] {likeTry}\r\n");
 
-                        await Task.Delay(2000);
+                                await Task.Delay(2000, token);
 
-                        var unlikeSeen = await webView.ExecuteScriptAsync(@"
+                                var unlikeSeen = await webView.ExecuteScriptAsync(@"
 (function(){
   try{
     var sc = document.querySelector('div[role=""dialog""]') || document;
     return (!!sc.querySelector('svg[aria-label*=""Unlike"" i], svg[aria-label*=""Je n\\u2019aime plus"" i], svg[aria-label*=""Je n\\'aime plus"" i], button[aria-pressed=""true""], [role=""button""][aria-pressed=""true""], svg[color=""rgb(255, 48, 64)""], svg[fill=""rgb(237, 73, 86)""], svg path[d^=""M12 21.35""]')).toString();
   }catch(e){ return 'ERR:' + String(e); }
 })()");
-                        logTextBox.AppendText($"[LIKE][STATE] unlikeSeen = {unlikeSeen}\r\n");
+                                logTextBox.AppendText($"[LIKE][STATE] unlikeSeen = {unlikeSeen}\r\n");
+                            }
+                            else
+                            {
+                                logTextBox.AppendText("[LIKE] Skipped (random 9%)\r\n");
+                            }
 
-                        // COMMENT (adapté du code qui marche, avec random de txt ou default)
-                        string randomComment = comments[rand.Next(comments.Count)];
-                        logTextBox.AppendText($"[COMMENT] Sélectionné: '{randomComment}'\r\n");
+                            // Déterminer si on doit commenter
+                            bool shouldComment = false;
+                            if (reelDate != "NO_DATE_FOUND")
+                            {
+                                try
+                                {
+                                    using var doc = JsonDocument.Parse(reelDate);
+                                    string datetimeStr = doc.RootElement.GetProperty("datetime").GetString();
+                                    if (datetimeStr != "NO_DATETIME")
+                                    {
+                                        if (DateTimeOffset.TryParse(datetimeStr, out var reelTime))
+                                        {
+                                            var now = DateTimeOffset.UtcNow;
+                                            var age = now - reelTime;
+                                            if (age.TotalHours < 24)
+                                            {
+                                                shouldComment = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    logTextBox.AppendText($"[DATE_PARSE_ERROR] {ex.Message}\r\n");
+                                }
+                            }
 
-                        var commentTry = await webView.ExecuteScriptAsync($@"
+                            if (shouldComment)
+                            {
+                                // COMMENT (adapté du code qui marche, avec random de txt ou default)
+                                string randomComment = comments[rand.Next(comments.Count)];
+                                logTextBox.AppendText($"[COMMENT] Sélectionné: '{randomComment}'\r\n");
+
+                                var commentTry = await webView.ExecuteScriptAsync($@"
 (async function(){{
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const rand = (a,b) => Math.floor(a + Math.random()*(b-a+1));
@@ -441,15 +506,20 @@ namespace SocialNetworkArmy.Services
   }}
   return 'COMMENTED';
 }})();");
-                        logTextBox.AppendText($"[COMMENT][TRY] {commentTry}\r\n");
+                                logTextBox.AppendText($"[COMMENT][TRY] {commentTry}\r\n");
 
-                        await Task.Delay(rand.Next(1200, 2201)); // Délai après comment
+                                await Task.Delay(rand.Next(1200, 2201), token); // Délai après comment
+                            }
+                            else
+                            {
+                                logTextBox.AppendText("[COMMENT] Skipped: Reel older than 24 hours or no date.\r\n");
+                            }
 
-                        // NEXT si pas le dernier
-                        if (reel < maxReels)
-                        {
-                            logTextBox.AppendText("[NEXT] Tentative passage au suivant...\r\n");
-                            var nextTry = await webView.ExecuteScriptAsync(@"
+                            // NEXT si pas le dernier
+                            if (reelNum < maxReels)
+                            {
+                                logTextBox.AppendText("[NEXT] Tentative passage au suivant...\r\n");
+                                var nextTry = await webView.ExecuteScriptAsync(@"
 (function(){
   try{
     var scope = document.querySelector('div[role=""dialog""]') || document;
@@ -468,25 +538,35 @@ namespace SocialNetworkArmy.Services
     return 'OK';
   }catch(e){ return 'JSERR: ' + String(e); }
 })()");
-                            logTextBox.AppendText($"[NEXT][TRY] {nextTry}\r\n");
+                                logTextBox.AppendText($"[NEXT][TRY] {nextTry}\r\n");
 
-                            await Task.Delay(rand.Next(600, 1001)); // Délai après next
+                                await Task.Delay(rand.Next(600, 1001), token); // Délai après next
 
-                            // Vérifier si toujours en modal
-                            var stillOpened = await webView.ExecuteScriptAsync(@"
+                                // Vérifier si toujours en modal
+                                var stillOpened = await webView.ExecuteScriptAsync(@"
 (function(){
   const hasDialog  = !!document.querySelector('div[role=""dialog""]');
   return hasDialog.toString();
 })()");
-                            if (!JsBoolIsTrue(stillOpened))
-                            {
-                                logTextBox.AppendText("[NEXT] Plus de modal, arrêt boucle.\r\n");
-                                break;
+                                if (!JsBoolIsTrue(stillOpened))
+                                {
+                                    logTextBox.AppendText("[NEXT] Plus de modal, arrêt boucle.\r\n");
+                                    break;
+                                }
                             }
                         }
+
+                        logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget} (LIKE + COMMENT + NEXT).\r\n");
+
+                        // Délai entre targets
+                        await Task.Delay(rand.Next(5000, 15000), token);
                     }
 
-                    logTextBox.AppendText("[FLOW] Terminé (LIKE + COMMENT + NEXT).\r\n");
+                    logTextBox.AppendText("[FLOW] Tous les targets traités.\r\n");
+                }
+                catch (OperationCanceledException)
+                {
+                    logTextBox.AppendText("Script annulé par l'utilisateur.\r\n");
                 }
                 catch (Exception ex)
                 {
@@ -495,7 +575,7 @@ namespace SocialNetworkArmy.Services
                 }
                 finally
                 {
-                    // Laisse l’utilisateur gérer Stop via le bouton
+                    form.ScriptCompleted();
                 }
             }
             catch (Exception ex)
