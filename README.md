@@ -1,370 +1,376 @@
-Cahier des charges – Automatisation Instagram / TikTok (C# / WinForms)
-1. Objectif
-Développer un outil Windows en C# (.NET 6/8, WinForms) permettant :
-De gérer plusieurs profils (Instagram et TikTok).
+SocialNetworkArmy
 
+Description Générale
 
-De lancer un navigateur configuré avec des empreintes anti-détection (fingerprints + proxy).
+SocialNetworkArmy est un outil Windows en C# (.NET 8 avec WinForms) pour automatiser les interactions sur Instagram et TikTok de manière réaliste et anti-détection. Il gère plusieurs profils, utilise des proxies et un spoofing de fingerprints (User-Agent, WebGL, etc.), et simule un comportement humain pour éviter les bans (délais aléatoires, interactions partielles, limites quotidiennes).
 
 
-D’exécuter des scripts d’automatisation réalistes (Target, Scroll, Publish).
 
+Plateformes supportées : Instagram et TikTok.
 
-D’assurer la gestion multi-profils, la planification d’actions et le suivi statistique.
+Fonctionnalités clés :
 
 
-De conserver une interface simple et des logs clairs.
 
+Gestion multi-profils (login/logout sécurisé).
 
+Automatisation via WebView2 (navigation, clics, saisie, scrolls natifs).
 
-2. Fonctionnalités principales
-2.1 Gestion des profils (MainForm)
-Inputs :
+Actions : Target (ciblage), Scroll (visionnage passif), Post (publication).
 
+Anti-détection : Proxies rotatifs, randomisation des timings/mouvements, limites par jour.
 
-Plateforme : Instagram ou TikTok.
+UI : Forms séparées pour Instagram/TikTok, logs en temps réel, stats exportables.
 
 
-Nom de profil (identifiant unique).
 
 
-Proxy associé (http://ip:port ou socks5://ip:port).
 
+Dépendances :
 
-Actions :
 
 
-Créer un profil → génère fingerprints + sauvegarde (JSON ou SQLite).
+Microsoft.Web.WebView2 (pour l'embed de navigateur).
 
+Serilog (logging).
 
-Supprimer un profil existant.
+CsvHelper (exports stats et lecture CSV pour publications).
 
+Newtonsoft.Json (config).
 
-Sélectionner un profil dans la liste (ListBox ou DataGridView).
+Pas de Playwright/Puppeteer : tout via WebView2 natif.
 
 
-Lancer le navigateur avec les paramètres du profil.
 
 
-Persistance :
 
 
-Profils stockés dans profiles.json ou SQLite.
 
+Architecture
 
-Cookies/session isolés par profil.
 
 
-Multi-profils simultanés :
+Services :
 
 
-Support du threading / async pour gérer plusieurs profils en parallèle.
 
+ProfileService : Gestion des profils (login, sessions, multi-comptes).
 
+AutomationService : Orchestre les actions globales (lancement WebView2, injection de fingerprints, proxies).
 
-2.2 Anti-détection / Fingerprinting
-Chaque profil doit simuler un utilisateur réel via :
-User-Agent dynamique (desktop/mobile).
+ProxyService : Rotation de proxies (fichier Data/proxies.txt).
 
+FingerprintService : Spoofing (User-Agent aléatoire, Canvas/WebGL via args WebView2).
 
-Fuseau horaire, langue, résolution écran, WebGL, Canvas, plugins.
+TargetService : Spécifique au ciblage (détails ci-dessous).
 
+LoggerService : Logs structurés (console + fichier).
 
-Spoofing hardware (CPU/GPU, fonts, concurrency).
 
 
-Masquage automatisation (navigator.webdriver, WebRTC, etc.).
 
 
-Proxy dédié (résidentiel/mobile de préférence).
+Forms :
 
 
-Sessions/cookies persistants restaurés automatiquement.
 
+MainForm : Sélection plateforme/profil, boutons d'actions.
 
-👉 Implémentation avec PuppeteerSharp ou PlaywrightSharp en C# et scripts JS injectés.
+InstagramBotForm / TikTokBotForm : UI dédiée avec WebView2 embarqué, logs live.
 
-2.3 Actions (Forms spécifiques)
-Chaque plateforme dispose de son Form (InstagramBotForm / TikTokBotForm) avec trois boutons : Target, Scroll, Publish.
-a) Target
-Charge targets.txt (UTF-8, un profil par ligne).
 
 
-Pour chaque profil :
 
 
-Ouvre le dernier Reel/post → like + commentaire (aléatoire).
+Données :
 
 
-Visionne 5–10 Reels suivants (5–10 sec chacun) → like environ 20%.
 
+Data/profiles.json : Liste profils (username, password hashé).
 
-Gestion d’erreurs : profil privé, inexistant ou sans contenu → log + skip.
+Data/targets.txt : Cibles (un username par ligne, UTF-8).
 
+Data/comments.txt : Commentaires aléatoires (un par ligne).
 
-Fermeture du navigateur en fin de traitement.
+Data/publish\_schedule.csv : Planning publications (format CSV : Date,Account,Plateforme,Media Path,Description).
 
+Data/commented\_creators.txt : Liste des créateurs commentés (append par Scrolling, un par ligne).
 
-b) Scroll
-Accède à la page des Reels (/reels/ ou /foryou).
+config.json : Params (taux interactions, délais min/max, limites likes/jour).
 
 
-Pendant 20–40 min :
 
 
-Visionnage aléatoire avec scroll fluide et pauses variables.
 
+Build : .NET 8, target x64. Installer WebView2 Runtime via Evergreen Bootstrapper.
 
-Like ~30%, commentaire ~30% (contenu aléatoire).
 
 
-Fermeture automatique à la fin.
+Détails des Actions
 
+Target (Ciblage)
 
-c) Publish
-Lit schedule.csv ou Excel (Date / Account / Plateforme / Media Path / Description).
 
 
-Filtre par date du jour + compte sélectionné + plateforme.
+Objectif : Pour chaque cible (de Data/targets.txt), ouvrir son profil, puis scroller 5-10 Reels/posts suivants pour simuler un "engagement naturel". Liker aléatoirement 9% des Reels scrollés, et commenter uniquement ceux publiés il y a moins de 24h (détection via timestamp relatif ou scraping date de post).
 
+Flux :
 
-Pour chaque ligne correspondante :
 
 
-Ouvre la page de publication.
+Charger liste cibles.
 
+Pour chaque : Naviguer vers https://www.instagram.com/\[target]/ (ou TikTok equiv.).
 
-Upload du média (photo/vidéo) et ajout de la description.
+Attendre chargement (via CoreWebView2.NavigationCompleted).
 
+Si profil privé/inexistant : Log erreur, skip (simuler un bref scroll puis next).
 
-Vérification erreurs (fichier manquant, format non supporté).
+Ouvrir dernier Reel/post : Clique via ExecuteScriptAsync("document.querySelector('selector').click()") (injection JS minimale si besoin, mais prioriser événements natifs WebView2).
 
+Scroller 5-10 Reels : Scroll fluide (via ExecuteScriptAsync pour smooth scroll), durée 5-10s par Reel.
 
-Fermeture automatique après les publications.
+Likes : Pour chaque Reel scrollé, si random < 9% : Simuler clic souris (aléatoire position ±10px pour humaniser).
 
+Commentaires : Pour chaque Reel avec <24h : Saisir texte aléatoire de comments.txt (délai frappe 100-300ms/char, avec 5% backspace/erreurs).
 
+Délai global : 30-90s par cible + pause 1-5min entre cibles.
 
-3. Gestion des fichiers
-targets.txt : liste des cibles (UTF-8).
 
 
-schedule.csv : planification des publications.
 
 
-profiles.json : stockage des profils et fingerprints.
+Sécurité : Max 50 interactions/jour/profil. Randomiser User-Agent/fingerprint par session.
 
+Intégration : Bouton "Target" sur Form → Appel TargetService.ProcessTargetsAsync(profile, platform).
 
-Logs/ : fichiers .log avec rotation quotidienne et export JSON.
 
 
+Scroll (Visionnage Passif)
 
-4. Interface utilisateur
-MainForm.cs : CRUD profils + lancement navigateur.
 
 
-InstagramBotForm.cs / TikTokBotForm.cs : boutons Target / Scroll / Publish.
+Objectif : Naviguer feed principal, scroll infini 10-20min (vitesse variable, pauses aléatoires). Liker aléatoirement 9% des posts/Reels, commenter uniquement ceux avec déjà ≥100 commentaires (détection via count de replies), et logger les noms des créateurs commentés dans Data/commented\_creators.txt (append, un username par ligne, avec timestamp).
 
+Flux :
 
-Tableau de bord temps réel : progression, logs, statut navigateur.
 
 
-Dashboard statistique : graphiques sur engagement (likes, commentaires, publications réussies).
+Naviguer feed principal (https://www.instagram.com/ ou TikTok equiv., post-login).
 
+Attendre chargement.
 
-Scheduler intégré : possibilité de planifier l’exécution automatique des scripts.
+Scroll infini : Boucle de scrolls fluides (via ExecuteScriptAsync("window.scrollBy(0, window.innerHeight \* Math.random());")), avec pauses aléatoires 2-5s.
 
+Pour chaque post/Reel visible :
 
 
-5. Logs & suivi
-Logger centralisé (Logger.cs).
 
+Like : Si random < 9% : Clic simulé.
 
-Niveaux : INFO / WARNING / ERROR.
+Commentaire : Vérif nombre commentaires (inject ExecuteScriptAsync("return document.querySelector('.comment-count')?.textContent || 0;") → Si ≥100 : Saisir commentaire aléatoire + submit ; append username créateur à commented\_creators.txt).
 
 
-Exemple :
- [2025-10-02 12:35:20][INFO] Profil "insta_demo" → Like effectué sur Reel #id123
 
 
-Logs affichés en temps réel dans l’interface + sauvegarde persistante.
 
+Durée totale : 10-20min, avec ~10% likes/vues partielles.
 
-Analyse post-exécution (nb likes, nb commentaires, nb publications).
+Humanisation : Mouvements souris aléatoires, délais frappe.
 
 
 
-6. Paramétrage
-Fichier config.json pour ajuster :
 
 
-Durée visionnage min/max (ex: 5–10s).
+Sécurité : Limites quotidiennes (ex. max 100 likes/session). Logs stats (likes, commentaires effectués).
 
+Intégration : Bouton "Scrolling" sur Form → Appel AutomationService.StartScrollingAsync(profile, platform).
 
-% like/comment (avec plage aléatoire).
 
 
-Nombre max de Reels par profil.
+Post (Publication)
 
 
-Délais entre actions.
 
+Objectif : Lire le fichier Data/publish\_schedule.csv (format : Date,Account,Plateforme,Media Path,Description ; exemple : "2025-10-03,monprofil,Instagram,C:\\test\\image.jpg,Test post !"). Filtrer les lignes où Date = date du jour (format YYYY-MM-DD), et où Account = nom du profil actif (défini dans Data/profiles.json). Pour chaque ligne matchante : Publier le média avec la description fournie.
 
-Paramètres modifiables directement depuis l’interface.
+Flux :
 
 
 
-7. Stack technique
-Langage : C# .NET 6 ou .NET 8
+Charger CSV via CsvHelper (parser en objets {Date, Account, Platforme, MediaPath, Description}).
 
+Filtrer : Date == DateTime.Today.ToString("yyyy-MM-dd") ET Account == profile.Username.
 
-UI : WinForms
+Pour chaque entrée filtrée :
 
 
-Automation : PuppeteerSharp ou PlaywrightSharp
 
+Naviguer vers page publication (https://www.instagram.com/p/ ou + pour nouveau post ; TikTok equiv.).
 
-Parsing CSV/Excel : CsvHelper + ClosedXML
+Attendre formulaire upload.
 
+Uploader média : Via WebView2, simuler drag-drop ou file input (ExecuteScriptAsync pour trigger input file avec chemin absolu).
 
-Persistance : JSON (Newtonsoft.Json) ou SQLite
+Saisir description : Texte de CSV + hashtags aléatoires si config ; délai frappe humanisé.
 
+Submit : Clic bouton post + attente confirmation.
 
-Logging : Serilog ou Logger custom
 
 
 
-8. Sécurité & limitations
-Automatisation = violation CGU Instagram/TikTok → risque de bannissement.
 
+Gestion erreurs : Si média introuvable/échec upload → Log et skip ; retry max 3x.
 
-Actions doivent intégrer de l’aléatoire (temps, taux d’interaction, déplacements souris).
+Post-upload : Délai 1-3min avant next (si multiple).
 
 
-Proxy obligatoire (HTTP/SOCKS5).
 
 
-Nettoyage mémoire + fermeture navigateur après chaque run.
 
+Sécurité : Max 5 posts/jour/profil. Vérif format média (jpg/png/mp4 via Path.GetExtension).
 
-Limites de sécurité intégrées (ex: max 50 likes/jour/profil).
+Intégration : Bouton "Publish" sur Form → Appel AutomationService.PublishScheduledAsync(profile, platform) (scan CSV et exécute).
 
 
 
-9. Structure projet
-SocialNetworkArmy/
-│
-├── Data/
-│   ├── profiles.json
-│   ├── targets.txt
-│   ├── schedule.csv
-│   └── Logs/
-│
-├── Scripts/
-│   ├── instagram/ (target.js, scroll.js, publish.js)
-│   └── tiktok/ (target.js, scroll.js, publish.js)
-│
-├── Services/
-│   ├── ProfileService.cs
-│   ├── AutomationService.cs
-│   ├── ProxyService.cs
-│   └── FingerprintService.cs
-│
-├── Forms/
-│   ├── MainForm.cs
-│   ├── InstagramBotForm.cs
-│   └── TikTokBotForm.cs
-│
-├── Models/
-│   ├── Profile.cs
-│   ├── Fingerprint.cs
-│   └── ScheduleEntry.cs
-│
-└── Utils/
-├── Logger.cs
-├── Config.cs
-└── Helpers.cs
+Classe TargetService (Détails Implémentation)
 
+Voici ce que fait TargetService.cs maintenant (structure proposée ; on peut coder ça ensemble si tu veux) :
 
 
 
+Rôle : Gère le ciblage end-to-end pour une plateforme/profil, en utilisant un WebView2 partagé via AutomationService. Pas de JS externes : tout en C# avec événements WebView2 (NavigationCompleted, DOMContentLoaded) et injections inline minimales pour interactions précises. Focus sur scroll 5-10 Reels, likes 9%, commentaires <24h.
 
+Méthodes clés :
 
 
 
+async Task ProcessTargetsAsync(Profile profile, Platform platform) :
 
 
 
+Lit targets.txt → Pour chaque cible : await TargetSingleAsync(target, webView).
 
+Logs progression/stats (ex. "Cible @userX : 7 Reels scrollés, 1 like, 2 commentaires <24h").
 
+Gère exceptions (timeout, ban detect) → Retry ou skip.
 
 
-LES COMPTES DOIVENT SURVIVRE :
- 
-Anti-détection / Fingerprinting 
 
 
-Pour assurer que Instagram et TikTok ne détectent jamais l'automatisation, il faut implémenter une stratégie complète d'évasion couvrant les empreintes digitales (fingerprints), les comportements humains simulés, les protocoles de communication, et les limites d'activité. L'objectif est de rendre l'outil indistinguable d'un utilisateur réel en évitant tous les signaux de détection connus (comme les flags d'automatisation, les patterns comportementaux anormaux, ou les artefacts techniques). Voici une liste exhaustive de tous les éléments à considérer et implémenter, basée sur les meilleures pratiques pour PuppeteerSharp ou PlaywrightSharp. Cela inclut des techniques basiques (déjà mentionnées) et avancées pour contourner les défenses modernes comme les VMs obfuscées de TikTok ou les fingerprintings basés sur l'IA d'Instagram.
-Empreintes digitales (Fingerprints) à spoofer
 
-User-Agent dynamique: Générer aléatoirement des User-Agents réalistes (basés sur des listes de navigateurs réels comme Chrome, Firefox sur desktop/mobile). Éviter les User-Agents par défaut de Puppeteer/Playwright qui incluent "HeadlessChrome". Rotation par session ou par action pour matcher des dispositifs variés (ex: iOS pour TikTok mobile-like).
-Fuseau horaire et langue: Spoofer le timezone (ex: via Intl.DateTimeFormat) et la langue du navigateur (navigator.languages) pour correspondre à des utilisateurs réels (ex: aléatoire par proxy géolocalisé). Utiliser des valeurs cohérentes avec le proxy (ex: US pour un proxy américain).
-Résolution d'écran et viewport: Randomiser la résolution (ex: 1920x1080, 1280x720) et le viewport pour simuler différents appareils. Éviter les résolutions par défaut headless qui sont détectables.
-WebGL et Canvas fingerprinting: Spoofer les rendus WebGL (vendor/renderer) et Canvas (via injection JS pour modifier toDataURL ou ajouter du bruit aléatoire aux pixels). TikTok utilise spécifiquement cela dans sa VM obfuscée ; ajouter du bruit unique par session pour éviter les matches exacts.
-Audio fingerprinting: Modifier les propriétés audio (ex: AudioContext, oscillatorNode) pour ajouter du bruit aléatoire et éviter les fingerprints statiques.
-Fonts et plugins: Spoofer la liste des fonts installées (via injection pour simuler des sets communs comme Arial, Times New Roman). Ajouter des plugins manquants (ex: PDF viewer, Flash-like stubs) pour matcher un navigateur réel ; Puppeteer headless manque souvent ces éléments.
-Hardware spoofing: Randomiser le hardware concurrency (navigator.hardwareConcurrency, ex: 4-16 cœurs), CPU/GPU info (via WebGL), et mémoire disponible. Utiliser des valeurs plausibles basées sur des stats réelles d'utilisateurs.
-WebRTC masking: Désactiver ou spoofer WebRTC (ex: navigator.mediaDevices) pour cacher l'IP réelle ; configurer pour matcher le proxy et éviter les leaks.
-Autres APIs navigateur: Spoofer navigator.platform, navigator.vendor, screen.depth, navigator.maxTouchPoints (pour simuler touch sur mobile). Utiliser des proxies JS pour intercepter et modifier ces appels.
+async Task TargetSingleAsync(string target, CoreWebView2 webView) :
 
-Masquage des indicateurs d'automatisation
 
-Désactiver navigator.webdriver: Définir navigator.webdriver à undefined via page.addInitScript (Playwright) ou page.evaluateOnNewDocument (Puppeteer). C'est un flag clé détecté par Instagram et TikTok.
-Cacher les artefacts CDP (Chrome DevTools Protocol): Minimiser l'usage de CDP pour éviter les détections protocol-level (ex: WebSocket communications, object serialization). Utiliser des frameworks avancés comme Nodriver ou Selenium Driverless pour réimplémenter les primitives d'automatisation sans CDP/WebDriver.
-Mode headful vs headless: Préférer le mode headful (visible) pour certaines actions, car headless laisse des traces (ex: codebase unifié de Chrome depuis 2022 rend headless plus détectable). Basculer dynamiquement en fonction du risque.
-Éviter les VMs obfuscées (spécifique TikTok): Pour TikTok, qui compile son JS en bytecode exécuté par une VM custom, extraire/reimplémenter l'interpréteur ou émuler le bytecode manuellement. Utiliser un navigateur complet pour générer des signaux valides au lieu de bots HTTP purs.
-Intégration avec anti-detect browsers: Utiliser des patches comme Rebrowser pour Puppeteer/Playwright, ou intégrer avec des browsers anti-detect commerciaux (ex: pour spoofing avancé et rotation automatique).
 
-Gestion des proxies et réseau
+Navigue : webView.Navigate(new Uri($"https://www.{platform.Domain}/{target}/"));.
 
-Proxies dédiés et rotation: Utiliser exclusivement des proxies résidentiels ou mobiles (pas datacenter, car détectables). Rotation automatique d'IP par session ou après N actions (ex: toutes les 10-20 min). Support HTTP/SOCKS5 avec authentification. Géolocaliser les proxies pour matcher le fingerprint (ex: proxy US pour un User-Agent américain).
-Rotation des headers HTTP: Randomiser les headers comme Referer, Accept-Language, Accept-Encoding, et Connection. Éviter les patterns statiques ; utiliser des listes réalistes.
-Gestion des CAPTCHAs: Éviter de les déclencher en imitant les humains ; si déclenchés, intégrer un solver externe (ex: via API). Surveiller les patterns qui les activent (ex: trop de requêtes rapides).
+Attend : await webView.WaitForNavigationAsync(); (extension helper pour polling).
 
-Simulation de comportements humains
+Vérif profil : Inject await webView.ExecuteScriptAsync("return document.querySelector('.error') ? true : false;") → Si erreur, log et return.
 
-Déplacements de souris et clics: Simuler des mouvements courbes avec accélération/décélération (pas linéaires). Utiliser des libs comme puppeteer-mouse pour des paths aléatoires. Pour les likes/comments, ajouter des hovers aléatoires avant clic.
-Vitesse de frappe et saisie: Typer les commentaires avec des délais variables par caractère (ex: 100-300ms), inclure des erreurs/backspaces aléatoires pour humaniser.
-Scroll fluide et pauses: Implémenter un scroll non-linéaire avec vitesse variable (ex: accélérer puis ralentir). Ajouter des pauses aléatoires (ex: 2-10s) pendant le visionnage de Reels.
-Taux d'interaction aléatoires: Like ~20-30% avec variance (ex: Poisson distribution), commentaires ~10-30% avec contenu généré aléatoirement (ex: emojis variés, phrases courtes). Configurable via config.json avec plages min/max.
-Durées de session variables: Sessions de 20-40 min avec fin aléatoire ; éviter les durées fixes. Inclure des "pauses inactives" simulées.
-Ordre des actions randomisé: Ne pas suivre un ordre fixe (ex: like puis comment) ; randomiser la séquence pour éviter les patterns.
-Gestion des erreurs humaine: Sur profil privé/inexistant, simuler un "regard" bref puis back ; loguer sans paniquer.
+Scroll Reels : Boucle 5-10x : await webView.ExecuteScriptAsync("window.scrollBy(0, window.innerHeight \* Math.random());"); + durée 5-10s.
 
-Limites de sécurité et anti-patterns
+Pour chaque Reel :
 
-Limites quotidiennes: Intégrer des caps hardcodés (ex: max 50 likes/jour/profil, 20 follows, 10 posts) pour éviter les flags d'activité anormale. Configurable mais avec warnings si dépassé.
-Randomisation globale: Utiliser des distributions statistiques (ex: normale pour délais) pour tous les timings/interactions. Éviter les boucles prédictibles.
-Nettoyage post-session: Fermer le navigateur, effacer la mémoire/cache temporaire, tuer les processus résiduels pour éviter les leaks.
-Multi-threading prudent: Pour multi-profils, utiliser async avec délais entre lancements pour éviter les bursts d'activité détectables.
-Éviter les signaux d'automatisation avancée: Pas de navigation trop rapide, pas d'accès direct à des URLs internes sans simulation de navigation.
 
-Implémentation technique
 
-Libs et plugins: Utiliser puppeteer-extra-plugin-stealth ou playwright-extra pour des patches automatiques. Injecter des scripts JS custom pour spoofing (ex: via page.evaluate).
-Monitoring et adaptation: Logger les détections potentielles (ex: CAPTCHAs, bans) et ajuster dynamiquement (ex: ralentir si warning). Mettre à jour les fingerprints périodiquement via config.
-Test et validation: Tester contre des outils comme CreepJS ou FingerprintJS pour vérifier l'unicité des fingerprints. Simuler des runs sur des comptes tests pour mesurer les taux de ban.
-Évolution des défenses: Surveiller les updates (ex: unification Chrome headless/headful, VMs TikTok) et patcher en conséquence. Prévoir une modularité pour switcher vers des frameworks comme Nodriver si Puppeteer devient trop détectable.
+Like : Si Random.Shared.NextDouble() < 0.09 : await webView.ExecuteScriptAsync("document.querySelector('svg\[aria-label=\\"Like\\"]')?.click();"); + délai.
 
-PACKAGES NUGGETS
+Commentaire <24h : Inject pour check timestamp (ExecuteScriptAsync("return new Date(document.querySelector('.post-date')?.textContent).getTime() > Date.now() - 86400000;")) → Si true : Saisir via host object + append log.
 
-Microsoft.Web.WebView2 Pour l'automatisation navigateur + anti-détection
-CsvHelper --version 30.0.1  # Parsing CSV pour schedule.csv
-ClosedXML --version 0.102.1  # Parsing Excel si tu ajoutes du support
-Newtonsoft.Json --version 13.0.3  # JSON pour profiles.json et fingerprints
-Serilog --version 3.1.1  # Logging avancé (remplace Logger custom)
-Serilog.Sinks.File --version 6.0.0  # Pour rotation logs quotidiens
-Serilog.Sinks.Console --version 5.0.1  # Logs en console pour debug
 
 
 
+
+Humanisation : Ajouter MouseSimulator.MoveRandom(webView) (classe helper pour mouvements souris via Windows API).
+
+
+
+
+
+
+
+
+
+Dépendances : Inject ILogger<TargetService>, IProxyService, IFingerprintService.
+
+Exemple snippet (dans TargetSingleAsync) :
+
+csharp// Scroll et interactions
+
+int reelsCount = Random.Shared.Next(5, 11);
+
+for (int i = 0; i < reelsCount; i++)
+
+{
+
+&nbsp;   await webView.ExecuteScriptAsync("window.scrollBy(0, window.innerHeight);");
+
+&nbsp;   await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(5, 11)));
+
+
+
+&nbsp;   // Like 9%
+
+&nbsp;   if (Random.Shared.NextDouble() < 0.09)
+
+&nbsp;   {
+
+&nbsp;       await webView.ExecuteScriptAsync("document.querySelector('svg\[aria-label=\\"Like\\"]')?.click();");
+
+&nbsp;       await Task.Delay(TimeSpan.FromSeconds(Random.Shared.Next(2, 5)));
+
+&nbsp;   }
+
+
+
+&nbsp;   // Check <24h et commentaire
+
+&nbsp;   var isRecent = await webView.ExecuteScriptAsync("return (Date.now() - new Date(document.querySelector('.post-date')?.getAttribute('datetime') || 0)) < 86400000;");
+
+&nbsp;   if (Convert.ToBoolean(await webView.CoreWebView2.EvaluateScriptAsync(isRecent)))
+
+&nbsp;   {
+
+&nbsp;       // Saisir commentaire...
+
+&nbsp;   }
+
+}
+
+
+
+Avantages WebView2 : Léger, pas de headless externe, intégration native WinForms. Limites : Moins flexible que Playwright pour scraping avancé, mais parfait pour automation basique.
+
+
+
+Installation \& Lancement
+
+
+
+Clone repo.
+
+dotnet restore.
+
+Installer WebView2 Runtime (auto via NuGet ou manual).
+
+Configurer config.json et fichiers Data (incl. CSV pour publish).
+
+dotnet run → Sélectionner profil/plateforme → Lancer actions.
+
+
+
+TODO
+
+
+
+Implémenter helpers pour WebView2 (WaitForElement, SimulateKeyPress, CheckPostAge, CountComments).
+
+Ajouter stats dashboard (Graphiques via WinForms charts).
+
+Tests unitaires (xUnit) pour services.
+
+Version portable (self-contained).
 

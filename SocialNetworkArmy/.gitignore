@@ -32,6 +32,27 @@ Icon?
 *.log
 *.lastcodeanalysissucceeded
 
+# ===== Generated .NET files (AssemblyInfo, GlobalUsings, props/targets) =====
+*.AssemblyInfo.cs
+*.GlobalUsings.g.cs
+*.Designer.cs
+*.g.cs
+*.props
+*.targets
+*.FileListAbsolute.txt
+*.nuget.g.props
+*.nuget.g.targets
+
+# ===== Exes, DLLs, PDBs (build outputs) =====
+*.exe
+*.dll
+*.pdb
+*.appx
+*.msix
+*.msi
+*.ilk
+*.lib
+
 # ===== NuGet / Artifacts =====
 .nuget/
 **/packages/
@@ -116,3 +137,6 @@ _ReSharper*/
 # ===== Git merge junk =====
 *.orig
 *.rej
+
+# ===== Doublons inutiles =====
+.gitignore.txt  # Vire le .txt doublon
