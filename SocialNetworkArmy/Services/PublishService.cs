@@ -29,7 +29,7 @@ namespace SocialNetworkArmy.Services
         // =============== PUBLIC ENTRY ===============
         public async Task RunAsync(string[] filePaths, string? caption = null, bool autoPublish = false, CancellationToken token = default)
         {
-            // === [NOUVEAU] Vérifie s’il y a un schedule dans data/schedule.csv ===
+            // === [NOUVEAU] Vérifie s’il y a un schedule dans Data/schedule.csv ===
             try
             {
                 string schedInfo;
@@ -99,6 +99,10 @@ namespace SocialNetworkArmy.Services
                 var ui = await WaitUploadUi(token);
                 log.AppendText(ui ? "[UPLOAD UI] détectée.\r\n" : "[UPLOAD UI] non détectée.\r\n");
                 await Slow(token);
+
+                // >>> [ADD] clic utilisateur sur “Sélectionner depuis l’ordinateur”, puis petite pause humaine
+               // await ClickSelectFromComputerAsync(token);
+               // await HumanUploadPauseAsync(token);
 
                 // 4) Injecter fichiers (nodeId)
                 var inputNodeId = await GetInputNodeId();
@@ -248,9 +252,7 @@ namespace SocialNetworkArmy.Services
         {
             try
             {
-                await Cdp("DOM.setFileInputFiles", new { files, nodeId });
-
-                // Déclencher input/change sur CET élément
+                // Resolve node => objectId
                 var resolve = await Cdp("DOM.resolveNode", new { nodeId, objectGroup = "upload" });
                 string? objectId = null;
                 try
@@ -261,25 +263,109 @@ namespace SocialNetworkArmy.Services
                 }
                 catch { /* ignore */ }
 
+                // Pre-click already done in flow: but ensure input is visible + enabled
+                // Poll JS to confirm input exists & !disabled & visible
+                bool found = await WaitFor(async () =>
+                {
+                    var r = await webView.CoreWebView2.ExecuteScriptAsync(@"
+(() => {
+  const i = document.querySelector('[role=""dialog""] input[type=""file""], input[type=""file""]');
+  if (!i) return 'NO';
+  const style = window.getComputedStyle(i);
+  const visible = style && style.display !== 'none' && style.visibility !== 'hidden' && i.offsetWidth > 0 && i.offsetHeight > 0;
+  return (visible && !i.disabled) ? 'OK' : 'NO';
+})()");
+                    return Trim(r) == "OK";
+                }, 3000, 200, CancellationToken.None);
+
+//                if (!found)
+//                {
+//                    // still try to pre-click input element via CDP if available
+//                    if (!string.IsNullOrEmpty(objectId))
+//                    {
+//                        await Cdp("Runtime.callFunctionOn", new
+//                        {
+//                            objectId,
+//                            functionDeclaration = @"function(){
+//  try{ this.scrollIntoView({block:'center'}); this.click(); }catch(e){}
+//}",
+//                            silent = true
+//                        });
+//                    }
+//                    // small extra wait
+//                    await Task.Delay(rng.Next(400, 900));
+//                }
+
+                // small human jitter BEFORE setFileInputFiles
+                await Task.Delay(rng.Next(400, 900));
+
+                // attempt to set files (with simple retry loop)
+                int attempts = 0;
+                bool setOk = false;
+                Exception lastEx = null;
+                while (attempts < 3 && !setOk)
+                {
+                    attempts++;
+                    try
+                    {
+                        await Cdp("DOM.setFileInputFiles", new { files, nodeId });
+                        setOk = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        lastEx = ex;
+                        await Task.Delay(300 * attempts);
+                    }
+                }
+                if (!setOk)
+                {
+                    log.AppendText("[SET_FILES] DOM.setFileInputFiles failed: " + (lastEx?.Message ?? "unknown") + "\r\n");
+                    return false;
+                }
+
+                // small pause after injection
+                await Task.Delay(rng.Next(300, 1000));
+
+                // dispatch input/change on resolved object if possible
                 if (!string.IsNullOrEmpty(objectId))
                 {
                     await Cdp("Runtime.callFunctionOn", new
                     {
                         objectId,
                         functionDeclaration = @"function(){
-try{ this.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){}
-try{ this.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
+  try{ this.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){}
+  try{ this.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
 }",
-                        returnByValue = true,
                         silent = true
                     });
                 }
                 else
                 {
                     await webView.CoreWebView2.ExecuteScriptAsync(@"
-(() => { const i=document.querySelector('[role=""dialog""] input[type=""file""], input[type=""file""]');
-if(i){ i.dispatchEvent(new Event('input',{bubbles:true})); i.dispatchEvent(new Event('change',{bubbles:true})); } })()");
+(() => {
+  const i=document.querySelector('[role=""dialog""] input[type=""file""], input[type=""file""]');
+  if(i){ i.dispatchEvent(new Event('input',{bubbles:true})); i.dispatchEvent(new Event('change',{bubbles:true})); }
+})()");
                 }
+
+                // attendre que l'UI prenne en compte l'upload (par ex. bouton "Suivant" qui apparaît)
+                bool uiReady = await WaitFor(async () =>
+                {
+                    var r = await webView.CoreWebView2.ExecuteScriptAsync(@"
+(() => {
+  const dlg = document.querySelector('[role=""dialog""]') || document;
+  const hasNext = [...dlg.querySelectorAll('button,[role=""button""]')].some(b => /suivant|next/i.test((b.textContent||'') + ((b.getAttribute&&b.getAttribute('aria-label'))||'')));
+  return hasNext ? 'true' : 'false';
+})()");
+                    return Trim(r) == "true";
+                }, 8000, 400, CancellationToken.None);
+
+                if (!uiReady)
+                {
+                    log.AppendText("[SET_FILES] Warning: UI didn't respond after file injection (possible detection).\r\n");
+                    // don't outright fail — caller will catch downstream if needed
+                }
+
                 return true;
             }
             catch (Exception ex)
@@ -288,6 +374,7 @@ if(i){ i.dispatchEvent(new Event('input',{bubbles:true})); i.dispatchEvent(new E
                 return false;
             }
         }
+
 
         // =============== IG UI POLLS ===============
         private async Task<bool> WaitUploadUi(CancellationToken token)
@@ -620,6 +707,7 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             }
             return false;
         }
+
         // [ADD] Script console: ECRIRE DANS DESCRIPTION (execCommand)
         private async Task<bool> WriteCaptionExecCmdAsync(string text, CancellationToken token)
         {
@@ -664,17 +752,16 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             log.AppendText("[PUBLISH/XPath] " + res + "\r\n");
             return res == "OK_XPATH";
         }
+
         // [ADD] Lecture/filtrage du schedule.csv et surcharge des paramètres si match trouvé.
-        // Retourne true = continuer le flux, false = stopper (pas de match ou problème bloquant).
         private bool TryApplyScheduleCsv(ref string[] filePaths, ref string? caption, out string info)
         {
             info = string.Empty;
 
-            // Emplacement du CSV: variable d'env SNA_SCHEDULE prioritaire, sinon fichier "schedule.csv" à côté de l'exe.
+            // Data/ (majuscules) comme tu l'as confirmé
             string schedulePath = Environment.GetEnvironmentVariable("SNA_SCHEDULE");
             if (string.IsNullOrWhiteSpace(schedulePath))
-                schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "schedule.csv");
-
+                schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "schedule.csv");
 
             if (!File.Exists(schedulePath))
             {
@@ -682,17 +769,15 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 return true; // pas de schedule → on laisse la logique actuelle
             }
 
-            // On essaie de connaître le compte courant depuis le formulaire (sans dépendre d'un nom précis, via réflexion souple).
             string? currentAccount = GetCurrentAccountNameSafe();
 
             var lines = File.ReadAllLines(schedulePath);
             if (lines.Length < 2)
             {
                 info = "schedule.csv vide.";
-                return false; // fichier présent mais vide → on stoppe (aucune tâche à exécuter)
+                return false;
             }
 
-            // Mapping d'en-têtes (tolérant)
             var headers = SplitCsvLine(lines[0]);
             int iDate = IndexOfHeader(headers, "Date");
             int iAccount = IndexOfHeader(headers, "Account", "Compte", "Name", "Profil", "Profile");
@@ -707,7 +792,6 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             }
 
             var today = DateTime.Today;
-            // on parcourt toutes les lignes à la recherche de la 1ʳᵉ correspondance stricte
             for (int li = 1; li < lines.Length; li++)
             {
                 var cols = SplitCsvLine(lines[li]);
@@ -730,7 +814,6 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 if (!string.IsNullOrWhiteSpace(currentAccount) &&
                     !account.Equals(currentAccount, StringComparison.OrdinalIgnoreCase))
                 {
-                    // si on connaît le compte courant, on exige l'égalité stricte
                     continue;
                 }
 
@@ -748,7 +831,6 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                     return false;
                 }
 
-                // OK, on applique
                 filePaths = new[] { fullMedia };
                 if (iDesc >= 0 && iDesc < cols.Length)
                 {
@@ -757,12 +839,11 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 }
 
                 info = $"match: {today:yyyy-MM-dd} / {account} / {platform} → override media & description.";
-                return true; // continuer le flux normal (on a rempli filePaths+caption)
+                return true;
             }
 
-            // schedule présent mais aucune ligne ne correspond pour aujourd'hui/compte
             info = "NO_MATCH (aucune ligne pour aujourd’hui et ce compte) → arrêt.";
-            return false; // on stoppe : rien à publier
+            return false;
         }
 
         // [ADD] Essaie de deviner le nom du compte courant exposé par le formulaire (réflexion souple, non bloquant).
@@ -772,12 +853,11 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             {
                 var t = form.GetType();
 
-                // propriétés directes de type string possibles
                 string[] propNames =
                 {
-            "SelectedProfileName","ActiveProfileName","CurrentProfileName",
-            "ProfileName","AccountName","SelectedName","Name"
-        };
+                    "SelectedProfileName","ActiveProfileName","CurrentProfileName",
+                    "ProfileName","AccountName","SelectedName","Name"
+                };
                 for (int i = 0; i < propNames.Length; i++)
                 {
                     var p = t.GetProperty(propNames[i],
@@ -791,7 +871,6 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                     }
                 }
 
-                // méthodes qui renvoient string
                 string[] methodNames = { "GetCurrentProfileName", "GetSelectedProfileName", "GetProfileName" };
                 for (int i = 0; i < methodNames.Length; i++)
                 {
@@ -807,7 +886,6 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                     }
                 }
 
-                // objet "SelectedProfile"/"CurrentProfile"/"ActiveProfile" possédant une propriété Name/name
                 var pObj = t.GetProperty("SelectedProfile") ??
                            t.GetProperty("CurrentProfile") ??
                            t.GetProperty("ActiveProfile");
@@ -825,12 +903,11 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                     }
                 }
 
-                // variable d'environnement en dernier recours
                 var env = Environment.GetEnvironmentVariable("SNA_ACCOUNT");
                 if (!string.IsNullOrWhiteSpace(env)) return env;
             }
             catch { /* non bloquant */ }
-            return null; // inconnu → on ne bloque pas, TryApplyScheduleCsv gère le cas
+            return null;
         }
 
         // [ADD] utilitaire: index d'un header parmi plusieurs alias
@@ -864,7 +941,6 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 {
                     if (c == '"')
                     {
-                        // double guillemet "" -> guillemet littéral
                         if (i + 1 < line.Length && line[i + 1] == '"') { sb.Append('"'); i++; }
                         else { inQuotes = false; }
                     }
@@ -881,10 +957,44 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             return list.ToArray();
         }
 
-
         private static string Trim(string s) => (s ?? "").Trim().Trim('"');
 
         private async Task Slow(CancellationToken ct) =>
-            await Task.Delay(rng.Next(3000, 7000), ct); // 3–7s pour simuler l’humain
+            await Task.Delay(rng.Next(2000, 5000), ct); // 3–5s pour simuler l’humain
+
+        // ===================== AJOUTS ANTI-DÉTECTION UPLOAD =====================
+
+        // [ADD] Clic "Sélectionner depuis l’ordinateur" / "Select from computer" avant l'upload
+        private async Task<bool> ClickSelectFromComputerAsync(CancellationToken token)
+        {
+            var res = await GetButtonPosition(@"
+const sc=document.querySelector('[role=""dialog""],[aria-modal=""true""]')||document;
+const btn=[...sc.querySelectorAll('button,[role=""button""],a,[tabindex]')].find(e=>{
+  const t=(e.textContent||'').toLowerCase();
+  const a=(e.getAttribute && e.getAttribute('aria-label')||'').toLowerCase();
+  return /(sélectionner|selectionner|select).*(ordinateur|computer)/.test(t+a);
+});
+if(!btn) return {ok:false, msg:'NO_SELECT_BUTTON'};
+btn.scrollIntoView({block:'center', inline:'center'});
+const r=btn.getBoundingClientRect();
+return {
+  ok:true,
+  msg:'HIT',
+  x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)),
+  y:Math.round(r.top + r.height * (0.2 + Math.random() * 0.6))
+};
+");
+            if (!res.ok) { log.AppendText("[UPLOAD] Bouton \"Sélectionner…\" introuvable.\r\n"); return false; }
+
+            await SimulateClick(res.x, res.y, token);
+            log.AppendText("[UPLOAD] Click \"Sélectionner depuis l’ordinateur\".\r\n");
+            return true;
+        }
+
+        // [ADD] Attente humaine courte (0.9–2.1s) pour coller à un vrai clic + ouverture
+        private async Task HumanUploadPauseAsync(CancellationToken ct)
+        {
+            await Task.Delay(rng.Next(900, 2100), ct);
+        }
     }
 }

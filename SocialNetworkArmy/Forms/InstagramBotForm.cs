@@ -209,38 +209,40 @@ namespace SocialNetworkArmy.Forms
         {
             try
             {
+                // One folder per profile = one persistent session per profile
                 var userDataDir = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                     "SocialNetworkArmy",
-                    profile.Name
+                    "Profiles",            // (optional subfolder, keeps things tidy)
+                    profile.Name           // <-- key: different folder for each profile
+                );
+                Directory.CreateDirectory(userDataDir);
+
+                // Create environment bound to that folder
+                var env = await CoreWebView2Environment.CreateAsync(
+                    browserExecutableFolder: null,
+                    userDataFolder: userDataDir,
+                    options: null
                 );
 
-                // webView est déjà ajouté au form dans InitializeComponent
-                // On initialise le runtime/instance CoreWebView2
-                await webView.EnsureCoreWebView2Async(null);
+                // Initialize WebView2 with this environment
+                await webView.EnsureCoreWebView2Async(env);
 
-                // (si tu gardes InitializeBrowserAsync, tu peux remplacer Ensure... par ton appel)
-                // webView = await automationService.InitializeBrowserAsync(profile, userDataDir);
-
-                // Réglages
-                if (webView.CoreWebView2 != null)
-                {
-                    webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
-                    webView.CoreWebView2.Settings.IsScriptEnabled = true;
-                    webView.CoreWebView2.Navigate("https://www.instagram.com/");
-                }
+                // Settings + first navigation
+                webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
+                webView.CoreWebView2.Settings.IsScriptEnabled = true;
+                webView.CoreWebView2.Navigate("https://www.instagram.com/");
 
                 await Task.Delay(800);
                 webView.Focus();
                 webView.BringToFront();
 
-                // Maintenant que CoreWebView2 existe -> on peut créer TargetService
+                // Initialize services after CoreWebView2 is ready
                 targetButton.Enabled = true;
                 targetService = new TargetService(webView, logTextBox, profile, this);
                 scrollService = new ScrollService(webView, logTextBox, profile, this);
                 publishService = new PublishService(webView, logTextBox, this);
 
-                // (optionnel) test fp
                 try { await monitoringService.TestFingerprintAsync(webView); } catch { /* ignore */ }
 
                 Logger.LogInfo("WebView2 prêt. TargetService et ScrollService initialisés.");
