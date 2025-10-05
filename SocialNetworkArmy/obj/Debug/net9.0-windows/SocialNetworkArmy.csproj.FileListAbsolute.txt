@@ -4,12 +4,6 @@ C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.AssemblyInfo.cs
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.csproj.CoreCompileInputs.cache
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\SocialNetworkArmy.exe
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Scripts\Instagram\publish.js
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Scripts\Instagram\scroll.js
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Scripts\Instagram\target.js
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Scripts\Tiktok\publish.js
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Scripts\Tiktok\scroll.js
-C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Scripts\Tiktok\target.js
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\SocialNetworkArmy.deps.json
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\SocialNetworkArmy.runtimeconfig.json
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\SocialNetworkArmy.dll
@@ -45,3 +39,5 @@ C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Microsoft.Web.WebView2.WinForms.xml
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\bin\Debug\net9.0-windows\Microsoft.Web.WebView2.Wpf.xml
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.sourcelink.json
+C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\Interop.UIAutomationClient.dll
+C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.csproj.ResolveComReference.cache

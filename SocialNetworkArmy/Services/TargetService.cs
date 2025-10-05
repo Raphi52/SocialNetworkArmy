@@ -69,9 +69,21 @@ namespace SocialNetworkArmy.Services
                         comments = new string[] { "Super ! ??", "J'adore ! ??", "Trop cool ! ??", "Impressionnant !", "Bien vu ! ??", "Top ! ??" }.ToList();
                     }
 
-
                     Random rand = new Random();
-                    
+
+                    // Detect language by navigating to home page
+                    webView.CoreWebView2.Navigate("https://www.instagram.com/");
+                    await Task.Delay(rand.Next(4000, 7001), token);
+                    var langResult = await webView.ExecuteScriptAsync("document.documentElement.lang;");
+                    var lang = langResult?.Trim('"') ?? "en";
+                    logTextBox.AppendText($"[LANG] Detected language: {lang}\r\n");
+
+                    string likeSelectors = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? @"svg[aria-label=""J\u2019aime""], svg[aria-label=""Je n\u2019aime plus""]" : @"svg[aria-label=""Like""], svg[aria-label=""Unlike""]";
+                    string unlikeSelectors = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? @"svg[aria-label=""Je n\u2019aime plus""], svg[aria-label=""Je n'aime plus""]" : @"svg[aria-label=""Unlike""]";
+                    string unlikeTest = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? @"n\u2019aime plus" : "unlike";
+                    string publishPattern = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "publier|envoyer" : "post|send";
+                    string nextLabel = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "Suivant" : "Next";
+                    string commentLabel = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "Commenter" : "Comment"; // In case needed later
 
                     foreach (var target in targets)
                     {
@@ -89,6 +101,25 @@ namespace SocialNetworkArmy.Services
 
                         // 4) Attendre un peu que la navigation se stabilise
                         await Task.Delay(3000, token);
+
+                        // Check for reels feed to load before proceeding
+                        bool isLoaded = false;
+                        int loadRetries = 0;
+                        while (!isLoaded && loadRetries < 5)
+                        {
+                            var loadCheck = await webView.ExecuteScriptAsync("document.querySelectorAll('a[href*=\"/reel/\"]').length > 0 ? 'true' : 'false';");
+                            isLoaded = JsBoolIsTrue(loadCheck);
+                            if (!isLoaded)
+                            {
+                                await Task.Delay(2000, token);
+                                loadRetries++;
+                            }
+                        }
+                        if (!isLoaded)
+                        {
+                            logTextBox.AppendText($"[ERROR] Reels feed failed to load for {currentTarget}.\r\n");
+                            continue;
+                        }
 
                         // 6) Vérifier login (mur de connexion)
                         var loginWall = await webView.ExecuteScriptAsync(@"
@@ -191,14 +222,13 @@ namespace SocialNetworkArmy.Services
 
                         // ======================= 12) BOUCLE POUR REELS (LIKE + COMMENT + NEXT) =======================
                         // Refactorisé en boucle C# pour plus de contrôle et logs par étape (moins fragile)
-                        for (int reelNum = 1; reelNum <= maxReels; reelNum++)
-                        {
-                            token.ThrowIfCancellationRequested();
-
-                            logTextBox.AppendText($"[REEL {reelNum}/{maxReels}] Début interaction...\r\n");
-
-                            // Extraction de la date
-                            var dateScript = @"
+                        string previousReelId = null;
+                        var reelIdScript = @"
+(function(){
+  const match = window.location.href.match(/\/reel\/([^\/]+)/);
+  return match ? match[1] : 'NO_ID';
+})()";
+                        var dateScript = @"
 (function(){
   const timeEl = document.querySelector('time.x1p4m5qa');
   if (timeEl) {
@@ -209,6 +239,19 @@ namespace SocialNetworkArmy.Services
     return 'NO_DATE_FOUND';
   }
 })()";
+
+                        for (int reelNum = 1; reelNum <= maxReels; reelNum++)
+                        {
+                            token.ThrowIfCancellationRequested();
+
+                            logTextBox.AppendText($"[REEL {reelNum}/{maxReels}] Début interaction...\r\n");
+
+                            // Extract reel ID
+                            var reelId = await webView.ExecuteScriptAsync(reelIdScript);
+                            reelId = reelId?.Trim('"').Trim();
+                            logTextBox.AppendText($"[REEL_ID] {reelId}\r\n");
+
+                            // Extraction de la date
                             var reelDateRaw = await webView.ExecuteScriptAsync(dateScript);
 
                             // Fix: Properly deserialize the returned JSON string to get the unescaped inner JSON
@@ -233,34 +276,34 @@ namespace SocialNetworkArmy.Services
                             if (shouldLike)
                             {
                                 // LIKE (greffé du code qui marche)
-                                var likeTry = await webView.ExecuteScriptAsync(@"
-(function(){
-  try {
+                                var likeTry = await webView.ExecuteScriptAsync($@"
+(function(){{
+  try {{
     var scope = document.querySelector('div[role=""dialog""]') || document;
 
-    function sig(el){
+    function sig(el){{
       if(!el) return 'null';
       var id = el.id ? '#' + el.id : '';
       var cls = el.classList && el.classList.length ? ('.' + Array.from(el.classList).join('.')) : '';
       var role = el.getAttribute && el.getAttribute('role') ? '[role='+el.getAttribute('role')+']' : '';
       return el.tagName + id + cls + role;
-    }
+    }}
 
-    function getSvgAria(el){ try{ var svg = el.querySelector('svg[aria-label]'); return svg ? (svg.getAttribute('aria-label')||'') : ''; }catch(_){ return ''; } }
+    function getSvgAria(el){{ try{{ var svg = el.querySelector('svg[aria-label]'); return svg ? (svg.getAttribute('aria-label')||'') : ''; }}catch(_){{ return ''; }} }}
 
-    function liked(){
+    function liked(){{
       var s = scope;
-      if (s.querySelector('svg[aria-label=""Je n\u2019aime plus""], svg[aria-label=""Unlike""], svg[aria-label=""Je n\\\'aime plus""]')) return true;
+      if (s.querySelector('{unlikeSelectors}')) return true;
       if (s.querySelector('button[aria-pressed=""true""], [role=""button""][aria-pressed=""true""]')) return true;
       if (s.querySelector('svg[color=""rgb(255, 48, 64)""], svg[fill=""rgb(237, 73, 86)""], svg path[d^=""M12 21.35""]')) return true;
       return false;
-    }
+    }}
 
-    var svg = scope.querySelector('svg[aria-label=""J\u2019aime""], svg[aria-label=""Like""], svg[aria-label=""Je n\u2019aime plus""], svg[aria-label=""Unlike""]');
+    var svg = scope.querySelector('{likeSelectors}');
     if (!svg) return 'NO_SVG_FOUND';
 
     var svgAria = svg.getAttribute('aria-label') || '';
-    var isAlreadyLiked = /n\u2019aime plus|unlike/i.test(svgAria);
+    var isAlreadyLiked = /{unlikeTest}/i.test(svgAria);
 
     var el = svg.closest('button,[role=""button""],div[role=""button""],span[role=""button""]') || svg.parentElement;
     if (!el) return 'NO_BUTTON_PARENT';
@@ -269,26 +312,26 @@ namespace SocialNetworkArmy.Services
 
     if (isAlreadyLiked) return 'ALREADY_LIKED ' + picked_info;
 
-    try{ el.scrollIntoView({behavior:'smooth', block:'center'}); }catch(_){}
-    try{ el.focus(); }catch(_){}
-    try{ el.style.border = '2px solid red'; setTimeout(function(){ try{ el.style.border = ''; }catch(_){} }, 5000); }catch(_){}
-
-    try{ el.click(); }catch(_){}
+    try{{ el.scrollIntoView({{behavior:'smooth', block:'center'}}); }}catch(_){{}}
+    try{{ el.focus(); }}catch(_){{}}
+    try{{ el.style.border = '2px solid red'; setTimeout(function(){{ try{{ el.style.border = ''; }}catch(_){{}} }}, 5000); }}catch(_){{}}
+    
+    try{{ el.click(); }}catch(_){{}}
     if (liked()) return 'OK:CLICK ' + picked_info;
 
     // Fallback elementFromPoint
-    try{
+    try{{
       var r = el.getBoundingClientRect(), x = Math.floor(r.left + r.width/2), y = Math.floor(r.top + r.height/2);
       var topEl = document.elementFromPoint(x, y) || el;
       topEl.click();
-    }catch(_){}
+    }}catch(_){{}}
     if (liked()) return 'OK:ELEMENTFROMPOINT ' + picked_info;
 
     return 'FAIL ' + picked_info;
-  } catch(e){
+  }} catch(e){{
     return 'JSERR: ' + (e && e.message ? e.message : String(e));
-  }
-})()");
+  }}
+}})();");
                                 logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
 
                                 await Task.Delay(2000, token);
@@ -372,7 +415,7 @@ namespace SocialNetworkArmy.Services
     let btn = form.querySelector('button[type=""submit""]');
     if (btn) return btn;
     const candidates = [...form.querySelectorAll('button,[role=""button""]')];
-    const match = candidates.find(el => /publier|post|envoyer|send/i.test((el.textContent||'').trim()));
+    const match = candidates.find(el => /{publishPattern}/i.test((el.textContent||'').trim()));
     if (match) return match;
     const wrap = form.querySelector('.x13fj5qh');
     if (wrap){{
@@ -447,28 +490,57 @@ namespace SocialNetworkArmy.Services
                             // NEXT si pas le dernier
                             if (reelNum < maxReels)
                             {
-                                var nextTry = await webView.ExecuteScriptAsync(@"
-(function(){
-  try{
+                                var nextScript = $@"
+(function(){{
+  try{{
     var scope = document.querySelector('div[role=""dialog""]') || document;
-    var next = scope.querySelector('button[aria-label=""Next""]')
-            || scope.querySelector('button[aria-label=""Suivant""]')
-            || scope.querySelector('[role=""button""][aria-label*=""Next""]')
-            || scope.querySelector('[role=""button""][aria-label*=""Suivant""]');
+    var next = scope.querySelector('button[aria-label=""{nextLabel}""]')
+            || scope.querySelector('[role=""button""][aria-label*=""{nextLabel}""]');
 
-    if (next){
-      next.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
-      next.dispatchEvent(new MouseEvent('mouseup',   {bubbles:true}));
-    } else {
-      document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', code:'ArrowRight', bubbles:true}));
-      document.body.dispatchEvent(new KeyboardEvent('keyup',   {key:'ArrowRight', code:'ArrowRight', bubbles:true}));
-    }
+    if (next){{
+      next.dispatchEvent(new MouseEvent('mousedown', {{bubbles:true}}));
+      next.dispatchEvent(new MouseEvent('mouseup',   {{bubbles:true}}));
+    }} else {{
+      document.body.dispatchEvent(new KeyboardEvent('keydown', {{key:'ArrowRight', code:'ArrowRight', bubbles:true}}));
+      document.body.dispatchEvent(new KeyboardEvent('keyup',   {{key:'ArrowRight', code:'ArrowRight', bubbles:true}}));
+    }}
     return 'OK';
-  }catch(e){ return 'JSERR: ' + String(e); }
-})()");
+  }}catch(e){{ return 'JSERR: ' + String(e); }}
+}})()";
+                                var nextTry = await webView.ExecuteScriptAsync(nextScript);
                                 logTextBox.AppendText($"[NEXT] {nextTry}\r\n");
 
                                 await Task.Delay(rand.Next(600, 1001), token); // Délai après next
+
+                                // Post-next verification
+                                int retryCount = 0;
+                                const int maxRetries = 3;
+                                string newReelId = null;
+                                while (retryCount < maxRetries)
+                                {
+                                    await Task.Delay(rand.Next(1500, 3000), token); // Wait for load
+                                    newReelId = await webView.ExecuteScriptAsync(reelIdScript);
+                                    newReelId = newReelId?.Trim('"').Trim();
+
+                                    if (newReelId != previousReelId && newReelId != "NO_ID")
+                                    {
+                                        break; // Successfully advanced
+                                    }
+
+                                    logTextBox.AppendText($"[NEXT RETRY {retryCount + 1}] Stuck on {previousReelId}, retrying...\r\n");
+
+                                    // Retry next
+                                    nextTry = await webView.ExecuteScriptAsync(nextScript);
+                                    logTextBox.AppendText($"[NEXT RETRY] {nextTry}\r\n");
+
+                                    retryCount++;
+                                }
+
+                                if (retryCount >= maxRetries)
+                                {
+                                    logTextBox.AppendText($"[NEXT ERROR] Max retries reached, still stuck on {previousReelId}. Stopping reel loop.\r\n");
+                                    break; // Break the reel loop
+                                }
 
                                 // Vérifier si toujours en modal
                                 var stillOpened = await webView.ExecuteScriptAsync(@"
@@ -482,6 +554,8 @@ namespace SocialNetworkArmy.Services
                                     break;
                                 }
                             }
+
+                            previousReelId = reelId; // Update for next iteration
                         }
 
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");

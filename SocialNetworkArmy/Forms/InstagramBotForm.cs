@@ -17,6 +17,8 @@ namespace SocialNetworkArmy.Forms
     {
         private TargetService targetService;   // <-- sera défini après init
         private ScrollService scrollService;
+        private PublishService publishService;
+
         private readonly Profile profile;
         private readonly AutomationService automationService;
         private readonly LimitsService limitsService;
@@ -236,6 +238,7 @@ namespace SocialNetworkArmy.Forms
                 targetButton.Enabled = true;
                 targetService = new TargetService(webView, logTextBox, profile, this);
                 scrollService = new ScrollService(webView, logTextBox, profile, this);
+                publishService = new PublishService(webView, logTextBox, this);
 
                 // (optionnel) test fp
                 try { await monitoringService.TestFingerprintAsync(webView); } catch { /* ignore */ }
@@ -327,44 +330,33 @@ namespace SocialNetworkArmy.Forms
         // ========================= PUBLISH =========================
         private async void PublishButton_Click(object sender, EventArgs e)
         {
-            await StartScriptAsync("Publish");
-
-            var today = DateTime.Today;
-            var schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "schedule.csv");
-            var allSchedule = Helpers.LoadSchedule(schedulePath);
-            var filteredSchedule = allSchedule
-                .Where(s => s.Date.Date == today && s.Account == profile.Name && s.Platform == "Instagram")
-                .ToList();
-
-            if (!filteredSchedule.Any())
+            try
             {
-                logTextBox.AppendText("Aucune publication prévue aujourd'hui pour ce profil.\r\n");
-                StopScript();
-                return;
+                logTextBox.AppendText("[Publish] Vérification du planning (data/schedule.csv)...\r\n");
+
+                // Pas de sélection de fichier ici — on laisse le PublishService
+                // charger automatiquement le fichier "data/schedule.csv"
+                // et décider quoi publier aujourd’hui selon le profil courant.
+
+                string caption = null; // la description sera lue depuis le CSV si applicable
+                bool autoPublish = true; // on peut l’activer par défaut
+
+                // On lance directement la publication
+                await publishService.RunAsync(
+                    Array.Empty<string>(),  // on passe un tableau vide : la classe se charge de charger depuis le CSV
+                    caption: caption,
+                    autoPublish: autoPublish,
+                    token: GetCancellationToken());
+
+                logTextBox.AppendText("[Publish] Script terminé.\r\n");
             }
-
-            var jsonData = JsonConvert.SerializeObject(filteredSchedule);
-            var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "instagram", "publish.js");
-
-            if (File.Exists(scriptPath))
+            catch (Exception ex)
             {
-                var scriptContent = File.ReadAllText(scriptPath);
-                var fullScript = $"var data = {jsonData}; {scriptContent}";
-
-                await automationService.ExecuteActionWithLimitsAsync(webView, "publish", "posts", async () =>
-                {
-                    await webView.ExecuteScriptAsync(fullScript);
-                });
-
-                logTextBox.AppendText($"Publish lancé sur {filteredSchedule.Count} entrées.\r\n");
+                logTextBox.AppendText("[Publish] ERREUR: " + ex.Message + "\r\n");
             }
-            else
-            {
-                logTextBox.AppendText("Script publish.js introuvable !\r\n");
-            }
-
-            StopScript();
         }
+
+
 
         private void StopButton_Click(object sender, EventArgs e)
         {

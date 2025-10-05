@@ -75,26 +75,77 @@ namespace SocialNetworkArmy.Services
 })()");
                     await Task.Delay(rand.Next(2500, 4501), token);
 
+                    // Check for reels feed to load before starting the loop
+                    bool isLoaded = false;
+                    int loadRetries = 0;
+                    while (!isLoaded && loadRetries < 5)
+                    {
+                        var loadCheck = await webView.ExecuteScriptAsync("document.querySelectorAll('video').length > 0 ? 'true' : 'false';");
+                        isLoaded = JsBoolIsTrue(loadCheck);
+                        if (!isLoaded)
+                        {
+                            await Task.Delay(2000, token);
+                            loadRetries++;
+                        }
+                    }
+                    if (!isLoaded)
+                    {
+                        throw new Exception("Reels feed failed to load.");
+                    }
+
+                    // Detect language
+                    var langResult = await webView.ExecuteScriptAsync("document.documentElement.lang;");
+                    var lang = langResult?.Trim('"') ?? "en"; // Default to English if null
+                    logTextBox.AppendText($"[LANG] Detected language: {lang}\r\n");
+
+                    string likeContains;
+                    string unlikeRegex;
+                    string commentLabel;
+
+                    if (lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase))
+                    {
+                        likeContains = "aime";
+                        unlikeRegex = "n’aime plus";
+                        commentLabel = "Commenter";
+                    }
+                    else
+                    {
+                        likeContains = "ike"; // For "Like" or "Unlike"
+                        unlikeRegex = "unlike";
+                        commentLabel = "Comment";
+                    }
+
                     // Prépare le fichier FutureTargets.txt
                     string dataDir = Path.Combine(Application.StartupPath, "data"); // Assure-toi que c'est le bon chemin
                     Directory.CreateDirectory(dataDir);
                     string targetFile = Path.Combine(dataDir, "FutureTargets.txt");
 
                     // ======================= BOUCLE POUR REELS (HUMAN SCROLL + WATCH + LIKE + LOG CREATOR/COMMENTS) =======================
+                    string previousCreator = null;
                     for (int reelNum = 1; reelNum <= maxReels; reelNum++)
                     {
                         token.ThrowIfCancellationRequested();
 
                         logTextBox.AppendText($"[REEL {reelNum}/{maxReels}] Début interaction...\r\n");
 
-                        // Extract creator name from first/visible Reel
+                        // Extract creator name from visible Reel
                         var creatorScript = @"
 (function(){
   try {
-    var video = document.querySelector('video');
-    if (!video) return 'NO_VIDEO';
+    const videos = document.querySelectorAll('video');
+    let mostVisibleVideo = null;
+    let maxVisible = 0;
+    videos.forEach(video => {
+      const rect = video.getBoundingClientRect();
+      const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      if (visible > maxVisible) {
+        maxVisible = visible;
+        mostVisibleVideo = video;
+      }
+    });
+    if (!mostVisibleVideo) return 'NO_VISIBLE_VIDEO';
 
-    var parent3 = video.parentElement.parentElement.parentElement;
+    var parent3 = mostVisibleVideo.parentElement.parentElement.parentElement;
     if (!parent3) return 'NO_PARENT3';
 
     var creatorSpan = parent3.querySelector('span[dir=""auto""]');
@@ -108,34 +159,36 @@ namespace SocialNetworkArmy.Services
 })();
 ";
                         var creatorName = await webView.ExecuteScriptAsync(creatorScript);
+                        creatorName = creatorName?.Trim('"').Trim(); // Clean up
                         logTextBox.AppendText($"[CREATOR] {creatorName}\r\n");
 
                         // Extract comment count from visible Reel using the working getCurrentComments
-                        var commentScript = @"
-function getCurrentComments() {
-  const commentBtns = document.querySelectorAll('[role=""button""]:has(svg[aria-label=""Commenter""])');
+                        var commentScript = $@"
+function getCurrentComments() {{
+  const commentBtns = document.querySelectorAll('[role=""button""]:has(svg[aria-label=""{commentLabel}""])');
   let mostVisible = null;
   let maxVisible = 0;
-  commentBtns.forEach(btn => {
+  commentBtns.forEach(btn => {{
     const rect = btn.getBoundingClientRect();
     const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
-    if (visible > maxVisible) {
+    if (visible > maxVisible) {{
       maxVisible = visible;
       mostVisible = btn;
-    }
-  });
+    }}
+  }});
   const span = mostVisible?.querySelector('span.html-span');
   return span?.textContent.trim() || '0';
-}
+}}
 getCurrentComments();
 ";
                         var commentCount = await webView.ExecuteScriptAsync(commentScript);
                         logTextBox.AppendText($"[COMMENTS] {commentCount}\r\n");
 
-                        // Parse comments pour check >300
+                        // Parse comments pour check >300 - clean non-digits
+                        string cleanCount = new string(commentCount.Trim().Trim('"').Where(char.IsDigit).ToArray());
                         int comments = 0;
-                        if (int.TryParse(commentCount.Trim().Trim('"'), out int c)) comments = c;
-                        if (comments > 300 && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VIDEO" && creatorName != "NO_PARENT3")
+                        if (int.TryParse(cleanCount, out int c)) comments = c;
+                        if (comments > 300 && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
                         {
                             // Check si déjà dans le fichier
                             bool alreadyExists = false;
@@ -164,32 +217,33 @@ getCurrentComments();
                         if (shouldLike)
                         {
                             // LIKE on visible Reel
-                            var likeTry = await webView.ExecuteScriptAsync(@"
-(function(){
-  const likeSVGs = document.querySelectorAll('svg[aria-label*=""aime""]');
+                            var likeScript = $@"
+(function(){{
+  const likeSVGs = document.querySelectorAll('svg[aria-label*=""{likeContains}""]');
   let visibleBtn = null;
-  likeSVGs.forEach(svg => {
+  likeSVGs.forEach(svg => {{
     const btn = svg.closest('div[role=""button""]');
     const rect = btn ? btn.getBoundingClientRect() : null;
     const isVisible = rect && rect.top < window.innerHeight && rect.bottom > 0;
-    if (isVisible) {
+    if (isVisible) {{
       visibleBtn = btn;
-    }
-  });
+    }}
+  }});
   if (!visibleBtn) return 'NO_VISIBLE_LIKE';
 
   const svg = visibleBtn.querySelector('svg');
   const aria = svg.getAttribute('aria-label') || '';
-  if (/n’aime plus/i.test(aria)) return 'ALREADY_LIKED';
+  if (/{unlikeRegex}/i.test(aria)) return 'ALREADY_LIKED';
 
   // Simule click humain (comme le working JS)
   visibleBtn.click();
 
   // Vérif simple post-click (sync, approx)
   const newAria = svg.getAttribute('aria-label') || '';
-  return /n’aime plus/i.test(newAria) ? 'OK:LIKED' : 'CLICKED';
-})();
-");
+  return /{unlikeRegex}/i.test(newAria) ? 'OK:LIKED' : 'CLICKED';
+}})();
+";
+                            var likeTry = await webView.ExecuteScriptAsync(likeScript);
                             logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
 
                             // Post-like pause
@@ -205,23 +259,29 @@ getCurrentComments();
                         // Scroll to next reel if not last
                         if (reelNum < maxReels)
                         {
-                            await webView.ExecuteScriptAsync(@"
+                            var scrollResult = await webView.ExecuteScriptAsync(@"
 (function() {
-  const scroller = Array.from(document.querySelectorAll('div')).find(div => {
-    const style = window.getComputedStyle(div);
-    return style.overflowY === 'scroll' || style.overflowY === 'auto';
-  }) || window;
-  const startY = scroller.pageYOffset || scroller.scrollTop;
-  const targetY = startY + window.innerHeight;
-  const duration = 800;
+  // More precise scroller detection: look for the main reels container
+  let scroller = document.querySelector('div[role=""main""] > div') || // Common reels wrapper
+                 document.querySelector('div[data-testid=""reels-tab""]') || // Reels tab container
+                 Array.from(document.querySelectorAll('div')).find(div => {
+                   const style = window.getComputedStyle(div);
+                   return (style.overflowY === 'scroll' || style.overflowY === 'auto') && div.clientHeight >= window.innerHeight * 0.8; // Filter for tall scrollers
+                 }) || document.body; // Fallback to body instead of window for better control
+
+  if (!scroller) return 'NO_SCROLLER_FOUND';
+
+  const startY = scroller.scrollTop;
+  const targetY = startY + window.innerHeight; // Assume full viewport snap
+  const duration = 800 + Math.random() * 400; // Vary duration for human-like feel (800-1200ms)
   const startTime = performance.now();
 
   function scrollStep(currentTime) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
-    const easeOut = 1 - Math.pow(1 - progress, 3);
+    const easeOut = 1 - Math.pow(1 - progress, 3); // Cubic ease-out for smooth snap
 
-    if (scroller.scrollTo) scroller.scrollTo(0, startY + (targetY - startY) * easeOut);
+    scroller.scrollTo(0, startY + (targetY - startY) * easeOut);
 
     if (progress < 1) {
       requestAnimationFrame(scrollStep);
@@ -232,7 +292,52 @@ getCurrentComments();
   return 'SCROLLED_TO_NEXT';
 })();
 ");
-                            await Task.Delay(rand.Next(2000, 4001), token); // Stabilize for next
+                            logTextBox.AppendText($"[SCROLL] Result: {scrollResult}\r\n");
+                            await Task.Delay(rand.Next(2000, 4001), token); // Stabilize
+
+                            // Post-scroll verification
+                            int retryCount = 0;
+                            const int maxRetries = 3;
+                            string newCreator = null;
+                            while (retryCount < maxRetries)
+                            {
+                                await Task.Delay(rand.Next(1500, 3000), token); // Wait for load/snap
+                                newCreator = await webView.ExecuteScriptAsync(creatorScript);
+                                newCreator = newCreator?.Trim('"').Trim();
+
+                                if (newCreator != previousCreator && newCreator != "NO_VISIBLE_VIDEO" && newCreator != "NO_CREATOR")
+                                {
+                                    break; // Successfully advanced
+                                }
+
+                                logTextBox.AppendText($"[SCROLL RETRY {retryCount + 1}] Stuck on {previousCreator}, retrying...\r\n");
+
+                                // Retry scroll with slight variation (e.g., overscroll by 10-50px)
+                                await webView.ExecuteScriptAsync($@"
+(function() {{
+  const scroller = document.querySelector('div[role=""main""] > div') || 
+                 document.querySelector('div[data-testid=""reels-tab""]') || 
+                 Array.from(document.querySelectorAll('div')).find(div => {{
+                   const style = window.getComputedStyle(div);
+                   return (style.overflowY === 'scroll' || style.overflowY === 'auto') && div.clientHeight >= window.innerHeight * 0.8;
+                 }}) || document.body;
+  scroller.scrollBy(0, {rand.Next(10, 51)});
+  return 'NUDGE_SCROLL';
+}})();");
+                                retryCount++;
+                            }
+
+                            if (retryCount >= maxRetries)
+                            {
+                                logTextBox.AppendText($"[SCROLL ERROR] Max retries reached, still stuck on {previousCreator}. Skipping.\r\n");
+                                // Optional: Break loop or handle error
+                            }
+
+                            previousCreator = newCreator; // Update for next iteration
+                        }
+                        else
+                        {
+                            previousCreator = creatorName; // For first reel
                         }
                     }
 

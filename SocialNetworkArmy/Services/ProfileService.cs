@@ -1,8 +1,6 @@
-﻿// Services/ProfileService.cs
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using Newtonsoft.Json;
 using SocialNetworkArmy.Models;
 using SocialNetworkArmy.Utils;
@@ -11,15 +9,21 @@ namespace SocialNetworkArmy.Services
 {
     public class ProfileService
     {
-        private readonly string rootDir;
         private readonly string profilesFile;
 
         public ProfileService()
         {
-            var assemblyPath = Assembly.GetExecutingAssembly().Location;
-            var binDir = Path.GetDirectoryName(assemblyPath);
-            rootDir = Path.GetFullPath(Path.Combine(binDir, "../../../")); // Up three levels to project root
-            profilesFile = Path.Combine(rootDir, "Data", "profiles.json");
+            // Répertoire de base de l’exécutable
+            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            // On garde la casse réelle du dossier
+            var dataDir = Path.Combine(baseDir, "Data");
+
+            // Création auto du dossier s’il n’existe pas
+            Directory.CreateDirectory(dataDir);
+
+            // Fichier JSON complet
+            profilesFile = Path.Combine(dataDir, "profiles.json");
         }
 
         public List<Profile> LoadProfiles()
@@ -39,19 +43,15 @@ namespace SocialNetworkArmy.Services
                     return new List<Profile>();
                 }
             }
+
+            Logger.LogInfo("Aucun fichier de profils trouvé (Data/profiles.json).");
             return new List<Profile>();
         }
 
         public void SaveProfiles(List<Profile> profiles)
         {
-            var dataDir = Path.GetDirectoryName(profilesFile);
             try
             {
-                if (!Directory.Exists(dataDir))
-                {
-                    Directory.CreateDirectory(dataDir);
-                }
-
                 var json = JsonConvert.SerializeObject(profiles, Formatting.Indented);
                 File.WriteAllText(profilesFile, json);
                 Logger.LogInfo($"Profils sauvés : {profiles.Count}.");
