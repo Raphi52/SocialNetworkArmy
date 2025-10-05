@@ -18,7 +18,7 @@ namespace SocialNetworkArmy.Services
         {
             var assemblyPath = Assembly.GetExecutingAssembly().Location;
             var binDir = Path.GetDirectoryName(assemblyPath);
-            rootDir = Path.GetFullPath(Path.Combine(binDir, "../../"));
+            rootDir = Path.GetFullPath(Path.Combine(binDir, "../../../")); // Up three levels to project root
             profilesFile = Path.Combine(rootDir, "Data", "profiles.json");
         }
 

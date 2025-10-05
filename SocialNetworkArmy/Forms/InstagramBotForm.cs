@@ -16,6 +16,7 @@ namespace SocialNetworkArmy.Forms
     public partial class InstagramBotForm : Form
     {
         private TargetService targetService;   // <-- sera défini après init
+        private ScrollService scrollService;
         private readonly Profile profile;
         private readonly AutomationService automationService;
         private readonly LimitsService limitsService;
@@ -234,11 +235,12 @@ namespace SocialNetworkArmy.Forms
                 // Maintenant que CoreWebView2 existe -> on peut créer TargetService
                 targetButton.Enabled = true;
                 targetService = new TargetService(webView, logTextBox, profile, this);
+                scrollService = new ScrollService(webView, logTextBox, profile, this);
 
                 // (optionnel) test fp
                 try { await monitoringService.TestFingerprintAsync(webView); } catch { /* ignore */ }
 
-                Logger.LogInfo("WebView2 prêt. TargetService initialisé.");
+                Logger.LogInfo("WebView2 prêt. TargetService et ScrollService initialisés.");
             }
             catch (Exception ex)
             {
@@ -314,25 +316,12 @@ namespace SocialNetworkArmy.Forms
         // ========================= SCROLL =========================
         private async void ScrollButton_Click(object sender, EventArgs e)
         {
-            await StartScriptAsync("Scroll");
-            if (webView?.CoreWebView2 == null)
+            if (scrollService == null)
             {
-                logTextBox.AppendText("[SCROLL] WebView non prêt.\r\n");
-                StopScript();
+                logTextBox.AppendText("[INIT] Navigateur en cours d'initialisation… réessaie dans 1–2s.\r\n");
                 return;
             }
-
-            webView.CoreWebView2.Navigate("https://www.instagram.com/reels/");
-
-            var scriptPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Scripts", "instagram", "scroll.js");
-
-            await automationService.ExecuteActionWithLimitsAsync(webView, "scroll", "likes", async () =>
-            {
-                await automationService.ExecuteScriptAsync(webView, scriptPath);
-                await automationService.SimulateHumanScrollAsync(webView, Config.GetConfig().ScrollDurationMin * 60);
-            });
-
-            StopScript();
+            await scrollService.RunAsync();
         }
 
         // ========================= PUBLISH =========================

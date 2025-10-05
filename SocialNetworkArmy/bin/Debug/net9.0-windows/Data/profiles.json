@@ -1,0 +1,26 @@
+[
+  {
+    "name": "precious.milaa",
+    "platform": "Instagram",
+    "proxy": "",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0\",\"Timezone\":\"Europe/Paris\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1536x864\",\"Viewport\":\"1366x705\",\"WebGLVendor\":\"NVIDIA Corporation\",\"WebGLRenderer\":\"Apple M1 Pro\",\"AudioContext\":\"noise_5138_0,44\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\"],\"HardwareConcurrency\":5,\"Platform\":\"Win32\",\"Vendor\":\"Google Inc.\",\"ScreenDepth\":32,\"MaxTouchPoints\":0}",
+    "cookies": "",
+    "storageState": null
+  },
+  {
+    "name": "PreciousmilaOf",
+    "platform": "Instagram",
+    "proxy": "",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\",\"Timezone\":\"Europe/Paris\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1920x1080\",\"Viewport\":\"1920x1017\",\"WebGLVendor\":\"NVIDIA Corporation\",\"WebGLRenderer\":\"Intel UHD Graphics 630\",\"AudioContext\":\"noise_3585\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Arial\",\"Arial\",\"Times New Roman\",\"Arial\",\"Times New Roman\"],\"HardwareConcurrency\":9,\"Platform\":\"Win32\",\"Vendor\":\"Apple Computer, Inc.\",\"ScreenDepth\":24,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": ""
+  },
+  {
+    "name": "precvipos",
+    "platform": "TikTok",
+    "proxy": "",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\",\"Timezone\":\"America/New_York\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1920x1080\",\"Viewport\":\"1920x1017\",\"WebGLVendor\":\"Intel Inc.\",\"WebGLRenderer\":\"Intel UHD Graphics 630\",\"AudioContext\":\"noise_1353\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Times New Roman\",\"Arial\",\"Arial\",\"Arial\",\"Times New Roman\"],\"HardwareConcurrency\":8,\"Platform\":\"Win32\",\"Vendor\":\"Apple Computer, Inc.\",\"ScreenDepth\":32,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": ""
+  }
+]
