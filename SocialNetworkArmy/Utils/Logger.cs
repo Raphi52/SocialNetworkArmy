@@ -21,6 +21,11 @@ namespace SocialNetworkArmy.Utils
             Log("INFO", message);
         }
 
+        public static void LogDebug(string message)
+        {
+            Log("DEBUG", message);
+        }
+
         public static void LogWarning(string message)
         {
             Log("WARNING", message);

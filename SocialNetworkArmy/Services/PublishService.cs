@@ -278,23 +278,7 @@ namespace SocialNetworkArmy.Services
                     return Trim(r) == "OK";
                 }, 3000, 200, CancellationToken.None);
 
-//                if (!found)
-//                {
-//                    // still try to pre-click input element via CDP if available
-//                    if (!string.IsNullOrEmpty(objectId))
-//                    {
-//                        await Cdp("Runtime.callFunctionOn", new
-//                        {
-//                            objectId,
-//                            functionDeclaration = @"function(){
-//  try{ this.scrollIntoView({block:'center'}); this.click(); }catch(e){}
-//}",
-//                            silent = true
-//                        });
-//                    }
-//                    // small extra wait
-//                    await Task.Delay(rng.Next(400, 900));
-//                }
+
 
                 // small human jitter BEFORE setFileInputFiles
                 await Task.Delay(rng.Next(400, 900));

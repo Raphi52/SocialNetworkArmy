@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Newtonsoft.Json;
 using SocialNetworkArmy.Models;
@@ -47,8 +48,8 @@ namespace SocialNetworkArmy.Forms
             this.AutoScaleDimensions = new SizeF(8F, 20F);
             this.AutoScaleMode = AutoScaleMode.Font;
 
-            // ListBox élargie pour quasi toute la largeur (460 sur 500)
-            profilesListBox = new ListBox { Location = new Point(12, 12), Size = new Size(460, 250), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, Font = yaheiBold12 };
+            // ListBox élargie pour quasi toute la largeur (960 sur 1000)
+            profilesListBox = new ListBox { Location = new Point(12, 12), Size = new Size(960, 250), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, Font = yaheiBold12 };
             profilesListBox.SelectedIndexChanged += ProfilesListBox_SelectedIndexChanged;
 
             platformComboBox = new ComboBox { Location = new Point(12, 280), Size = new Size(120, 30), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, Font = yaheiBold12 };
@@ -57,10 +58,10 @@ namespace SocialNetworkArmy.Forms
             profileNameTextBox = new TextBox { Location = new Point(140, 280), Size = new Size(120, 30), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = yaheiBold12 };
             profileNameTextBox.PlaceholderText = "Nom";
 
-            proxyTextBox = new TextBox { Location = new Point(270, 280), Size = new Size(200, 30), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = yaheiBold12 };
+            proxyTextBox = new TextBox { Location = new Point(270, 280), Size = new Size(400, 30), BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Font = yaheiBold12 };
             proxyTextBox.PlaceholderText = "Proxy (optionnel)";
 
-            // Boutons agrandis (110x35)
+            // Boutons agrandis (110x35) - positions ajustées pour largeur x2
             // Bouton Créer : Fond sombre, bordure bleue
             createButton = new Button { Text = "Créer", Location = new Point(12, 320), Size = new Size(110, 35), FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(45, 45, 45), ForeColor = Color.White, UseVisualStyleBackColor = false, Font = yaheiBold12 };
             createButton.FlatAppearance.BorderSize = 2;
@@ -82,9 +83,9 @@ namespace SocialNetworkArmy.Forms
             launchButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             launchButton.Click += LaunchButton_Click;
 
-            statusLabel = new Label { Location = new Point(12, 370), Size = new Size(400, 20), Text = "Prêt", AutoSize = true, ForeColor = Color.LightGray, Font = yaheiBold12 };
+            statusLabel = new Label { Location = new Point(12, 370), Size = new Size(800, 20), Text = "Prêt", AutoSize = true, ForeColor = Color.LightGray, Font = yaheiBold12 };
 
-            this.ClientSize = new Size(500, 420); // Form agrandie
+            this.ClientSize = new Size(1000, 420); // Largeur doublée (500 -> 1000), hauteur inchangée
             this.Text = "SocialNetworkArmy";
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -119,8 +120,20 @@ namespace SocialNetworkArmy.Forms
             }
 
             string name = profileNameTextBox.Text.Trim();
+            if (!IsValidProfileName(name))
+            {
+                MessageBox.Show("Nom invalide ! Utilise lettres, chiffres, tirets ou underscores uniquement (3-20 caractères).");
+                return;
+            }
+
             string platform = platformComboBox.SelectedItem.ToString();
             string proxy = string.IsNullOrWhiteSpace(proxyTextBox.Text) ? "" : proxyTextBox.Text.Trim();
+
+            if (!string.IsNullOrEmpty(proxy) && !IsValidProxy(proxy))
+            {
+                MessageBox.Show("Format proxy invalide ! Ex: IP:port ou http://user:pass@IP:port");
+                return;
+            }
 
             if (profiles.Any(p => p.Name == name))
             {
@@ -146,6 +159,20 @@ namespace SocialNetworkArmy.Forms
             statusLabel.Text = $"Profil '{name}' créé !";
             profileNameTextBox.Clear();
             proxyTextBox.Clear();
+        }
+
+        private bool IsValidProfileName(string name)
+        {
+            // Lettres, chiffres, tirets, underscores ; 3-20 caractères
+            var regex = new Regex(@"^[a-zA-Z0-9_-]{3,20}$");
+            return regex.IsMatch(name);
+        }
+
+        private bool IsValidProxy(string proxy)
+        {
+            // Format: (http://)? (username:password@)? (IP ou hostname):port
+            var regex = new Regex(@"^(http://)?(([^:]+):([^@]+)@)?([\w\.-]+|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})$", RegexOptions.IgnoreCase);
+            return regex.IsMatch(proxy);
         }
 
         private void DeleteButton_Click(object sender, EventArgs e)
