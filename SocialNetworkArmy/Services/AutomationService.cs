@@ -7,6 +7,7 @@ using SocialNetworkArmy.Utils;
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using static SocialNetworkArmy.Services.ProxyService;
 
 namespace SocialNetworkArmy.Services
 {
@@ -57,6 +58,37 @@ namespace SocialNetworkArmy.Services
 
             Logger.LogInfo($"Browser initialized for '{profile.Name}' with full anti-detection.");
             return webView;
+        }
+        // ... (code existant pour lancer WebView2)
+
+        private async Task<CoreWebView2> InitializeWebViewAsync(ProxyInfo proxyInfo)
+        {
+            var options = new CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments = $"--proxy-server=http://{proxyInfo.Host}:{proxyInfo.Port}"
+                // Autres args existants, e.g., pour fingerprints : "--user-agent=..." 
+            };
+
+            var environment = await CoreWebView2Environment.CreateAsync(null, null, options);
+            var webView = new WebView2(); // Ou votre instance existante
+            await webView.EnsureCoreWebView2Async(environment);
+
+            // Nouveau : Handler pour l'auth proxy
+            webView.CoreWebView2.BasicAuthenticationRequested += (sender, e) =>
+            {
+                if (!string.IsNullOrEmpty(proxyInfo.Username))
+                {
+                    e.Response.UserName = proxyInfo.Username;
+                    e.Response.Password = proxyInfo.Password;
+                }
+                else
+                {
+                    // Si pas d'auth, annuler ou log erreur
+                    e.Cancel = true;
+                }
+            };
+
+            return webView.CoreWebView2;
         }
 
         public async Task<bool> ExecuteActionWithLimitsAsync(WebView2 webView, string actionType, string subAction, Func<Task> actionFunc)

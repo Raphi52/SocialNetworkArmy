@@ -1,4 +1,4 @@
-﻿// Models/Profile.cs (add StorageState serialized)
+﻿// Models/Profile.cs
 using System;
 using Newtonsoft.Json;
 
@@ -15,15 +15,25 @@ namespace SocialNetworkArmy.Models
         [JsonProperty("proxy")]
         public string Proxy { get; set; }
 
+        [JsonProperty("userDataFolderId")]
+        public string UserDataFolderId { get; set; }
+
         [JsonProperty("fingerprint")]
         public string Fingerprint { get; set; }
 
         [JsonProperty("cookies")]
-        public string Cookies { get; set; } // Legacy, peut virer si StorageState suffit
+        public string Cookies { get; set; }
 
         [JsonProperty("storageState")]
-        public string StorageState { get; set; } // Nouveau : Full session JSON
+        public string StorageState { get; set; }
 
-        public Profile() { }
+        public Profile()
+        {
+            // Auto-générer un GUID unique si pas encore défini
+            if (string.IsNullOrEmpty(UserDataFolderId))
+            {
+                UserDataFolderId = Guid.NewGuid().ToString();
+            }
+        }
     }
 }

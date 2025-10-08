@@ -1,16 +1,15 @@
-﻿using System;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using Microsoft.Web.WebView2.Core;
+﻿using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Newtonsoft.Json;
 using SocialNetworkArmy.Models;
 using SocialNetworkArmy.Services;
-using SocialNetworkArmy.Utils;
+using System;
+using System.Drawing;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
 namespace SocialNetworkArmy.Forms
 {
     public partial class InstagramBotForm : Form
@@ -39,6 +38,7 @@ namespace SocialNetworkArmy.Forms
         private Font yaheiBold12 = new Font("Microsoft YaHei", 12f, FontStyle.Bold);
         private System.Windows.Forms.Timer closeTimer;
         private CancellationTokenSource _cts;
+
         public InstagramBotForm(Profile profile)
         {
             this.profile = profile;
@@ -57,6 +57,7 @@ namespace SocialNetworkArmy.Forms
             // lance l'init async
             LoadBrowserAsync();
         }
+
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
             if (isScriptRunning)
@@ -68,6 +69,7 @@ namespace SocialNetworkArmy.Forms
                 return;
             }
         }
+
         private void InitializeComponent()
         {
             this.BackColor = Color.FromArgb(30, 30, 30);
@@ -235,6 +237,7 @@ namespace SocialNetworkArmy.Forms
             // ajouter le panneau bas APRÈS le webView pour qu'il reste visible
             this.Controls.Add(bottomPanel);
         }
+
         private async void LoadBrowserAsync()
         {
             try
@@ -255,7 +258,7 @@ namespace SocialNetworkArmy.Forms
                 if (!string.IsNullOrEmpty(profile.Proxy))
                 {
                     proxyService.ApplyProxy(options, profile.Proxy); // Utilise le proxy du profil
-                    Logger.LogInfo($"Proxy du profil appliqué: {profile.Proxy}");
+                    logTextBox.AppendText($"[INFO] Proxy du profil appliqué: {profile.Proxy}\r\n");
                 }
                 else
                 {
@@ -274,6 +277,23 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
                 webView.CoreWebView2.Navigate("https://www.instagram.com/");
 
+                // Add proxy auth handler here if needed (moved from InitializeInstagramWebView)
+                var proxyInfo = proxyService.GetNextProxy(); // Récupère les infos parsées
+                webView.CoreWebView2.BasicAuthenticationRequested += (sender, e) =>
+                {
+                    if (!string.IsNullOrEmpty(proxyInfo.Username))
+                    {
+                        e.Response.UserName = proxyInfo.Username;
+                        e.Response.Password = proxyInfo.Password;
+                        logTextBox.AppendText("[INFO] Authentification proxy fournie.\r\n");
+                    }
+                    else
+                    {
+                        e.Cancel = true;
+                        logTextBox.AppendText("[WARNING] Aucune auth proxy disponible.\r\n");
+                    }
+                };
+
                 await Task.Delay(800);
                 webView.Focus();
                 webView.BringToFront();
@@ -291,11 +311,11 @@ namespace SocialNetworkArmy.Forms
                 // Vérif proxy après init
                 await UpdateProxyStatusAsync();
 
-                Logger.LogInfo("WebView2 prêt. Services initialisés. Arguments: " + options.AdditionalBrowserArguments);
+                logTextBox.AppendText("[INFO] WebView2 prêt. Services initialisés. Arguments: " + options.AdditionalBrowserArguments + "\r\n");
             }
             catch (Exception ex)
             {
-                Logger.LogError("Erreur d'initialisation WebView2 : " + ex);
+                logTextBox.AppendText("[ERROR] Erreur d'initialisation WebView2 : " + ex.Message + "\r\n");
                 logTextBox.AppendText("[INIT] Erreur WebView2 : " + ex.Message + "\r\n");
             }
         }
@@ -325,11 +345,10 @@ namespace SocialNetworkArmy.Forms
                 lblProxyStatus.Text = "Proxy Error: " + ex.Message;
                 lblProxyStatus.ForeColor = Color.Orange;
                 logTextBox.AppendText($"[Proxy] Erreur: {ex.Message}\r\n");
-                Logger.LogError("Erreur lors de la vérification du proxy : " + ex);
+                logTextBox.AppendText("[ERROR] Erreur lors de la vérification du proxy : " + ex + "\r\n");
             }
         }
-        // Added method to update proxy status
-       
+
         public async Task StartScriptAsync(string actionName)
         {
             if (isScriptRunning)
@@ -348,6 +367,7 @@ namespace SocialNetworkArmy.Forms
             if (webView?.CoreWebView2 != null)
                 await webView.ExecuteScriptAsync("window.isRunning = true; console.log('Script démarré');");
         }
+
         public void StopScript()
         {
             if (!isScriptRunning) return;
@@ -361,13 +381,15 @@ namespace SocialNetworkArmy.Forms
             catch (Exception ex)
             {
                 logTextBox.AppendText($"Erreur Stop (ignorée) : {ex.Message}\r\n");
-                Logger.LogError($"Erreur StopScript : {ex}");
+                logTextBox.AppendText("[ERROR] Erreur StopScript : " + ex + "\r\n");
             }
         }
+
         public CancellationToken GetCancellationToken()
         {
             return _cts?.Token ?? CancellationToken.None;
         }
+
         public void ScriptCompleted()
         {
             isScriptRunning = false;
@@ -378,6 +400,7 @@ namespace SocialNetworkArmy.Forms
             dmButton.Enabled = true;
             logTextBox.AppendText("Script arrêté avec succès.\r\n");
         }
+
         // ====== HANDLERS ======
         private async void TargetButton_Click(object sender, EventArgs e)
         {
@@ -388,6 +411,7 @@ namespace SocialNetworkArmy.Forms
             }
             await targetService.RunAsync();
         }
+
         private async void ScrollButton_Click(object sender, EventArgs e)
         {
             if (scrollService == null)
@@ -397,6 +421,7 @@ namespace SocialNetworkArmy.Forms
             }
             await scrollService.RunAsync();
         }
+
         private async void PublishButton_Click(object sender, EventArgs e)
         {
             try
@@ -416,6 +441,7 @@ namespace SocialNetworkArmy.Forms
                 logTextBox.AppendText("[Publish] ERREUR: " + ex.Message + "\r\n");
             }
         }
+
         private async void DmButton_Click(object sender, EventArgs e)
         {
             try
@@ -429,6 +455,7 @@ namespace SocialNetworkArmy.Forms
                 logTextBox.AppendText("[DM] ERREUR: " + ex.Message + "\r\n");
             }
         }
+
         private async void DownloadButton_Click(object sender, EventArgs e)
         {
             if (downloadService == null)
@@ -447,10 +474,12 @@ namespace SocialNetworkArmy.Forms
                 logTextBox.AppendText("[Download] ERREUR: " + ex.Message + "\r\n");
             }
         }
+
         private void StopButton_Click(object sender, EventArgs e)
         {
             StopScript();
         }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -463,4 +492,3 @@ namespace SocialNetworkArmy.Forms
         }
     }
 }
-

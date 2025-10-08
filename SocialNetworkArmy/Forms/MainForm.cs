@@ -155,7 +155,6 @@ namespace SocialNetworkArmy.Forms
             profiles.Add(newProfile);
             profileService.SaveProfiles(profiles);
             PopulateProfilesList();
-            Logger.LogInfo($"Profil '{name}' créé.");
             statusLabel.Text = $"Profil '{name}' créé !";
             profileNameTextBox.Clear();
             proxyTextBox.Clear();
@@ -191,12 +190,11 @@ namespace SocialNetworkArmy.Forms
                 profiles.Remove(profileToDelete);
                 profileService.SaveProfiles(profiles);
                 PopulateProfilesList();
-                Logger.LogInfo($"Profil '{name}' supprimé.");
                 statusLabel.Text = $"Profil '{name}' supprimé !";
             }
         }
 
-        private async void LaunchButton_Click(object sender, EventArgs e)
+        private void LaunchButton_Click(object sender, EventArgs e)
         {
             if (profilesListBox.SelectedIndex < 0)
             {
@@ -211,10 +209,17 @@ namespace SocialNetworkArmy.Forms
             {
                 statusLabel.Text = $"Lancement '{name}'...";
 
-                Form botForm = selectedProfile.Platform == "Instagram" ? new InstagramBotForm(selectedProfile) : new TikTokBotForm(selectedProfile);
-                botForm.Show();
-
-                statusLabel.Text = $"Bot lancé pour '{name}' !";
+                if (selectedProfile.Platform == "Instagram")
+                {
+                    var botForm = new InstagramBotForm(selectedProfile);
+                    botForm.Show();
+                    statusLabel.Text = $"Bot lancé pour '{name}' !";
+                }
+                else
+                {
+                    MessageBox.Show("Seule la plateforme Instagram est supportée pour le moment.");
+                    statusLabel.Text = "Plateforme non supportée.";
+                }
             }
         }
 

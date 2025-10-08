@@ -13,7 +13,7 @@ namespace SocialNetworkArmy.Services
 {
     public class ProxyService
     {
-        private List<ProxyItem> proxies = new List<ProxyItem>();
+        private List<string> proxies = new List<string>();
         private int currentIndex = 0;
         private readonly string proxiesFilePath = Path.Combine("Data", "proxies.txt");
         private string realIp = null;
@@ -46,8 +46,8 @@ namespace SocialNetworkArmy.Services
             }
 
             // Normalize: Add protocol if missing
-            proxies = lines.Select(NormalizeProxyAddress).Select(addr => new ProxyItem { Address = addr }).ToList();
-            Logger.LogInfo($"Loaded {proxies.Count} proxies from {proxiesFilePath}. Premier: {proxies[0]?.Address}");
+            proxies = lines.Select(NormalizeProxyAddress).ToList();
+            Logger.LogInfo($"Loaded {proxies.Count} proxies from {proxiesFilePath}. Premier: {proxies[0]}");
         }
 
         private bool IsValidProxyFormat(string line)
@@ -70,23 +70,9 @@ namespace SocialNetworkArmy.Services
             return line;
         }
 
-        public ProxyItem GetNextProxy()
-        {
-            if (proxies.Count == 0)
-            {
-                Logger.LogWarning("Aucun proxy disponible dans le fichier.");
-                return null;
-            }
-
-            var proxy = proxies[currentIndex];
-            currentIndex = (currentIndex + 1) % proxies.Count;
-            Logger.LogDebug($"Proxy rotaté: {proxy.Address}");
-            return proxy;
-        }
-
         public void ApplyProxy(CoreWebView2EnvironmentOptions options, string proxy = null)
         {
-            string proxyAddress = proxy ?? GetNextProxy()?.Address;
+            string proxyAddress = proxy ?? GetNextProxyAddress();
             if (string.IsNullOrEmpty(proxyAddress))
             {
                 Logger.LogWarning("No proxy available to apply.");
@@ -109,9 +95,17 @@ namespace SocialNetworkArmy.Services
             }
         }
 
+        private string GetNextProxyAddress()
+        {
+            if (proxies.Count == 0) return null;
+            var address = proxies[currentIndex % proxies.Count];
+            currentIndex++;
+            return address;
+        }
+
         public async Task<string> GetCurrentProxyIpAsync()
         {
-            string proxyAddress = currentProxyAddress ?? GetNextProxy()?.Address;
+            string proxyAddress = currentProxyAddress ?? GetNextProxyAddress();
             if (string.IsNullOrEmpty(proxyAddress))
             {
                 Logger.LogDebug("No current proxy address available for verification.");
@@ -224,10 +218,39 @@ namespace SocialNetworkArmy.Services
                 return null;
             }
         }
-    }
 
-    public class ProxyItem
-    {
-        public string Address { get; set; }
+        public ProxyInfo GetNextProxy()
+        {
+            string proxyString = GetNextProxyAddress();
+            if (string.IsNullOrEmpty(proxyString))
+            {
+                throw new InvalidOperationException("No proxies available");
+            }
+
+            // Utilisez votre regex existante pour parser (adaptée de MainForm)
+            var regex = new Regex(@"^(http://)?(([^:]+):([^@]+)@)?([\w\.-]+|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})$", RegexOptions.IgnoreCase);
+            var match = regex.Match(proxyString);
+
+            if (!match.Success)
+            {
+                throw new ArgumentException("Format proxy invalide");
+            }
+
+            return new ProxyInfo
+            {
+                Username = match.Groups[3].Value, // Peut être vide si pas d'auth
+                Password = match.Groups[4].Value,
+                Host = match.Groups[5].Value,
+                Port = match.Groups[6].Value
+            };
+        }
+
+        public struct ProxyInfo
+        {
+            public string Host { get; set; }
+            public string Port { get; set; }
+            public string Username { get; set; }
+            public string Password { get; set; }
+        }
     }
 }

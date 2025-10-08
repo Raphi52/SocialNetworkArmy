@@ -27,6 +27,7 @@ namespace SocialNetworkArmy.Services
             this.form = form ?? throw new ArgumentNullException(nameof(form));
         }
 
+
         private static bool JsBoolIsTrue(string jsResult)
         {
             if (string.IsNullOrWhiteSpace(jsResult)) return false;
@@ -51,7 +52,18 @@ namespace SocialNetworkArmy.Services
                 {
                     // 1) Charger la liste des cibles
                     var targetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "targets.txt");
-                    var targets = Helpers.LoadTargets(targetsPath);
+                    var targets = new System.Collections.Generic.List<string>();
+                    if (File.Exists(targetsPath))
+                    {
+                        targets = File.ReadAllLines(targetsPath)
+                                      .Where(line => !string.IsNullOrWhiteSpace(line))
+                                      .Select(line => line.Trim())
+                                      .ToList();
+                    }
+                    else
+                    {
+                        logTextBox.AppendText($"Fichier targets.txt non trouvé à {targetsPath} !\r\n");
+                    }
                     if (!targets.Any())
                     {
                         logTextBox.AppendText("Aucun target trouvé dans targets.txt !\r\n");
@@ -61,12 +73,42 @@ namespace SocialNetworkArmy.Services
 
                     // 1bis) Charger commentaires
                     var commentsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "comments.txt");
-                    var comments = Helpers.LoadTargets(commentsPath);
+                    var comments = new System.Collections.Generic.List<string>();
+                    if (File.Exists(commentsPath))
+                    {
+                        comments = File.ReadAllLines(commentsPath)
+                                       .Where(line => !string.IsNullOrWhiteSpace(line))
+                                       .Select(line => line.Trim())
+                                       .ToList();
+                    }
+                    else
+                    {
+                        logTextBox.AppendText($"Fichier comments.txt non trouvé à {commentsPath} ! Utilisation de commentaires par défaut.\r\n");
+                    }
                     if (!comments.Any())
                     {
                         logTextBox.AppendText("Aucun commentaire trouvé dans comments.txt ! Utilisation de commentaires par défaut.\r\n");
                         // Ajouter des commentaires par défaut si vide
                         comments = new string[] { "Super ! ??", "J'adore ! ??", "Trop cool ! ??", "Impressionnant !", "Bien vu ! ??", "Top ! ??" }.ToList();
+                    }
+
+                    // Charger le schedule CSV sans helper (lecture simple des lignes, parsing manuel si besoin)
+                    var schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "publish_schedule.csv");
+                    var scheduleLines = new System.Collections.Generic.List<string>();
+                    if (File.Exists(schedulePath))
+                    {
+                        scheduleLines = File.ReadAllLines(schedulePath)
+                                            .Where(line => !string.IsNullOrWhiteSpace(line))
+                                            .Select(line => line.Trim())
+                                            .ToList();
+                        logTextBox.AppendText($"[SCHEDULE] Chargé {scheduleLines.Count} lignes du CSV publish_schedule.csv.\r\n");
+                        // Si besoin de parser en objets, ajoutez ici un parsing manuel (ex: split par virgule)
+                        // Par exemple:
+                        // foreach (var line in scheduleLines.Skip(1)) { var parts = line.Split(','); ... }
+                    }
+                    else
+                    {
+                        logTextBox.AppendText($"[SCHEDULE] Fichier publish_schedule.csv non trouvé à {schedulePath} !\r\n");
                     }
 
                     Random rand = new Random();
