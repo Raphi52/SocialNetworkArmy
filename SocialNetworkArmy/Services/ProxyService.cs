@@ -13,47 +13,17 @@ namespace SocialNetworkArmy.Services
 {
     public class ProxyService
     {
-        private List<string> proxies = new List<string>();
-        private int currentIndex = 0;
-        private readonly string proxiesFilePath = Path.Combine("Data", "proxies.txt");
         private string realIp = null;
         private string currentProxyAddress = null;
 
         public ProxyService()
         {
-            LoadProxies();
-            _ = GetRealIpAsync(); // Cache real IP asynchronously
-        }
-
-        private void LoadProxies()
-        {
-            if (!File.Exists(proxiesFilePath))
-            {
-                Logger.LogWarning($"Proxies file not found: {proxiesFilePath}. Crée-le avec un proxy valide (ex: http://ip:port).");
-                return;
-            }
-
-            var lines = File.ReadAllLines(proxiesFilePath)
-                            .Where(line => !string.IsNullOrWhiteSpace(line))
-                            .Select(line => line.Trim())
-                            .Where(IsValidProxyFormat)
-                            .ToList();
-
-            if (lines.Count == 0)
-            {
-                Logger.LogWarning("No valid proxies found in file. Vérifie le format dans proxies.txt.");
-                return;
-            }
-
-            // Normalize: Add protocol if missing
-            proxies = lines.Select(NormalizeProxyAddress).ToList();
-            Logger.LogInfo($"Loaded {proxies.Count} proxies from {proxiesFilePath}. Premier: {proxies[0]}");
+            _ = GetRealIpAsync();
         }
 
         private bool IsValidProxyFormat(string line)
         {
-            // Regex for proxy: [protocol://][user:pass@]host:port
-            var regex = new Regex(@"^((http|https|socks4|socks5)://)?(?:([^:]+):([^@]+)@)?(?:[\w\.-]+|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})$", RegexOptions.IgnoreCase);
+            var regex = new Regex(@"^((http|https|socks4|socks5)://)?(?:([^:@]+):([^@]+)@)?(?:[\w\.-]+|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})$", RegexOptions.IgnoreCase);
             return regex.IsMatch(line);
         }
 
@@ -61,7 +31,6 @@ namespace SocialNetworkArmy.Services
         {
             if (string.IsNullOrEmpty(line)) return line;
 
-            // If no protocol, assume http:// (change to socks5:// si besoin)
             if (!line.Contains("://"))
             {
                 line = "http://" + line;
@@ -72,133 +41,418 @@ namespace SocialNetworkArmy.Services
 
         public void ApplyProxy(CoreWebView2EnvironmentOptions options, string proxy = null)
         {
-            string proxyAddress = proxy ?? GetNextProxyAddress();
-            if (string.IsNullOrEmpty(proxyAddress))
+            if (string.IsNullOrEmpty(proxy))
             {
-                Logger.LogWarning("No proxy available to apply.");
+                Logger.LogWarning("No proxy provided to apply.");
                 return;
             }
 
-            // Ensure normalized
-            proxyAddress = NormalizeProxyAddress(proxyAddress);
+            Logger.LogInfo($"[PROXY] Starting ApplyProxy with: {proxy}");
 
-            if (IsValidProxyFormat(proxyAddress))
+            string proxyAddress = NormalizeProxyAddress(proxy);
+            Logger.LogInfo($"[PROXY] Normalized address: {proxyAddress}");
+
+            if (!IsValidProxyFormat(proxyAddress))
             {
-                string args = options.AdditionalBrowserArguments ?? "";
-                options.AdditionalBrowserArguments = string.IsNullOrEmpty(args) ? $"--proxy-server={proxyAddress}" : $"{args} --proxy-server={proxyAddress}";
-                currentProxyAddress = proxyAddress;
-                Logger.LogInfo($"Proxy appliqué au WebView2: {proxyAddress} (via --proxy-server)");
+                Logger.LogWarning($"Invalid proxy format: {proxyAddress}");
+                return;
+            }
+
+            var (protocol, host, port, user, pass) = ParseProxy(proxyAddress);
+            if (string.IsNullOrEmpty(host) || string.IsNullOrEmpty(port))
+            {
+                Logger.LogWarning($"Invalid parsed proxy: {proxyAddress}");
+                return;
+            }
+
+            Logger.LogInfo($"[PROXY] Parsed values:");
+            Logger.LogInfo($"  Protocol: {protocol}");
+            Logger.LogInfo($"  Host: {host}");
+            Logger.LogInfo($"  Port: {port}");
+            Logger.LogInfo($"  User: {user}");
+            Logger.LogInfo($"  Pass: {(string.IsNullOrEmpty(pass) ? "EMPTY" : $"***{pass.Length} chars***")}");
+            Logger.LogInfo($"  Has Auth: {!string.IsNullOrEmpty(user)}");
+
+            // Build browser arguments
+            string args = options.AdditionalBrowserArguments ?? "";
+
+            // CRITICAL: Chromium's --proxy-server does NOT support HTTPS proxies
+            // Always use HTTP for the proxy connection scheme
+            // The proxy server itself will handle HTTPS tunneling via CONNECT
+            string proxyScheme = "http";
+
+            // Log if original was HTTPS (for debugging)
+            if (protocol.Equals("https", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.LogInfo($"[PROXY] Note: Original proxy used HTTPS, converting to HTTP for Chromium compatibility");
+                Logger.LogInfo($"[PROXY] The proxy will still tunnel HTTPS traffic via HTTP CONNECT method");
+            }
+
+            // Build proxy URL - ALWAYS use http:// for Chromium, NO credentials
+            string proxyServer = $"{proxyScheme}://{host}:{port}";
+            Logger.LogInfo($"[PROXY] Built proxy server URL: {proxyServer}");
+
+            // Use --proxy-server WITHOUT credentials (auth via BasicAuthenticationRequested)
+            string proxyArg = $"--proxy-server=\"{proxyServer}\"";
+
+            // Bypass local addresses
+            string bypassArg = "--proxy-bypass-list=\"<local>\"";
+
+            // Anti-detection flags - make browser look more legitimate
+            // Remove flags that scream "automation"
+            string stealthFlags =
+                "--disable-blink-features=AutomationControlled " +  // Critical: hides automation
+                "--disable-features=IsolateOrigins,site-per-process " + // Better compatibility
+                "--disable-site-isolation-trials " +
+                "--ignore-certificate-errors " +
+                "--ignore-urlfetcher-cert-requests";
+
+            // Combine arguments
+            if (string.IsNullOrEmpty(args))
+            {
+                options.AdditionalBrowserArguments = $"{proxyArg} {bypassArg} {stealthFlags}";
             }
             else
             {
-                Logger.LogWarning($"Invalid proxy format: {proxyAddress}");
+                options.AdditionalBrowserArguments = $"{args} {proxyArg} {bypassArg} {stealthFlags}";
             }
+
+            currentProxyAddress = proxyAddress;
+            Logger.LogInfo($"[PROXY] ✓ Final browser arguments:");
+            Logger.LogInfo($"  {options.AdditionalBrowserArguments}");
         }
 
-        private string GetNextProxyAddress()
+        // Primary authentication handler - this is the correct way for WebView2
+        public void SetupProxyAuthentication(CoreWebView2 webView2, string proxyAddress)
         {
-            if (proxies.Count == 0) return null;
-            var address = proxies[currentIndex % proxies.Count];
-            currentIndex++;
-            return address;
-        }
-
-        public async Task<string> GetCurrentProxyIpAsync()
-        {
-            string proxyAddress = currentProxyAddress ?? GetNextProxyAddress();
             if (string.IsNullOrEmpty(proxyAddress))
             {
-                Logger.LogDebug("No current proxy address available for verification.");
+                Logger.LogInfo("No proxy address provided for authentication setup");
+                return;
+            }
+
+            var (protocol, host, port, user, pass) = ParseProxy(proxyAddress);
+
+            if (string.IsNullOrEmpty(user))
+            {
+                Logger.LogInfo("No proxy authentication required (no credentials in proxy URL)");
+                return;
+            }
+
+            int authAttempts = 0;
+
+            webView2.BasicAuthenticationRequested += (sender, args) =>
+            {
+                try
+                {
+                    authAttempts++;
+                    Logger.LogInfo($"[AUTH #{authAttempts}] Request for: {args.Uri}");
+                    Logger.LogInfo($"[AUTH #{authAttempts}] Challenge: {args.Challenge}");
+
+                    var deferral = args.GetDeferral();
+
+                    // Provide RAW (unencoded) credentials to the auth handler
+                    args.Response.UserName = user;
+                    args.Response.Password = pass ?? "";
+
+                    deferral.Complete();
+
+                    Logger.LogInfo($"[AUTH #{authAttempts}] ✓ Credentials sent (user: {user})");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError($"[AUTH] Error: {ex.Message}");
+                }
+            };
+
+            Logger.LogInfo($"✓ Authentication handler registered for user: {user}");
+        }
+
+        public async Task<string> GetWebView2ProxyIpAsync(CoreWebView2 webView2)
+        {
+            if (webView2 == null)
+            {
+                Logger.LogWarning("WebView2 not initialized for proxy verification");
                 return null;
             }
 
-            Logger.LogInfo($"Vérification proxy: {proxyAddress}");
+            try
+            {
+                Logger.LogInfo("Verifying proxy IP through WebView2...");
+
+                // Wait longer for proxy to be fully initialized (especially with auth)
+                await Task.Delay(4000);
+
+                // Try multiple IP services
+                string[] ipCheckUrls = new[]
+                {
+                    "https://api.ipify.org?format=json",
+                    "https://api.myip.com",
+                    "https://ipinfo.io/json",
+                    "https://ifconfig.me/all.json"
+                };
+
+                foreach (var url in ipCheckUrls)
+                {
+                    try
+                    {
+                        Logger.LogDebug($"Checking IP via: {url}");
+
+                        string script = $@"
+                            (async () => {{
+                                try {{
+                                    const response = await fetch('{url}', {{
+                                        method: 'GET',
+                                        headers: {{ 'Accept': 'application/json' }},
+                                        credentials: 'omit'
+                                    }});
+                                    if (!response.ok) return null;
+                                    const data = await response.json();
+                                    return data.ip || data.ip_addr || null;
+                                }} catch (e) {{
+                                    return null;
+                                }}
+                            }})()
+                        ";
+
+                        var result = await webView2.ExecuteScriptAsync(script);
+
+                        if (!string.IsNullOrEmpty(result) && result != "null")
+                        {
+                            // Remove quotes from JSON string
+                            string proxyIp = result.Trim('"', ' ', '\r', '\n');
+
+                            // Validate IP format
+                            if (System.Net.IPAddress.TryParse(proxyIp, out _))
+                            {
+                                Logger.LogInfo($"✓ WebView2 proxy IP detected: {proxyIp}");
+
+                                // Compare with real IP
+                                if (string.IsNullOrEmpty(realIp))
+                                {
+                                    realIp = await GetRealIpAsync();
+                                }
+
+                                if (!string.IsNullOrEmpty(realIp) && proxyIp == realIp)
+                                {
+                                    Logger.LogWarning($"⚠ Proxy not working: IP {proxyIp} == real IP {realIp}");
+                                    return null;
+                                }
+
+                                return proxyIp;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug($"Failed to check IP via {url}: {ex.Message}");
+                        continue;
+                    }
+                }
+
+                Logger.LogWarning("Could not verify proxy IP through WebView2");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"Error verifying WebView2 proxy IP: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<string> GetCurrentProxyIpAsync(string proxyAddress)
+        {
+            if (string.IsNullOrEmpty(proxyAddress))
+            {
+                Logger.LogDebug("No proxy address provided for verification.");
+                return null;
+            }
+
+            Logger.LogInfo($"Verifying proxy via HttpClient: {proxyAddress}");
 
             try
             {
-                // Parse proxy pour auth (manual pour special chars)
-                var (host, port, user, pass) = ParseProxy(proxyAddress);
-                var webProxy = new WebProxy(host, int.Parse(port));
-                if (!string.IsNullOrEmpty(user) && !string.IsNullOrEmpty(pass))
+                var (protocol, host, port, user, pass) = ParseProxy(proxyAddress);
+
+                Logger.LogInfo($"Parsed proxy - Host: {host}, Port: {port}, User: {user}");
+
+                // Create proxy with proper credentials
+                var webProxy = new WebProxy($"http://{host}:{port}", true);
+
+                if (!string.IsNullOrEmpty(user))
                 {
-                    webProxy.Credentials = new NetworkCredential(user, pass);
-                    Logger.LogDebug($"Auth ajoutée pour proxy: {user}:***");
+                    // Use NetworkCredential for proper authentication
+                    webProxy.Credentials = new NetworkCredential(user, pass ?? "");
+                    Logger.LogInfo($"Proxy credentials configured for user: {user}");
                 }
 
-                var handler = new HttpClientHandler { Proxy = webProxy, UseProxy = true };
-                handler.UseDefaultCredentials = false; // Important: Don't use default, use proxy creds
-                handler.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
-                using var client = new HttpClient(handler);
-                client.Timeout = TimeSpan.FromSeconds(30); // Increased for slow proxies
+                // Use SocketsHttpHandler for better proxy support
+                var socketsHandler = new SocketsHttpHandler
+                {
+                    Proxy = webProxy,
+                    UseProxy = true,
+                    PreAuthenticate = true,
+                    DefaultProxyCredentials = webProxy.Credentials,
+                    AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+                    ConnectTimeout = TimeSpan.FromSeconds(20),
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                };
 
-                var response = await client.GetStringAsync("http://ipv4.icanhazip.com");
-                var proxyIp = response.Trim();
+                using var client = new HttpClient(socketsHandler);
+                client.Timeout = TimeSpan.FromSeconds(30);
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
 
-                // Compare with real IP
+                string proxyIp = null;
+
+                // Try HTTP endpoints (they work better with proxies)
+                string[] ipCheckUrls = new[]
+                {
+                    "http://api.ipify.org",
+                    "http://ifconfig.me/ip",
+                    "http://icanhazip.com"
+                };
+
+                foreach (var url in ipCheckUrls)
+                {
+                    try
+                    {
+                        Logger.LogDebug($"Trying IP check service: {url}");
+                        var response = await client.GetStringAsync(url);
+                        proxyIp = response.Trim();
+
+                        // Validate IP format
+                        if (!string.IsNullOrWhiteSpace(proxyIp) &&
+                            System.Net.IPAddress.TryParse(proxyIp, out _))
+                        {
+                            Logger.LogDebug($"Got valid IP from {url}: {proxyIp}");
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogDebug($"Failed {url}: {ex.Message}");
+                        continue;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(proxyIp))
+                {
+                    Logger.LogWarning($"Could not retrieve IP through proxy {proxyAddress}");
+                    return null;
+                }
+
                 if (string.IsNullOrEmpty(realIp))
                 {
                     realIp = await GetRealIpAsync();
                 }
 
-                if (string.IsNullOrEmpty(proxyIp) || proxyIp == realIp)
+                if (proxyIp == realIp)
                 {
-                    Logger.LogWarning($"Proxy {proxyAddress} non protecteur: IP {proxyIp} == real IP {realIp}");
+                    Logger.LogWarning($"⚠ Proxy is not protecting: IP {proxyIp} == real IP {realIp}");
                     return null;
                 }
 
-                Logger.LogInfo($"Proxy vérifié OK: {proxyAddress} -> IP {proxyIp} (différent de real: {realIp})");
+                Logger.LogInfo($"✓ Proxy verified OK: {proxyAddress} -> IP {proxyIp} (real: {realIp})");
                 return proxyIp;
+            }
+            catch (HttpRequestException ex)
+            {
+                Logger.LogError($"HTTP error verifying proxy: {ex.Message}");
+                if (ex.InnerException != null)
+                {
+                    Logger.LogError($"  Inner exception: {ex.InnerException.Message}");
+                }
+                return null;
+            }
+            catch (TaskCanceledException)
+            {
+                Logger.LogError($"Timeout verifying proxy (30s exceeded)");
+                return null;
             }
             catch (Exception ex)
             {
-                Logger.LogError($"Échec vérification proxy {proxyAddress}: {ex.Message}. Teste ce proxy manuellement (ex: curl --proxy {proxyAddress} https://api.ipify.org).");
+                Logger.LogError($"Failed to verify proxy: {ex.Message}");
                 return null;
             }
         }
 
-        private (string host, string port, string user, string pass) ParseProxy(string proxyAddress)
+        public (string protocol, string host, string port, string user, string pass) ParseProxy(string proxyAddress)
         {
-            // Manual parsing to handle special chars in pass
-            if (proxyAddress.StartsWith("http://") || proxyAddress.StartsWith("https://"))
-            {
-                proxyAddress = proxyAddress.Substring(proxyAddress.IndexOf("://") + 3);
-            }
+            if (string.IsNullOrEmpty(proxyAddress)) return ("", "", "", "", "");
 
-            var atIndex = proxyAddress.LastIndexOf('@');
-            string authPart = "";
-            string hostPortPart = proxyAddress;
-            if (atIndex > 0)
+            try
             {
-                authPart = proxyAddress.Substring(0, atIndex);
-                hostPortPart = proxyAddress.Substring(atIndex + 1);
-            }
+                // Extract protocol
+                string protocol = "http";
+                string remaining = proxyAddress;
 
-            string user = "";
-            string pass = "";
-            if (!string.IsNullOrEmpty(authPart))
-            {
-                var colonIndex = authPart.IndexOf(':');
-                if (colonIndex > 0)
+                if (remaining.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
                 {
-                    user = authPart.Substring(0, colonIndex);
-                    pass = authPart.Substring(colonIndex + 1);
+                    protocol = "https";
+                    remaining = remaining.Substring(8);
                 }
-                else
+                else if (remaining.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
                 {
-                    user = authPart;
+                    protocol = "http";
+                    remaining = remaining.Substring(7);
                 }
-            }
+                else if (remaining.StartsWith("socks5://", StringComparison.OrdinalIgnoreCase))
+                {
+                    protocol = "socks5";
+                    remaining = remaining.Substring(9);
+                }
+                else if (remaining.StartsWith("socks4://", StringComparison.OrdinalIgnoreCase))
+                {
+                    protocol = "socks4";
+                    remaining = remaining.Substring(9);
+                }
 
-            var colonPortIndex = hostPortPart.LastIndexOf(':');
-            string host = hostPortPart;
-            string port = "80"; // default
-            if (colonPortIndex > 0)
+                // Find the LAST @ to separate auth from host:port
+                int atIndex = remaining.LastIndexOf('@');
+
+                string user = "";
+                string pass = "";
+                string hostPort = remaining;
+
+                if (atIndex > 0)
+                {
+                    // There's authentication
+                    string authPart = remaining.Substring(0, atIndex);
+                    hostPort = remaining.Substring(atIndex + 1);
+
+                    // Find the FIRST : in auth part to separate user:pass
+                    int colonIndex = authPart.IndexOf(':');
+                    if (colonIndex > 0)
+                    {
+                        user = authPart.Substring(0, colonIndex);
+                        pass = authPart.Substring(colonIndex + 1);
+                    }
+                    else
+                    {
+                        user = authPart;
+                    }
+                }
+
+                // Parse host:port (find LAST : for port)
+                int portColonIndex = hostPort.LastIndexOf(':');
+                string host = hostPort;
+                string port = "80";
+
+                if (portColonIndex > 0)
+                {
+                    host = hostPort.Substring(0, portColonIndex);
+                    port = hostPort.Substring(portColonIndex + 1);
+                }
+
+                Logger.LogDebug($"ParseProxy result: protocol={protocol}, host={host}, port={port}, user={user}, pass={(string.IsNullOrEmpty(pass) ? "none" : "***")}");
+
+                return (protocol, host, port, user, pass);
+            }
+            catch (Exception ex)
             {
-                host = hostPortPart.Substring(0, colonPortIndex);
-                port = hostPortPart.Substring(colonPortIndex + 1);
+                Logger.LogError($"Error parsing proxy: {ex.Message}");
+                return ("", "", "", "", "");
             }
-
-            return (host, port, user, pass);
         }
 
         private async Task<string> GetRealIpAsync()
@@ -207,41 +461,38 @@ namespace SocialNetworkArmy.Services
             {
                 using var client = new HttpClient();
                 client.Timeout = TimeSpan.FromSeconds(10);
-                var response = await client.GetStringAsync("http://ipv4.icanhazip.com");
+                var response = await client.GetStringAsync("http://api.ipify.org");
                 var ip = response.Trim();
-                Logger.LogInfo($"IP réelle détectée: {ip}");
+                Logger.LogInfo($"Real IP detected: {ip}");
                 return ip;
             }
             catch (Exception ex)
             {
-                Logger.LogError("Échec détection IP réelle: " + ex.Message);
+                Logger.LogError("Failed to detect real IP: " + ex.Message);
                 return null;
             }
         }
 
-        public ProxyInfo GetNextProxy()
+        public string GetCurrentProxyAddress()
         {
-            string proxyString = GetNextProxyAddress();
-            if (string.IsNullOrEmpty(proxyString))
+            return currentProxyAddress;
+        }
+
+        public ProxyInfo GetProxyInfo(string proxyAddress)
+        {
+            if (string.IsNullOrEmpty(proxyAddress))
             {
-                throw new InvalidOperationException("No proxies available");
+                return new ProxyInfo();
             }
 
-            // Utilisez votre regex existante pour parser (adaptée de MainForm)
-            var regex = new Regex(@"^(http://)?(([^:]+):([^@]+)@)?([\w\.-]+|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):(\d{1,5})$", RegexOptions.IgnoreCase);
-            var match = regex.Match(proxyString);
-
-            if (!match.Success)
-            {
-                throw new ArgumentException("Format proxy invalide");
-            }
+            var (protocol, host, port, user, pass) = ParseProxy(proxyAddress);
 
             return new ProxyInfo
             {
-                Username = match.Groups[3].Value, // Peut être vide si pas d'auth
-                Password = match.Groups[4].Value,
-                Host = match.Groups[5].Value,
-                Port = match.Groups[6].Value
+                Username = user,
+                Password = pass,
+                Host = host,
+                Port = port
             };
         }
 

@@ -1,0 +1,142 @@
+# .gitignore pour SocialNetworkArmy (C# WinForms .NET avec WebView2)
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+*.lnk
+
+# ===== IDE: Visual Studio / Rider / VS Code =====
+.vs/
+.idea/
+*.iml
+.vscode/
+.history/
+*.code-workspace
+
+# ===== .NET build =====
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+**/x64/
+**/x86/
+**/AnyCPU/
+*.pidb
+*.pdb
+*.svclog
+*.tlog
+*.cache
+*.tmp
+*.log
+*.lastcodeanalysissucceeded
+
+# ===== Generated .NET files (AssemblyInfo, GlobalUsings, props/targets) =====
+*.AssemblyInfo.cs
+*.GlobalUsings.g.cs
+*.Designer.cs
+*.g.cs
+*.props
+*.targets
+*.FileListAbsolute.txt
+*.nuget.g.props
+*.nuget.g.targets
+
+# ===== Exes, DLLs, PDBs (build outputs) =====
+*.exe
+*.dll
+*.pdb
+*.appx
+*.msix
+*.msi
+*.ilk
+*.lib
+
+# ===== NuGet / Artifacts =====
+.nuget/
+**/packages/
+artifacts/
+*.nupkg
+*.snupkg
+project.lock.json
+project.assets.json
+
+# ===== Publish / ClickOnce =====
+**/publish/
+PublishProfiles/
+*.Publish.xml
+*.pubxml
+*.pubxml.user
+
+# ===== Tests / Coverage =====
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+# ===== Front (si présent) =====
+node_modules/
+bower_components/
+npm-debug.log*
+yarn-*.log*
+pnpm-*.log*
+
+# ===== Config locaux / secrets =====
+secrets.json
+appsettings.Development.json
+appsettings.Local.json
+*.local.json
+*.user.json
+
+# ===== WebView2 (IMPORTANT : évite les chemins trop longs) =====
+# Cache complet WebView2
+**/*.WebView2/
+**/EBWebView/
+**/WebView2/
+# Sous-dossiers bruyants
+**/Default/Service Worker/
+**/Default/IndexedDB/
+**/Default/Local Storage/
+**/Default/Storage/
+**/Default/Code Cache/
+**/Default/Network/
+**/Default/Cache/
+**/Extensions/
+**/Crashpad/
+**/CacheStorage/
+**/Service Worker/
+**/Extension Rules/
+**/Extension Scripts/
+**/Extension State/
+**/DevToolsPlugin.html
+**/DevToolsPlugin.js
+**/NamedFunctionRange.js
+**/filelist.txt
+**/LICENSE.*
+**/typescript.*
+
+# ===== Projet spécifique =====
+Data/Logs/
+Data/profiles.json
+Data/*.log
+# Data/*.csv  # Vire si tu veux commiter schedule.csv
+# Data/*.txt  # Vire si tu veux commiter targets.txt
+
+# ===== ReSharper / Analyzers =====
+_ReSharper*/
+*.DotSettings.user
+
+# ===== Installers / Appx =====
+*.appx
+*.appxbundle
+*.msix
+*.msixbundle
+
+# ===== Git merge junk =====
+*.orig
+*.rej
+
+# ===== Doublons inutiles =====
+.gitignore.txt  # Vire le .txt doublon
