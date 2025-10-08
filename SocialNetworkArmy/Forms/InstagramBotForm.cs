@@ -49,6 +49,7 @@ namespace SocialNetworkArmy.Forms
             proxyService = new ProxyService();
             automationService = new AutomationService(new FingerprintService(), proxyService, limitsService, cleanupService, monitoringService, profile);
             InitializeComponent();
+            this.Icon = new System.Drawing.Icon("Data\\Icons\\Insta.ico");
             targetButton.Enabled = false;
             closeTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             closeTimer.Tick += (s, e) => { closeTimer.Stop(); this.Close(); };

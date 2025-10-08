@@ -32,6 +32,7 @@ namespace SocialNetworkArmy.Forms
         public MainForm()
         {
             InitializeComponent();
+            this.Icon = new System.Drawing.Icon("Data\\Icons\\MainForm.ico");
             profileService = new ProfileService();
             fingerprintService = new FingerprintService();
             profiles = profileService.LoadProfiles();
@@ -163,7 +164,7 @@ namespace SocialNetworkArmy.Forms
         private bool IsValidProfileName(string name)
         {
             // Lettres, chiffres, tirets, underscores ; 3-20 caractères
-            var regex = new Regex(@"^[a-zA-Z0-9_-]{3,20}$");
+            var regex = new Regex(@"^[a-zA-Z0-9_.-]{3,20}$");
             return regex.IsMatch(name);
         }
 

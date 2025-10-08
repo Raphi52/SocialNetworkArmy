@@ -48,8 +48,7 @@ namespace SocialNetworkArmy.Services
 
                 try
                 {
-                    // 2) (Optionnel) ouvrir DevTools
-                    try { webView.CoreWebView2?.OpenDevToolsWindow(); } catch { /* ignore */ }
+                   
 
                     Random rand = new Random();
                     int maxReels = rand.Next(50, 101); // Random between 50 and 100 inclusive
@@ -184,13 +183,29 @@ getCurrentComments();
                         var commentCount = await webView.ExecuteScriptAsync(commentScript);
                         logTextBox.AppendText($"[COMMENTS] {commentCount}\r\n");
 
-                        // Parse comments pour check >300 - clean non-digits
-                        string cleanCount = new string(commentCount.Trim().Trim('"').Where(char.IsDigit).ToArray());
+                        // Parse comments to handle K (thousands) and check >300
+                        string cleanCount = commentCount.Trim().Trim('"').ToLower(); // Normalize input
                         int comments = 0;
-                        if (int.TryParse(cleanCount, out int c)) comments = c;
+
+                        if (cleanCount.EndsWith("k"))
+                        {
+                            // Remove "K" and parse the numeric part
+                            string numericPart = new string(cleanCount.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+                            if (double.TryParse(numericPart, out double number))
+                            {
+                                comments = (int)(number * 1000); // Convert to thousands
+                            }
+                        }
+                        else
+                        {
+                            // Original logic for plain numbers
+                            string digitsOnly = new string(cleanCount.Where(char.IsDigit).ToArray());
+                            int.TryParse(digitsOnly, out comments);
+                        }
+
                         if (comments > 300 && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
                         {
-                            // Check si déjà dans le fichier
+                            // Check if already in file
                             bool alreadyExists = false;
                             if (File.Exists(targetFile))
                             {

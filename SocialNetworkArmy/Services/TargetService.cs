@@ -134,7 +134,7 @@ namespace SocialNetworkArmy.Services
                         var currentTarget = target.Trim();
                         logTextBox.AppendText($"[TARGET] Processing {currentTarget}\r\n");
 
-                        int maxReels = rand.Next(5, 11); // Random between 5 and 10 inclusive
+                        int maxReels = rand.Next(4,6); // Random between 4 and 5 inclusive
                         logTextBox.AppendText($"[TARGET] Will process {maxReels} reels for this target.\r\n");
 
                         // 3) Aller sur la page Reels du target
