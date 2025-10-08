@@ -39,14 +39,13 @@ namespace SocialNetworkArmy.Services
 
         public async Task RunAsync(CancellationToken token = default)
         {
-            // Sécurité : s’assurer que CoreWebView2 est prêt même si on est appelé tôt
             await webView.EnsureCoreWebView2Async(null);
 
             try
             {
                 await form.StartScriptAsync("Target");
-                var localToken = form.GetCancellationToken(); // Récupérer le token depuis le form
-                token = localToken; // Utiliser ce token pour la cancellation
+                var localToken = form.GetCancellationToken();
+                token = localToken;
 
                 try
                 {
@@ -88,27 +87,7 @@ namespace SocialNetworkArmy.Services
                     if (!comments.Any())
                     {
                         logTextBox.AppendText("Aucun commentaire trouvé dans comments.txt ! Utilisation de commentaires par défaut.\r\n");
-                        // Ajouter des commentaires par défaut si vide
-                        comments = new string[] { "Super ! ??", "J'adore ! ??", "Trop cool ! ??", "Impressionnant !", "Bien vu ! ??", "Top ! ??" }.ToList();
-                    }
-
-                    // Charger le schedule CSV sans helper (lecture simple des lignes, parsing manuel si besoin)
-                    var schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "publish_schedule.csv");
-                    var scheduleLines = new System.Collections.Generic.List<string>();
-                    if (File.Exists(schedulePath))
-                    {
-                        scheduleLines = File.ReadAllLines(schedulePath)
-                                            .Where(line => !string.IsNullOrWhiteSpace(line))
-                                            .Select(line => line.Trim())
-                                            .ToList();
-                        logTextBox.AppendText($"[SCHEDULE] Chargé {scheduleLines.Count} lignes du CSV publish_schedule.csv.\r\n");
-                        // Si besoin de parser en objets, ajoutez ici un parsing manuel (ex: split par virgule)
-                        // Par exemple:
-                        // foreach (var line in scheduleLines.Skip(1)) { var parts = line.Split(','); ... }
-                    }
-                    else
-                    {
-                        logTextBox.AppendText($"[SCHEDULE] Fichier publish_schedule.csv non trouvé à {schedulePath} !\r\n");
+                        comments = new string[] { "Super ! 🔥", "J'adore ! ❤️", "Trop cool ! ✨", "Impressionnant !", "Bien vu ! 👍", "Top ! 🎯" }.ToList();
                     }
 
                     Random rand = new Random();
@@ -124,8 +103,9 @@ namespace SocialNetworkArmy.Services
                     string unlikeSelectors = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? @"svg[aria-label=""Je n\u2019aime plus""], svg[aria-label=""Je n'aime plus""]" : @"svg[aria-label=""Unlike""]";
                     string unlikeTest = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? @"n\u2019aime plus" : "unlike";
                     string publishPattern = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "publier|envoyer" : "post|send";
-                    string nextLabel = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "Suivant" : "Next";
-                    string commentLabel = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "Commenter" : "Comment"; // In case needed later
+
+                    // Compteur global pour le fallback Arrow (1 fois sur 15)
+                    int nextClickCounter = 0;
 
                     foreach (var target in targets)
                     {
@@ -134,17 +114,14 @@ namespace SocialNetworkArmy.Services
                         var currentTarget = target.Trim();
                         logTextBox.AppendText($"[TARGET] Processing {currentTarget}\r\n");
 
-                        int maxReels = rand.Next(4,6); // Random between 4 and 5 inclusive
+                        int maxReels = rand.Next(4, 6);
                         logTextBox.AppendText($"[TARGET] Will process {maxReels} reels for this target.\r\n");
 
-                        // 3) Aller sur la page Reels du target
                         var targetUrl = $"https://www.instagram.com/{currentTarget}/reels/";
                         webView.CoreWebView2.Navigate(targetUrl);
-
-                        // 4) Attendre un peu que la navigation se stabilise
                         await Task.Delay(3000, token);
 
-                        // Check for reels feed to load before proceeding
+                        // Check for reels feed to load
                         bool isLoaded = false;
                         int loadRetries = 0;
                         while (!isLoaded && loadRetries < 5)
@@ -163,7 +140,7 @@ namespace SocialNetworkArmy.Services
                             continue;
                         }
 
-                        // 6) Vérifier login (mur de connexion)
+                        // Vérifier login
                         var loginWall = await webView.ExecuteScriptAsync(@"
 (function(){
   return !!document.querySelector('[href*=""/accounts/login/""], .login-button');
@@ -175,7 +152,7 @@ namespace SocialNetworkArmy.Services
                             return;
                         }
 
-                        // 7) Sélecteur 1er Reel (priorité grid <article>)
+                        // Sélecteur 1er Reel
                         var findReelScript = @"
 (function(){
   const a = document.querySelector('article a[href*=""/reel/""]')
@@ -184,7 +161,7 @@ namespace SocialNetworkArmy.Services
 })()";
                         var reelHref = await webView.ExecuteScriptAsync(findReelScript);
 
-                        // 8) Lazy-load par scroll si rien
+                        // Lazy-load si rien
                         if (reelHref == "null")
                         {
                             await webView.ExecuteScriptAsync(@"
@@ -196,18 +173,16 @@ namespace SocialNetworkArmy.Services
   return true;
 })()");
                             await Task.Delay(1000, token);
-
                             reelHref = await webView.ExecuteScriptAsync(findReelScript);
                         }
 
-                        // 9) Si toujours rien ? abort propre
                         if (reelHref == "null")
                         {
                             logTextBox.AppendText("[ERREUR] Aucun Reel détecté sur la page du profil.\r\n");
-                            continue; // Passer au target suivant
+                            continue;
                         }
 
-                        // 10) Tentative 1 : click simple (peut suffire à ouvrir le MODAL)
+                        // Click pour ouvrir
                         var clickSimple = await webView.ExecuteScriptAsync(@"
 (function(){
   const el = document.querySelector('article a[href*=""/reel/""]')
@@ -218,8 +193,7 @@ namespace SocialNetworkArmy.Services
   return 'CLICKED';
 })()");
 
-                        // 11) Check ouverture (URL / modal / vidéo)
-                        await Task.Delay(3000, token); // Délai augmenté pour chargement
+                        await Task.Delay(3000, token);
                         var openedCheck = await webView.ExecuteScriptAsync(@"
 (function(){
   const urlHasReel = window.location.href.includes(""/reel/"");
@@ -230,7 +204,6 @@ namespace SocialNetworkArmy.Services
 
                         if (!JsBoolIsTrue(openedCheck))
                         {
-                            // 12bis) Sinon, MouseEvents SANS 'click' (comportement qui t’allait bien)
                             var clickMouseEvents = await webView.ExecuteScriptAsync(@"
 (async function(){
   const el = document.querySelector('article a[href*=""/reel/""]')
@@ -245,8 +218,7 @@ namespace SocialNetworkArmy.Services
   return 'MOUSE_EVENTS_SENT';
 })()");
 
-                            // Re-vérifier ouverture
-                            await Task.Delay(3000, token); // Délai augmenté
+                            await Task.Delay(3000, token);
                             openedCheck = await webView.ExecuteScriptAsync(@"
 (function(){
   const urlHasReel = window.location.href.includes(""/reel/"");
@@ -258,12 +230,11 @@ namespace SocialNetworkArmy.Services
 
                         if (!JsBoolIsTrue(openedCheck))
                         {
-                            logTextBox.AppendText("[KO] Impossible d’ouvrir le 1er Reel (sélecteur/clic).\r\n");
-                            continue; // Passer au target suivant
+                            logTextBox.AppendText("[KO] Impossible d'ouvrir le 1er Reel.\r\n");
+                            continue;
                         }
 
-                        // ======================= 12) BOUCLE POUR REELS (LIKE + COMMENT + NEXT) =======================
-                        // Refactorisé en boucle C# pour plus de contrôle et logs par étape (moins fragile)
+                        // ======================= BOUCLE REELS =======================
                         string previousReelId = null;
                         var reelIdScript = @"
 (function(){
@@ -293,10 +264,8 @@ namespace SocialNetworkArmy.Services
                             reelId = reelId?.Trim('"').Trim();
                             logTextBox.AppendText($"[REEL_ID] {reelId}\r\n");
 
-                            // Extraction de la date
+                            // Extraction date
                             var reelDateRaw = await webView.ExecuteScriptAsync(dateScript);
-
-                            // Fix: Properly deserialize the returned JSON string to get the unescaped inner JSON
                             string reelDate;
                             try
                             {
@@ -305,19 +274,17 @@ namespace SocialNetworkArmy.Services
                             catch (JsonException ex)
                             {
                                 logTextBox.AppendText($"[DATE_DESERIALIZE_ERROR] {ex.Message}\r\n");
-                                reelDate = "NO_DATE_FOUND"; // Fallback
+                                reelDate = "NO_DATE_FOUND";
                             }
-
                             logTextBox.AppendText($"[DATE] {reelDate}\r\n");
 
-                            // Watch delay (5-10s random)
+                            // Watch delay
                             await Task.Delay(rand.Next(5000, 10001), token);
 
-                            // Décider si liker (9% de chance)
+                            // Like (9%)
                             bool shouldLike = rand.NextDouble() < 0.09;
                             if (shouldLike)
                             {
-                                // LIKE (greffé du code qui marche)
                                 var likeTry = await webView.ExecuteScriptAsync($@"
 (function(){{
   try {{
@@ -356,12 +323,10 @@ namespace SocialNetworkArmy.Services
 
     try{{ el.scrollIntoView({{behavior:'smooth', block:'center'}}); }}catch(_){{}}
     try{{ el.focus(); }}catch(_){{}}
-    try{{ el.style.border = '2px solid red'; setTimeout(function(){{ try{{ el.style.border = ''; }}catch(_){{}} }}, 5000); }}catch(_){{}}
     
     try{{ el.click(); }}catch(_){{}}
     if (liked()) return 'OK:CLICK ' + picked_info;
 
-    // Fallback elementFromPoint
     try{{
       var r = el.getBoundingClientRect(), x = Math.floor(r.left + r.width/2), y = Math.floor(r.top + r.height/2);
       var topEl = document.elementFromPoint(x, y) || el;
@@ -375,7 +340,6 @@ namespace SocialNetworkArmy.Services
   }}
 }})();");
                                 logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
-
                                 await Task.Delay(2000, token);
                             }
                             else
@@ -383,7 +347,7 @@ namespace SocialNetworkArmy.Services
                                 logTextBox.AppendText("[LIKE] Skipped (random 9%)\r\n");
                             }
 
-                            // Déterminer si on doit commenter
+                            // Comment (si < 24h)
                             bool shouldComment = false;
                             if (reelDate != "NO_DATE_FOUND")
                             {
@@ -412,37 +376,218 @@ namespace SocialNetworkArmy.Services
 
                             if (shouldComment)
                             {
-                                // COMMENT (adapté du code qui marche, avec random de txt ou default)
                                 string randomComment = comments[rand.Next(comments.Count)];
                                 logTextBox.AppendText($"[COMMENT] Sélectionné: '{randomComment}'\r\n");
+                                logTextBox.AppendText($"[TYPING] Starting...\r\n");
 
-                                var commentTry = await webView.ExecuteScriptAsync($@"
+                                // Échapper TOUS les types d'apostrophes et guillemets
+                                var escapedComment = randomComment
+                                    .Replace("\\", "\\\\")
+                                    .Replace("\u2018", "'")
+                                    .Replace("\u2019", "'")
+                                    .Replace("'", "\\'");
+
+                                // SCRIPT EXACTEMENT COMME TESTSERVICE - QUI FONCTIONNE
+                                var typingScript = $@"
 (async function(){{
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  const rand = (a,b) => Math.floor(a + Math.random()*(b-a+1));
-
-  function setNativeValue(el, value){{
-    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
-                : el instanceof HTMLInputElement   ? HTMLInputElement.prototype
-                : null;
-    if (!proto) {{ el.value = value; el.dispatchEvent(new Event('input',{{bubbles:true}})); return; }}
-    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-    desc.set.call(el, value);
-    el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+  
+  // Utilitaire pour générer un délai aléatoire entre min et max ms
+  function randomDelay(min, max) {{
+    return Math.floor(min + Math.random() * (max - min + 1));
   }}
-
-  async function clickCenter(el){{
-    el.scrollIntoView({{behavior:'smooth', block:'center'}});
-    await sleep(120);
-    const r = el.getBoundingClientRect();
-    const x = r.left + r.width/2, y = r.top + r.height/2;
-    const opts = {{bubbles:true, cancelable:true, clientX:x, clientY:y, button:0}};
-    el.dispatchEvent(new MouseEvent('mousedown', opts));
-    el.dispatchEvent(new MouseEvent('mouseup',   opts));
-    el.dispatchEvent(new MouseEvent('click',     opts));
-    return 'OK';
+  
+  const dlg = document.querySelector('div[role=""dialog""]');
+  const root = dlg || document;
+  
+  // Texte à taper
+  const text = '{escapedComment}';
+  const chars = Array.from(text);
+  
+  // Focus initial
+  let ta = (root.querySelector('div[role=""dialog""] form textarea'))
+        || (root.querySelector('form textarea'))
+        || root.querySelector('textarea');
+  let ce = null;
+  
+  if (!ta) {{
+    ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
+    if (!ce) return 'NO_COMPOSER_INITIAL';
   }}
+  
+  const initialTarget = ta || ce;
+  
+  initialTarget.scrollIntoView({{behavior:'smooth', block:'center'}});
+  await sleep(randomDelay(200, 400));
+  
+  const rect = initialTarget.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  const opts = {{bubbles:true, cancelable:true, clientX:x, clientY:y, button:0}};
+  
+  initialTarget.dispatchEvent(new MouseEvent('mousedown', opts));
+  initialTarget.dispatchEvent(new MouseEvent('mouseup', opts));
+  initialTarget.dispatchEvent(new MouseEvent('click', opts));
+  
+  await sleep(randomDelay(100, 250));
+  initialTarget.focus();
+  
+  for (let i = 0; i < chars.length; i++) {{
+    const char = chars[i];
+    
+    // Re-trouver l'élément à chaque itération
+    ta = (root.querySelector('div[role=""dialog""] form textarea'))
+          || (root.querySelector('form textarea'))
+          || root.querySelector('textarea');
+    ce = null;
+    
+    if (!ta) {{
+      ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
+      if (!ce) return 'NO_COMPOSER_AT_' + i;
+    }}
+    
+    const currentTarget = ta || ce;
+    
+    try {{
+      if (ta) {{
+        const currentValue = ta.value;
+        const proto = HTMLTextAreaElement.prototype;
+        const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+        desc.set.call(ta, currentValue + char);
+        
+        ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+        ta.dispatchEvent(new Event('change', {{bubbles: true}}));
+      }} else {{
+        document.execCommand('insertText', false, char);
+      }}
+    }} catch(e) {{
+      return 'TYPE_ERROR_AT_' + i + ': ' + (e.message || String(e));
+    }}
+    
+    // Délai entre les caractères (vitesse de frappe variable)
+    let delay;
+    
+    // Pause plus longue après ponctuation
+    if (char === ',' || char === ';') {{
+      delay = randomDelay(200, 400);
+    }} else if (char === '.' || char === '!' || char === '?') {{
+      delay = randomDelay(300, 500);
+    }} else if (char === ' ') {{
+      delay = randomDelay(80, 150);
+    }} else {{
+      // Caractères normaux: vitesse variable
+      delay = randomDelay(50, 150);
+    }}
+    
+    // Chance de faire une erreur (5%)
+    if (Math.random() < 0.05 && i < chars.length - 1) {{
+      await sleep(delay);
+      
+      // Taper un mauvais caractère
+      const wrongChars = 'qwertyuiopasdfghjklzxcvbnm';
+      const wrongChar = wrongChars[Math.floor(Math.random() * wrongChars.length)];
+      
+      // Re-trouver pour erreur
+      ta = (root.querySelector('div[role=""dialog""] form textarea'))
+            || (root.querySelector('form textarea'))
+            || root.querySelector('textarea');
+      ce = null;
+      
+      if (!ta) {{
+        ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
+        if (!ce) return 'NO_COMPOSER_ERROR_AT_' + i;
+      }}
+      
+      const currentTargetError = ta || ce;
+      
+      try {{
+        if (ta) {{
+          const currentValue = ta.value;
+          const proto = HTMLTextAreaElement.prototype;
+          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+          desc.set.call(ta, currentValue + wrongChar);
+          ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+        }} else {{
+          document.execCommand('insertText', false, wrongChar);
+        }}
+      }} catch(e) {{
+        return 'ERROR_TYPE_AT_' + i + ': ' + (e.message || String(e));
+      }}
+      
+      // Petit délai avant de réaliser l'erreur
+      await sleep(randomDelay(100, 250));
+      
+      // Supprimer le mauvais caractère (Backspace)
+      // Re-trouver pour delete
+      ta = (root.querySelector('div[role=""dialog""] form textarea'))
+            || (root.querySelector('form textarea'))
+            || root.querySelector('textarea');
+      ce = null;
+      
+      if (!ta) {{
+        ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
+        if (!ce) return 'NO_COMPOSER_DELETE_AT_' + i;
+      }}
+      
+      const currentTargetDelete = ta || ce;
+      
+      try {{
+        if (ta) {{
+          const currentValue = ta.value;
+          const proto = HTMLTextAreaElement.prototype;
+          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+          desc.set.call(ta, currentValue.slice(0, -1));
+          ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+        }} else {{
+          document.execCommand('delete', false);
+        }}
+      }} catch(e) {{
+        return 'DELETE_ERROR_AT_' + i + ': ' + (e.message || String(e));
+      }}
+      
+      // Petit délai après correction
+      await sleep(randomDelay(50, 120));
+    }}
+    
+    // Hésitation aléatoire (2% de chance)
+    if (Math.random() < 0.02) {{
+      await sleep(randomDelay(400, 800));
+    }}
+    
+    await sleep(delay);
+  }}
+  
+  // Petit délai final
+  await sleep(randomDelay(300, 600));
+  
+  return 'TYPED_SUCCESSFULLY';
+}})()";
 
+                                // Calculer temps d'attente
+                                int charCount = randomComment.Length;
+                                int baseTime = charCount * 100;
+                                int punctuationCount = randomComment.Count(c => ".!?,;".Contains(c));
+                                int punctuationDelay = punctuationCount * 300;
+                                int errorDelay = (int)(charCount * 0.05 * 500);
+                                int totalTime = baseTime + punctuationDelay + errorDelay + 3000;
+
+                                // Lancer le script et attendre
+                                var typingTask = webView.ExecuteScriptAsync(typingScript);
+
+                                logTextBox.AppendText($"[TYPING] Attente de {totalTime}ms...\r\n");
+                                await Task.Delay(totalTime, token);
+
+                                var typingResult = await typingTask;
+                                logTextBox.AppendText($"[TYPING] Résultat: {typingResult}\r\n");
+
+                                // Attendre que le bouton se débloque
+                                await Task.Delay(rand.Next(1500, 2500), token);
+
+                                // PUBLISH
+                                var publishScript = $@"
+(async function(){{
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  
   function btnEnabled(b){{
     if (!b) return false;
     if (b.disabled) return false;
@@ -467,62 +612,49 @@ namespace SocialNetworkArmy.Services
     return null;
   }}
 
-  async function waitEnabled(el, timeout=8000){{
+  async function waitEnabled(el, timeout=10000){{
     const t0 = performance.now();
     while (performance.now() - t0 < timeout){{
       if (btnEnabled(el)) return true;
-      await sleep(120);
+      await sleep(150);
     }}
     return false;
   }}
 
-  const dlg  = document.querySelector('div[role=""dialog""]');
+  const dlg = document.querySelector('div[role=""dialog""]');
   const root = dlg || document;
-
-  let ta = (root.querySelector('div[role=""dialog""] form textarea'))
-        || (root.querySelector('form textarea'))
-        || root.querySelector('textarea');
-  let ce = null;
-  if (!ta){{
-    ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-    if (!ce) return 'NO_COMPOSER';
-  }}
-
-  const form = (ta && ta.closest('form')) || (ce && ce.closest('form')) || root.querySelector('form');
-  const text = '{randomComment.Replace("'", "\\'")}';
-
-  if (ta){{
-    if (await clickCenter(ta)==='STOP') return 'STOP';
-    ta.focus();
-    setNativeValue(ta, text);
-  }} else {{
-    if (await clickCenter(ce)==='STOP') return 'STOP';
-    ce.focus();
-    document.execCommand('insertText', false, text);
-    ce.dispatchEvent(new Event('input', {{bubbles:true}}));
-  }}
-
-  await sleep(rand(180, 360));
-
+  const form = root.querySelector('form');
+  
   const ctrl = findPublishControl(form);
   if (!ctrl) return 'NO_CTRL';
-  const ok = await waitEnabled(ctrl, 8000);
-  if (!ok) return 'CTRL_DISABLED';
-
-  await clickCenter(ctrl);
-
+  
+  const ok = await waitEnabled(ctrl, 10000);
+  if (!ok) return 'CTRL_DISABLED_TIMEOUT';
+  
+  const btnRect = ctrl.getBoundingClientRect();
+  const btnX = btnRect.left + btnRect.width / 2;
+  const btnY = btnRect.top + btnRect.height / 2;
+  const btnOpts = {{bubbles:true, cancelable:true, clientX:btnX, clientY:btnY, button:0}};
+  
+  ctrl.dispatchEvent(new MouseEvent('mousedown', btnOpts));
+  ctrl.dispatchEvent(new MouseEvent('mouseup', btnOpts));
+  ctrl.dispatchEvent(new MouseEvent('click', btnOpts));
+  
   const t0 = performance.now();
-  while (performance.now() - t0 < 12000){{
+  while (performance.now() - t0 < 12000) {{
     const scope = document.querySelector('div[role=""dialog""]') || document;
     const ta2 = scope.querySelector('form textarea');
     if (!ta2 || ta2.value.trim().length === 0) break;
     await sleep(220);
   }}
-  return 'COMMENTED';
-}})();");
-                                logTextBox.AppendText($"[COMMENT] {commentTry}\r\n");
+  
+  return 'PUBLISHED';
+}})()";
 
-                                await Task.Delay(rand.Next(1200, 2201), token); // Délai après comment
+                                var publishResult = await webView.ExecuteScriptAsync(publishScript);
+                                logTextBox.AppendText($"[PUBLISH] {publishResult}\r\n");
+
+                                await Task.Delay(rand.Next(1200, 2201), token);
                             }
                             else
                             {
@@ -532,27 +664,128 @@ namespace SocialNetworkArmy.Services
                             // NEXT si pas le dernier
                             if (reelNum < maxReels)
                             {
-                                var nextScript = $@"
+                                // Attendre que le modal soit stable (surtout important pour le 1er reel)
+                                if (reelNum == 1)
+                                {
+                                    await Task.Delay(rand.Next(800, 1500), token);
+                                }
+
+                                nextClickCounter++;
+
+                                // Délai pré-action aléatoire
+                                int preDelay = rand.Next(800, 2000);
+                                logTextBox.AppendText($"[NEXT] Waiting {preDelay}ms before action...\r\n");
+                                await Task.Delay(preDelay, token);
+
+                                // D'abord: debug pour voir quels boutons existent
+                                var debugScript = $@"
 (function(){{
   try{{
     var scope = document.querySelector('div[role=""dialog""]') || document;
-    var next = scope.querySelector('button[aria-label=""{nextLabel}""]')
-            || scope.querySelector('[role=""button""][aria-label*=""{nextLabel}""]');
-
-    if (next){{
-      next.dispatchEvent(new MouseEvent('mousedown', {{bubbles:true}}));
-      next.dispatchEvent(new MouseEvent('mouseup',   {{bubbles:true}}));
-    }} else {{
-      document.body.dispatchEvent(new KeyboardEvent('keydown', {{key:'ArrowRight', code:'ArrowRight', bubbles:true}}));
-      document.body.dispatchEvent(new KeyboardEvent('keyup',   {{key:'ArrowRight', code:'ArrowRight', bubbles:true}}));
-    }}
-    return 'OK';
-  }}catch(e){{ return 'JSERR: ' + String(e); }}
+    
+    // Chercher tous les boutons possibles
+    var allButtons = Array.from(scope.querySelectorAll('button, [role=""button""]'));
+    var buttonInfo = allButtons.map(b => {{
+      return {{
+        tag: b.tagName,
+        ariaLabel: b.getAttribute('aria-label') || 'NO_LABEL',
+        text: b.innerText?.substring(0, 20) || '',
+        visible: b.offsetWidth > 0
+      }};
+    }});
+    
+    return JSON.stringify(buttonInfo);
+  }} catch(e){{
+    return 'DEBUG_ERR:' + String(e);
+  }}
 }})()";
+
+                                var debugResult = await webView.ExecuteScriptAsync(debugScript);
+                                logTextBox.AppendText($"[NEXT] Debug buttons: {debugResult}\r\n");
+
+                                // 1 fois sur 15, utiliser ArrowRight, sinon clic humain
+                                bool useArrowKey = (nextClickCounter % 15 == 0);
+
+                                string nextScript;
+                                if (useArrowKey)
+                                {
+                                    logTextBox.AppendText("[NEXT] Using ArrowRight fallback (1/15)\r\n");
+                                    nextScript = @"
+(function(){
+  try{
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    document.body.dispatchEvent(new KeyboardEvent('keyup', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    return 'ARROW_KEY_USED';
+  }catch(e){ return 'JSERR: ' + String(e); }
+})()";
+                                }
+                                else
+                                {
+                                    // Clic humain sur le bouton avec coordonnées aléatoires
+                                    // Clic humain sur le bouton avec coordonnées aléatoires
+                                    nextScript = $@"
+(function(){{
+  try{{
+    var scope = document.querySelector('div[role=""dialog""]');
+    if (!scope) return 'NO_DIALOG';
+    
+    // Chercher tous les premiers boutons visibles
+   var allButtons = Array.from(scope.querySelectorAll('button')).filter(b => {{
+  var rect = b.getBoundingClientRect();
+  return b.offsetWidth > 0 && b.offsetHeight > 0 && 
+         Math.round(rect.width) === 32 && Math.round(rect.height) === 32;
+}});
+
+// Prendre le premier bouton 32x32 trouvé (c'est le Next)
+var nextBtn = allButtons.length > 0 ? allButtons[0] : null;
+    
+    if (nextBtn) {{
+      var rect = nextBtn.getBoundingClientRect();
+      
+      // Position aléatoire dans le bouton (éviter les bords de 20%)
+      var marginX = rect.width * 0.2;
+      var marginY = rect.height * 0.2;
+      var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
+      var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
+      var clientX = rect.left + offsetX;
+      var clientY = rect.top + offsetY;
+      
+      // Simuler séquence de click humain
+      var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
+      
+      nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
+      nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
+      nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+      nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+      nextBtn.dispatchEvent(new MouseEvent('click', opts));
+      nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
+      
+      return 'BTN_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY) + 
+             '|SIZE:' + Math.round(rect.width) + 'x' + Math.round(rect.height) +
+             '|BTN_INDEX:1';
+    }} else {{
+      // Fallback: touche flèche
+      document.body.dispatchEvent(new KeyboardEvent('keydown', {{
+        key: 'ArrowRight',
+        code: 'ArrowRight',
+        keyCode: 39,
+        bubbles: true
+      }}));
+      return 'FALLBACK_ARROW_KEY';
+    }}
+  }} catch(e){{
+    return 'ERR:' + (e.message || String(e));
+  }}
+}})()";
+                                }
+
                                 var nextTry = await webView.ExecuteScriptAsync(nextScript);
                                 logTextBox.AppendText($"[NEXT] {nextTry}\r\n");
 
-                                await Task.Delay(rand.Next(600, 1001), token); // Délai après next
+                                // Attendre le chargement du reel suivant
+                                int loadDelay = rand.Next(2500, 4500);
+                                logTextBox.AppendText($"[NEXT] Waiting {loadDelay}ms for next reel to load...\r\n");
+                                await Task.Delay(loadDelay, token);
 
                                 // Post-next verification
                                 int retryCount = 0;
@@ -560,31 +793,50 @@ namespace SocialNetworkArmy.Services
                                 string newReelId = null;
                                 while (retryCount < maxRetries)
                                 {
-                                    await Task.Delay(rand.Next(1500, 3000), token); // Wait for load
+                                    await Task.Delay(rand.Next(1500, 3000), token);
                                     newReelId = await webView.ExecuteScriptAsync(reelIdScript);
                                     newReelId = newReelId?.Trim('"').Trim();
 
-                                    if (newReelId != previousReelId && newReelId != "NO_ID")
+                                    var checkAdvanced = await webView.ExecuteScriptAsync(@"
+(function(){
+  const hasDialog = !!document.querySelector('div[role=""dialog""]');
+  const videos = document.querySelectorAll('video');
+  const hasVideo = videos.length > 0;
+  const videoPlaying = Array.from(videos).some(v => !v.paused);
+  return (hasDialog && hasVideo) ? 'true' : 'false';
+})()");
+
+                                    if (newReelId != previousReelId && newReelId != "NO_ID" && JsBoolIsTrue(checkAdvanced))
                                     {
-                                        break; // Successfully advanced
+                                        logTextBox.AppendText("[NEXT] ✓ Successfully advanced to next reel\r\n");
+                                        break;
                                     }
 
                                     logTextBox.AppendText($"[NEXT RETRY {retryCount + 1}] Stuck on {previousReelId}, retrying...\r\n");
 
+                                    // Retry debug
+                                    debugResult = await webView.ExecuteScriptAsync(debugScript);
+                                    logTextBox.AppendText($"[NEXT RETRY] Debug buttons: {debugResult}\r\n");
+
                                     // Retry next
                                     nextTry = await webView.ExecuteScriptAsync(nextScript);
                                     logTextBox.AppendText($"[NEXT RETRY] {nextTry}\r\n");
+
+                                    // Retry load delay
+                                    loadDelay = rand.Next(2500, 4500);
+                                    logTextBox.AppendText($"[NEXT RETRY] Waiting {loadDelay}ms for next reel to load...\r\n");
+                                    await Task.Delay(loadDelay, token);
 
                                     retryCount++;
                                 }
 
                                 if (retryCount >= maxRetries)
                                 {
-                                    logTextBox.AppendText($"[NEXT ERROR] Max retries reached, still stuck on {previousReelId}. Stopping reel loop.\r\n");
-                                    break; // Break the reel loop
+                                    logTextBox.AppendText($"[NEXT ERROR] Max retries reached, stuck on {previousReelId}. Stopping reel loop.\r\n");
+                                    break;
                                 }
 
-                                // Vérifier si toujours en modal
+                                // Vérifier modal toujours ouvert
                                 var stillOpened = await webView.ExecuteScriptAsync(@"
 (function(){
   const hasDialog  = !!document.querySelector('div[role=""dialog""]');
@@ -597,12 +849,10 @@ namespace SocialNetworkArmy.Services
                                 }
                             }
 
-                            previousReelId = reelId; // Update for next iteration
+                            previousReelId = reelId;
                         }
 
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");
-
-                        // Délai entre targets
                         await Task.Delay(rand.Next(5000, 15000), token);
                     }
 
