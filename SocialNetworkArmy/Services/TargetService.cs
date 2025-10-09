@@ -14,10 +14,12 @@ namespace SocialNetworkArmy.Services
 {
     public class TargetService
     {
+        private readonly NavigationService navigationService;
         private readonly InstagramBotForm form;
         private readonly WebView2 webView;
         private readonly TextBox logTextBox;
         private readonly Profile profile;
+        private readonly Random rand = new Random();
 
         public TargetService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -25,8 +27,8 @@ namespace SocialNetworkArmy.Services
             this.logTextBox = logTextBox ?? throw new ArgumentNullException(nameof(logTextBox));
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.form = form ?? throw new ArgumentNullException(nameof(form));
+            this.navigationService = new NavigationService(webView, logTextBox);
         }
-
 
         private static bool JsBoolIsTrue(string jsResult)
         {
@@ -35,6 +37,204 @@ namespace SocialNetworkArmy.Services
             if (s.StartsWith("\"") && s.EndsWith("\""))
                 s = s.Substring(1, s.Length - 2);
             return s.Equals("true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task RandomHumanPauseAsync(CancellationToken token, int minShort = 500, int maxShort = 2000, double longPauseChance = 0.08, int minLong = 10000, int maxLong = 60000)
+        {
+            if (rand.NextDouble() < longPauseChance)
+            {
+                int longDelay = rand.Next(minLong, maxLong);
+                logTextBox.AppendText($"[HUMAN PAUSE] Long distraction pause: {longDelay}ms\r\n");
+                await Task.Delay(longDelay, token);
+            }
+            else
+            {
+                int shortDelay = rand.Next(minShort, maxShort);
+                logTextBox.AppendText($"[HUMAN PAUSE] Short pause: {shortDelay}ms\r\n");
+                await Task.Delay(shortDelay, token);
+            }
+        }
+
+        private async Task RandomHumanNoiseAsync(CancellationToken token)
+        {
+            if (rand.NextDouble() < 0.3)  // 30% chance for noise
+            {
+                logTextBox.AppendText("[HUMAN NOISE] Adding idle scroll or hover...\r\n");
+
+                var noiseScript = @"
+(async function(){
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  // Random scroll
+  window.scrollBy(0, Math.random() * 200 - 100);  // Small up/down scroll
+  await sleep(500);
+
+  // Hover over a random element (e.g., a post or button without clicking)
+  var elements = document.querySelectorAll('a, button, div[role=""button""]');
+  if (elements.length > 0) {
+    var randomEl = elements[Math.floor(Math.random() * elements.length)];
+    var rect = randomEl.getBoundingClientRect();
+    var x = rect.left + rect.width / 2;
+    var y = rect.top + rect.height / 2;
+    randomEl.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, clientX: x, clientY: y}));
+    await sleep(Math.random() * 1000 + 500);  // Hover 0.5-1.5s
+    randomEl.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true, clientX: x, clientY: y}));
+  }
+  return 'NOISE_ADDED';
+})()";
+                var noiseResult = await webView.ExecuteScriptAsync(noiseScript);
+                logTextBox.AppendText($"[NOISE] {noiseResult}\r\n");
+            }
+        }
+
+        private async Task<bool> ClickReelsTabAsync(string username, string lang, CancellationToken token = default)
+        {
+            logTextBox.AppendText("[NAV] Clicking Reels tab...\r\n");
+
+            var reelsScript = $@"
+(function(){{
+  try{{
+    var reelsEl = document.querySelector('a[href=""/{username}/reels/""]');
+    if (!reelsEl) {{
+      reelsEl = document.querySelector('div[role=""tablist""] div:nth-child(2)'); // Fallback to second tab if href not found
+    }}
+    if (!reelsEl) return 'NO_REELS_ELEMENT';
+    
+    if (reelsEl.offsetWidth === 0 || reelsEl.offsetHeight === 0) {{
+      return 'REELS_NOT_VISIBLE';
+    }}
+    
+    reelsEl.scrollIntoView({{behavior:'smooth', block:'center'}});
+    
+    var rect = reelsEl.getBoundingClientRect();
+    var marginX = rect.width * 0.2;
+    var marginY = rect.height * 0.2;
+    var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
+    var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
+    var clientX = rect.left + offsetX;
+    var clientY = rect.top + offsetY;
+    
+    // Simulate mouse approach: 3-5 move events towards the target
+    var startX = clientX + (Math.random() * 100 - 50);  // Start offset
+    var startY = clientY + (Math.random() * 100 - 50);
+    for (let i = 1; i <= 5; i++) {{
+      var moveX = startX + (clientX - startX) * (i / 5);
+      var moveY = startY + (clientY - startY) * (i / 5);
+      reelsEl.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+    }}
+    
+    var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
+    
+    reelsEl.dispatchEvent(new MouseEvent('mouseenter', opts));
+    reelsEl.dispatchEvent(new MouseEvent('mouseover', opts));
+    reelsEl.dispatchEvent(new MouseEvent('mousedown', opts));
+    reelsEl.dispatchEvent(new MouseEvent('mouseup', opts));
+    reelsEl.dispatchEvent(new MouseEvent('click', opts));
+    reelsEl.dispatchEvent(new MouseEvent('mouseleave', opts));
+    
+    return 'REELS_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY);
+  }} catch(e){{
+    return 'ERR:' + (e.message || String(e));
+  }}
+}})()";
+
+            var reelsResult = await webView.ExecuteScriptAsync(reelsScript);
+            logTextBox.AppendText($"[NAV] Reels tab click: {reelsResult}\r\n");
+
+            if (!reelsResult.Contains("REELS_CLICKED"))
+            {
+                logTextBox.AppendText("[NAV] ✗ Failed to click Reels tab\r\n");
+                return false;
+            }
+
+            // Wait for reels page to load
+            await Task.Delay(rand.Next(2000, 4000), token);
+
+            // Check if on reels feed
+            var checkReels = await webView.ExecuteScriptAsync(@"
+(function(){
+  var url = window.location.href;
+  return url.includes('/reels/') ? 'true' : 'false';
+})()");
+
+            if (!JsBoolIsTrue(checkReels))
+            {
+                logTextBox.AppendText("[NAV] ✗ Reels tab did not load\r\n");
+                return false;
+            }
+
+            logTextBox.AppendText("[NAV] ✓ Reels tab loaded\r\n");
+            return true;
+        }
+
+        private async Task<bool> CloseReelModalAsync(string lang, CancellationToken token = default)
+        {
+            logTextBox.AppendText("[NAV] Closing reel modal...\r\n");
+
+            string closeLabel = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "Fermer" : "Close";
+
+            var closeScript = $@"
+(function(){{
+  try{{
+    var closeSvg = document.querySelector('svg[aria-label=""{closeLabel}""]');
+    if (!closeSvg) return 'NO_CLOSE_ELEMENT';
+    
+    var closeEl = closeSvg.closest('button, div[role=""button""]');
+    if (!closeEl) return 'NO_CLOSE_PARENT';
+    
+    var rect = closeEl.getBoundingClientRect();
+    var marginX = rect.width * 0.2;
+    var marginY = rect.height * 0.2;
+    var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
+    var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
+    var clientX = rect.left + offsetX;
+    var clientY = rect.top + offsetY;
+    
+    // Simulate mouse approach: 3-5 move events towards the target
+    var startX = clientX + (Math.random() * 100 - 50);  // Start offset
+    var startY = clientY + (Math.random() * 100 - 50);
+    for (let i = 1; i <= 5; i++) {{
+      var moveX = startX + (clientX - startX) * (i / 5);
+      var moveY = startY + (clientY - startY) * (i / 5);
+      closeEl.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+    }}
+    
+    var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
+    
+    closeEl.dispatchEvent(new MouseEvent('mousedown', opts));
+    closeEl.dispatchEvent(new MouseEvent('mouseup', opts));
+    closeEl.dispatchEvent(new MouseEvent('click', opts));
+    
+    return 'CLOSE_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY);
+  }} catch(e){{
+    return 'ERR:' + (e.message || String(e));
+  }}
+}})()";
+
+            var closeResult = await webView.ExecuteScriptAsync(closeScript);
+            logTextBox.AppendText($"[NAV] Close modal result: {closeResult}\r\n");
+
+            if (!closeResult.Contains("CLOSE_CLICKED"))
+            {
+                logTextBox.AppendText("[NAV] ✗ Failed to close modal\r\n");
+                return false;
+            }
+
+            await Task.Delay(rand.Next(1500, 2500), token);
+
+            // Check if modal is closed
+            var checkClosed = await webView.ExecuteScriptAsync(@"
+(function(){
+  return !document.querySelector('div[role=""dialog""]') ? 'true' : 'false';
+})()");
+
+            if (!JsBoolIsTrue(checkClosed))
+            {
+                logTextBox.AppendText("[NAV] ✗ Modal did not close\r\n");
+                return false;
+            }
+
+            logTextBox.AppendText("[NAV] ✓ Modal closed\r\n");
+            return true;
         }
 
         public async Task RunAsync(CancellationToken token = default)
@@ -90,14 +290,9 @@ namespace SocialNetworkArmy.Services
                         comments = new string[] { "Super ! 🔥", "J'adore ! ❤️", "Trop cool ! ✨", "Impressionnant !", "Bien vu ! 👍", "Top ! 🎯" }.ToList();
                     }
 
-                    Random rand = new Random();
-
                     // Detect language by navigating to home page
-                    webView.CoreWebView2.Navigate("https://www.instagram.com/");
-                    await Task.Delay(rand.Next(4000, 7001), token);
-                    var langResult = await webView.ExecuteScriptAsync("document.documentElement.lang;");
-                    var lang = langResult?.Trim('"') ?? "en";
-                    logTextBox.AppendText($"[LANG] Detected language: {lang}\r\n");
+                    await navigationService.NavigateToHomeAsync(token);
+                    var lang = await navigationService.DetectLanguageAsync(token);
 
                     string likeSelectors = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? @"svg[aria-label=""J\u2019aime""], svg[aria-label=""Je n\u2019aime plus""]" : @"svg[aria-label=""Like""], svg[aria-label=""Unlike""]";
                     string unlikeSelectors = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? @"svg[aria-label=""Je n\u2019aime plus""], svg[aria-label=""Je n'aime plus""]" : @"svg[aria-label=""Unlike""]";
@@ -117,9 +312,25 @@ namespace SocialNetworkArmy.Services
                         int maxReels = rand.Next(4, 6);
                         logTextBox.AppendText($"[TARGET] Will process {maxReels} reels for this target.\r\n");
 
-                        var targetUrl = $"https://www.instagram.com/{currentTarget}/reels/";
-                        webView.CoreWebView2.Navigate(targetUrl);
-                        await Task.Delay(3000, token);
+                        // Human-like navigation to profile via search
+                        bool navigationSuccess = await navigationService.NavigateToProfileViaSearchAsync(currentTarget, token);
+                        if (!navigationSuccess)
+                        {
+                            logTextBox.AppendText($"[TARGET] Failed to navigate to profile '{currentTarget}'\r\n");
+                            continue;
+                        }
+
+                        await RandomHumanPauseAsync(token);
+
+                        await RandomHumanNoiseAsync(token);
+
+                        // Click on Reels tab
+                        bool reelsSuccess = await ClickReelsTabAsync(currentTarget, lang, token);
+                        if (!reelsSuccess)
+                        {
+                            logTextBox.AppendText($"[TARGET] Failed to navigate to reels for '{currentTarget}'\r\n");
+                            continue;
+                        }
 
                         // Check for reels feed to load
                         bool isLoaded = false;
@@ -151,6 +362,8 @@ namespace SocialNetworkArmy.Services
                             form.StopScript();
                             return;
                         }
+
+                        await RandomHumanNoiseAsync(token);
 
                         // Sélecteur 1er Reel
                         var findReelScript = @"
@@ -278,8 +491,43 @@ namespace SocialNetworkArmy.Services
                             }
                             logTextBox.AppendText($"[DATE] {reelDate}\r\n");
 
-                            // Watch delay
-                            await Task.Delay(rand.Next(5000, 10001), token);
+                            await RandomHumanPauseAsync(token);
+
+                            // Watch delay with possible pause
+                            int watchTime = rand.Next(5000, 10001);
+                            await Task.Delay(watchTime / 2, token);  // Watch half first
+
+                            if (rand.NextDouble() < 0.15)  // 15% chance to pause mid-watch
+                            {
+                                logTextBox.AppendText("[HUMAN] Pausing reel mid-watch...\r\n");
+                                var pauseScript = @"
+                                (function(){
+                                  var video = document.querySelector('video');
+                                  if (video && !video.paused) {
+                                    video.pause();
+                                    return 'PAUSED';
+                                  }
+                                  return 'NO_VIDEO';
+                                })()";
+                                var pauseResult = await webView.ExecuteScriptAsync(pauseScript);
+                                logTextBox.AppendText($"[PAUSE] {pauseResult}\r\n");
+
+                                await Task.Delay(rand.Next(2000, 8000), token);  // Pause for 2-8s
+
+                                var playScript = @"
+                                (function(){
+                                  var video = document.querySelector('video');
+                                  if (video && video.paused) {
+                                    video.play();
+                                    return 'RESUMED';
+                                  }
+                                  return 'NO_VIDEO';
+                                })()";
+                                var playResult = await webView.ExecuteScriptAsync(playScript);
+                                logTextBox.AppendText($"[RESUME] {playResult}\r\n");
+                            }
+
+                            await Task.Delay(watchTime / 2, token);  // Finish watching
 
                             // Like (9%)
                             bool shouldLike = rand.NextDouble() < 0.09;
@@ -421,9 +669,23 @@ namespace SocialNetworkArmy.Services
   await sleep(randomDelay(200, 400));
   
   const rect = initialTarget.getBoundingClientRect();
-  const x = rect.left + rect.width / 2;
-  const y = rect.top + rect.height / 2;
-  const opts = {{bubbles:true, cancelable:true, clientX:x, clientY:y, button:0}};
+  var marginX = rect.width * 0.2;
+  var marginY = rect.height * 0.2;
+  var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
+  var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
+  const clientX = rect.left + offsetX;
+  const clientY = rect.top + offsetY;
+  
+  // Simulate mouse approach: 3-5 move events towards the target
+  var startX = clientX + (Math.random() * 100 - 50);  // Start offset
+  var startY = clientY + (Math.random() * 100 - 50);
+  for (let i = 1; i <= 5; i++) {{
+    var moveX = startX + (clientX - startX) * (i / 5);
+    var moveY = startY + (clientY - startY) * (i / 5);
+    initialTarget.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+  }}
+  
+  const opts = {{bubbles:true, cancelable:true, clientX:clientX, clientY:clientY, button:0}};
   
   initialTarget.dispatchEvent(new MouseEvent('mousedown', opts));
   initialTarget.dispatchEvent(new MouseEvent('mouseup', opts));
@@ -502,7 +764,7 @@ namespace SocialNetworkArmy.Services
       
       try {{
         if (ta) {{
-          const currentValue = ta.value;
+          const currentValue = currentTargetError.value;
           const proto = HTMLTextAreaElement.prototype;
           const desc = Object.getOwnPropertyDescriptor(proto, 'value');
           desc.set.call(ta, currentValue + wrongChar);
@@ -533,7 +795,7 @@ namespace SocialNetworkArmy.Services
       
       try {{
         if (ta) {{
-          const currentValue = ta.value;
+          const currentValue = currentTargetDelete.value;
           const proto = HTMLTextAreaElement.prototype;
           const desc = Object.getOwnPropertyDescriptor(proto, 'value');
           desc.set.call(ta, currentValue.slice(0, -1));
@@ -632,8 +894,22 @@ namespace SocialNetworkArmy.Services
   if (!ok) return 'CTRL_DISABLED_TIMEOUT';
   
   const btnRect = ctrl.getBoundingClientRect();
-  const btnX = btnRect.left + btnRect.width / 2;
-  const btnY = btnRect.top + btnRect.height / 2;
+  var marginX = btnRect.width * 0.2;
+  var marginY = btnRect.height * 0.2;
+  var offsetX = marginX + Math.random() * (btnRect.width - 2 * marginX);
+  var offsetY = marginY + Math.random() * (btnRect.height - 2 * marginY);
+  const btnX = btnRect.left + offsetX;
+  const btnY = btnRect.top + offsetY;
+  
+  // Simulate mouse approach: 3-5 move events towards the target
+  var startX = btnX + (Math.random() * 100 - 50);  // Start offset
+  var startY = btnY + (Math.random() * 100 - 50);
+  for (let i = 1; i <= 5; i++) {{
+    var moveX = startX + (btnX - startX) * (i / 5);
+    var moveY = startY + (btnY - startY) * (i / 5);
+    ctrl.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+  }}
+  
   const btnOpts = {{bubbles:true, cancelable:true, clientX:btnX, clientY:btnY, button:0}};
   
   ctrl.dispatchEvent(new MouseEvent('mousedown', btnOpts));
@@ -660,6 +936,10 @@ namespace SocialNetworkArmy.Services
                             {
                                 logTextBox.AppendText("[COMMENT] Skipped: Reel older than 24 hours or no date.\r\n");
                             }
+
+                            await RandomHumanPauseAsync(token);
+
+                            await RandomHumanNoiseAsync(token);
 
                             // NEXT si pas le dernier
                             if (reelNum < maxReels)
@@ -722,59 +1002,114 @@ namespace SocialNetworkArmy.Services
                                 else
                                 {
                                     // Clic humain sur le bouton avec coordonnées aléatoires
-                                    // Clic humain sur le bouton avec coordonnées aléatoires
                                     nextScript = $@"
-(function(){{
-  try{{
-    var scope = document.querySelector('div[role=""dialog""]');
-    if (!scope) return 'NO_DIALOG';
+(async function(){{
+  try {{
+    var info = [];
     
-    // Chercher tous les premiers boutons visibles
-   var allButtons = Array.from(scope.querySelectorAll('button')).filter(b => {{
-  var rect = b.getBoundingClientRect();
-  return b.offsetWidth > 0 && b.offsetHeight > 0 && 
-         Math.round(rect.width) === 32 && Math.round(rect.height) === 32;
-}});
-
-// Prendre le premier bouton 32x32 trouvé (c'est le Next)
-var nextBtn = allButtons.length > 0 ? allButtons[0] : null;
+    var dialog = document.querySelector('div[role=""dialog""]');
+    if (!dialog) return 'NO_DIALOG';
     
-    if (nextBtn) {{
-      var rect = nextBtn.getBoundingClientRect();
-      
-      // Position aléatoire dans le bouton (éviter les bords de 20%)
-      var marginX = rect.width * 0.2;
-      var marginY = rect.height * 0.2;
-      var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
-      var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
-      var clientX = rect.left + offsetX;
-      var clientY = rect.top + offsetY;
-      
-      // Simuler séquence de click humain
-      var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
-      
-      nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-      nextBtn.dispatchEvent(new MouseEvent('click', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
-      
-      return 'BTN_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY) + 
-             '|SIZE:' + Math.round(rect.width) + 'x' + Math.round(rect.height) +
-             '|BTN_INDEX:1';
-    }} else {{
-      // Fallback: touche flèche
-      document.body.dispatchEvent(new KeyboardEvent('keydown', {{
-        key: 'ArrowRight',
-        code: 'ArrowRight',
-        keyCode: 39,
-        bubbles: true
-      }}));
-      return 'FALLBACK_ARROW_KEY';
+    // Stratégie 1: Chercher par aria-label
+    var nextBtn = Array.from(dialog.querySelectorAll('button')).find(b => {{
+      var label = (b.getAttribute('aria-label') || '').toLowerCase();
+      return /next|suivant|nextpage|nextitem|flèche/.test(label);
+    }});
+    info.push('Stratégie 1 (aria-label): ' + (nextBtn ? 'FOUND' : 'NOT_FOUND'));
+    
+    // Stratégie 2: Boutons de taille 32x32
+    if (!nextBtn) {{
+      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
+        var rect = b.getBoundingClientRect();
+        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0 && Math.round(rect.width) === 32 && Math.round(rect.height) === 32;
+      }});
+      if (allBtns.length >= 1) {{
+        // Trier par position x pour prendre le plus à droite (next)
+        allBtns.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        nextBtn = allBtns[allBtns.length - 1]; // Prendre le dernier (plus à droite)
+        info.push('Stratégie 2 (32x32 buttons): FOUND ' + allBtns.length + ', picked rightmost');
+      }} else {{
+        info.push('Stratégie 2 (32x32 buttons): NOT_FOUND');
+      }}
     }}
-  }} catch(e){{
-    return 'ERR:' + (e.message || String(e));
+    
+    // Stratégie 3: 2e bouton visible si toujours pas trouvé
+    if (!nextBtn) {{
+      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
+        var rect = b.getBoundingClientRect();
+        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0;
+      }});
+      if (allBtns.length >= 2) {{
+        nextBtn = allBtns[1];
+        info.push('Stratégie 3 (2nd button): FOUND');
+      }} else {{
+        info.push('Stratégie 3 (2nd button): NOT_FOUND (only ' + allBtns.length + ' visible buttons)');
+      }}
+    }}
+    
+    if (!nextBtn) {{
+      info.push('RESULT: NO_NEXT_BUTTON');
+      return info.join('\\n');
+    }}
+    
+    var rect = nextBtn.getBoundingClientRect();
+    info.push('\\nButton details:');
+    info.push('  Size: ' + Math.round(rect.width) + 'x' + Math.round(rect.height));
+    info.push('  Position: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    info.push('  Visible: ' + (rect.width > 0 && rect.height > 0));
+    
+    // Scroll into view
+    nextBtn.scrollIntoView({{block: 'nearest', inline: 'nearest'}});
+    await new Promise(r => setTimeout(r, 100));
+    
+    // Recalculer après scroll
+    rect = nextBtn.getBoundingClientRect();
+    info.push('  After scroll: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    
+    // Calculer les coordonnées du click
+    var centerX = rect.left + rect.width / 2;
+    var centerY = rect.top + rect.height / 2;
+    var offsetX = (Math.random() - 0.5) * 10;
+    var offsetY = (Math.random() - 0.5) * 10;
+    var clientX = Math.floor(centerX + offsetX);
+    var clientY = Math.floor(centerY + offsetY);
+    
+    // Clamp dans les limites
+    clientX = Math.max(rect.left + 2, Math.min(clientX, rect.left + rect.width - 2));
+    clientY = Math.max(rect.top + 2, Math.min(clientY, rect.top + rect.height - 2));
+    
+    info.push('\\nClick coordinates:');
+    info.push('  Center: ' + Math.round(centerX) + ',' + Math.round(centerY));
+    info.push('  Final: ' + clientX + ',' + clientY);
+    
+    // Mouvement souris simulé
+    var startX = clientX + (Math.random() * 60 - 30);
+    var startY = clientY + (Math.random() * 60 - 30);
+    
+    for (let i = 1; i <= 4; i++) {{
+      var moveX = startX + (clientX - startX) * (i / 4);
+      var moveY = startY + (clientY - startY) * (i / 4);
+      nextBtn.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+      await new Promise(r => setTimeout(r, Math.random() * 30 + 20));
+    }}
+    
+    await new Promise(r => setTimeout(r, Math.random() * 100 + 50));
+    
+    // Events
+    var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
+    nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
+    nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
+    nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+    await new Promise(r => setTimeout(r, Math.random() * 80 + 30));
+    nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+    nextBtn.dispatchEvent(new MouseEvent('click', opts));
+    await new Promise(r => setTimeout(r, Math.random() * 50 + 25));
+    nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
+    
+    info.push('\\nCLICK_SENT');
+    return info.join('\\n');
+  }} catch(e) {{
+    return 'EXCEPTION: ' + e.message;
   }}
 }})()";
                                 }
@@ -818,7 +1153,17 @@ var nextBtn = allButtons.length > 0 ? allButtons[0] : null;
                                     debugResult = await webView.ExecuteScriptAsync(debugScript);
                                     logTextBox.AppendText($"[NEXT RETRY] Debug buttons: {debugResult}\r\n");
 
-                                    // Retry next
+                                    // Sur retry, forcer le fallback ArrowRight
+                                    logTextBox.AppendText("[NEXT RETRY] Forcing ArrowRight fallback...\r\n");
+                                    nextScript = @"
+(function(){
+  try{
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    document.body.dispatchEvent(new KeyboardEvent('keyup', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    return 'ARROW_KEY_RETRY';
+  }catch(e){ return 'JSERR: ' + String(e); }
+})()";
+
                                     nextTry = await webView.ExecuteScriptAsync(nextScript);
                                     logTextBox.AppendText($"[NEXT RETRY] {nextTry}\r\n");
 
@@ -852,8 +1197,14 @@ var nextBtn = allButtons.length > 0 ? allButtons[0] : null;
                             previousReelId = reelId;
                         }
 
+                        // Close the reel modal after processing all reels
+                        await CloseReelModalAsync(lang, token);
+
+                        // Click home to return to home page for next target
+                        await navigationService.ClickHomeButtonAsync(token);
+
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");
-                        await Task.Delay(rand.Next(5000, 15000), token);
+                        await RandomHumanPauseAsync(token, 5000, 15000, 0.1, 30000, 120000);
                     }
 
                     logTextBox.AppendText("[FLOW] Tous les targets traités.\r\n");

@@ -1,12 +1,8 @@
-﻿
-
-using Microsoft.Web.WebView2.WinForms;
+﻿using Microsoft.Web.WebView2.WinForms;
 using SocialNetworkArmy.Forms;
 using SocialNetworkArmy.Models;
 using SocialNetworkArmy.Utils;
 using System;
-using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -28,15 +24,6 @@ namespace SocialNetworkArmy.Services
             this.form = form ?? throw new ArgumentNullException(nameof(form));
         }
 
-        private static bool JsBoolIsTrue(string jsResult)
-        {
-            if (string.IsNullOrWhiteSpace(jsResult)) return false;
-            var s = jsResult.Trim();
-            if (s.StartsWith("\"") && s.EndsWith("\""))
-                s = s.Substring(1, s.Length - 2);
-            return s.Equals("true", StringComparison.OrdinalIgnoreCase);
-        }
-
         public async Task RunAsync(CancellationToken token = default)
         {
             await webView.EnsureCoreWebView2Async(null);
@@ -49,157 +36,206 @@ namespace SocialNetworkArmy.Services
 
                 try
                 {
-                    Random rand = new Random();
+                    logTextBox.AppendText("[TEST] === NEXT BUTTON CLICK TEST ===\r\n\r\n");
 
-                    // Detect language
-                    var langResult = await webView.ExecuteScriptAsync("document.documentElement.lang;");
-                    var lang = langResult?.Trim('"') ?? "en";
-                    logTextBox.AppendText($"[LANG] Detected language: {lang}\r\n");
-
-                    string nextLabel = lang.StartsWith("fr", StringComparison.OrdinalIgnoreCase) ? "Suivant" : "Next";
-
-                    // Vérifier si un reel est ouvert
-                    var isModalOpen = await webView.ExecuteScriptAsync(@"
+                    // PHASE 1: Analyser la structure du dialog
+                    logTextBox.AppendText("[PHASE 1] Analysing reel modal structure...\r\n");
+                    var analysisScript = @"
 (function(){
-  const hasDialog = !!document.querySelector('div[role=""dialog""]');
-  const hasVideo = document.querySelectorAll('video').length > 0;
-  return (hasDialog && hasVideo) ? 'true' : 'false';
-})()");
-
-                    if (!JsBoolIsTrue(isModalOpen))
-                    {
-                        logTextBox.AppendText("[ERROR] Aucun reel ouvert. Ouvrez un reel manuellement et relancez.\r\n");
-                        return;
-                    }
-
-                    // Test de 5 clics sur Next avec coordonnées aléatoires
-                    int testCount = 5;
-                    for (int i = 1; i <= testCount; i++)
-                    {
-                        token.ThrowIfCancellationRequested();
-
-                        logTextBox.AppendText($"\r\n[TEST {i}/{testCount}] Simulating human-like click...\r\n");
-
-                        // Délai pré-action aléatoire
-                        int preDelay = rand.Next(800, 2000);
-                        logTextBox.AppendText($"  → Waiting {preDelay}ms before action...\r\n");
-                        await Task.Delay(preDelay, token);
-
-                        // D'abord: debug pour voir quels boutons existent
-                        var debugScript = $@"
-(function(){{
-  try{{
-    var scope = document.querySelector('div[role=""dialog""]') || document;
+  try {
+    var info = [];
     
-    // Chercher tous les boutons possibles
-    var allButtons = Array.from(scope.querySelectorAll('button, [role=""button""]'));
-    var buttonInfo = allButtons.map(b => {{
-      return {{
-        tag: b.tagName,
-        ariaLabel: b.getAttribute('aria-label') || 'NO_LABEL',
-        text: b.innerText?.substring(0, 20) || '',
-        visible: b.offsetWidth > 0
-      }};
-    }});
+    var dialog = document.querySelector('div[role=""dialog""]');
+    if (!dialog) {
+      return 'NO_DIALOG_FOUND';
+    }
     
-    return JSON.stringify(buttonInfo);
-  }} catch(e){{
-    return 'DEBUG_ERR:' + String(e);
-  }}
-}})()";
-
-                        var debugResult = await webView.ExecuteScriptAsync(debugScript);
-                        logTextBox.AppendText($"  → Debug buttons: {debugResult}\r\n");
-
-                        // Script pour cliquer sur le bouton Next 
-                        var nextScript = $@"
-(function(){{
-  try{{
-    var scope = document.querySelector('div[role=""dialog""]');
-    if (!scope) return 'NO_DIALOG';
+    info.push('✓ Dialog found');
     
-    // Chercher tous les premiers boutons visibles (les 4 premiers sont souvent: close, prev, next, plus d'options)
-    var allButtons = Array.from(scope.querySelectorAll('button')).filter(b => {{
-      return b.offsetWidth > 0 && b.offsetHeight > 0;
-    }});
+    // Chercher tous les boutons dans le dialog
+    var buttons = dialog.querySelectorAll('button');
+    info.push('Total buttons in dialog: ' + buttons.length);
     
-    // Les boutons de navigation sont généralement parmi les 4 premiers
-    // Heuristique: le 2e bouton (index 1) est souvent 'Next'
-    var nextBtn = allButtons.length >= 2 ? allButtons[1] : null;
-    
-    if (nextBtn) {{
-      var rect = nextBtn.getBoundingClientRect();
+    // Analyser chaque bouton
+    for (var i = 0; i < buttons.length; i++) {
+      var btn = buttons[i];
+      var rect = btn.getBoundingClientRect();
+      var ariaLabel = btn.getAttribute('aria-label') || 'NO_LABEL';
+      var visible = btn.offsetWidth > 0 && btn.offsetHeight > 0;
+      var hasSvg = !!btn.querySelector('svg');
+      var text = (btn.innerText || btn.textContent || '').trim().substring(0, 30);
+      var disabled = btn.disabled || (btn.getAttribute('aria-disabled') === 'true');
       
-      // Position aléatoire dans le bouton (éviter les bords de 20%)
-      var marginX = rect.width * 0.2;
-      var marginY = rect.height * 0.2;
-      var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
-      var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
-      var clientX = rect.left + offsetX;
-      var clientY = rect.top + offsetY;
-      
-      // Simuler séquence de click humain
-      var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
-      
-      nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-      nextBtn.dispatchEvent(new MouseEvent('click', opts));
-      nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
-      
-      return 'BTN_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY) + 
-             '|SIZE:' + Math.round(rect.width) + 'x' + Math.round(rect.height) +
-             '|BTN_INDEX:1';
-    }} else {{
-      // Fallback: touche flèche
-      document.body.dispatchEvent(new KeyboardEvent('keydown', {{
-        key: 'ArrowRight',
-        code: 'ArrowRight',
-        keyCode: 39,
-        bubbles: true
-      }}));
-      return 'FALLBACK_ARROW_KEY';
-    }}
-  }} catch(e){{
-    return 'ERR:' + (e.message || String(e));
-  }}
-}})()";
+      info.push('\n[BTN ' + i + ']');
+      info.push('  aria-label: ' + ariaLabel);
+      info.push('  size: ' + Math.round(rect.width) + 'x' + Math.round(rect.height));
+      info.push('  visible: ' + visible);
+      info.push('  hasSVG: ' + hasSvg);
+      info.push('  disabled: ' + disabled);
+      info.push('  text: ' + text);
+      info.push('  position: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    }
+    
+    return info.join('\n');
+  } catch(e) {
+    return 'ERROR: ' + e.message;
+  }
+})()";
 
-                        var nextTry = await webView.ExecuteScriptAsync(nextScript);
-                        logTextBox.AppendText($"  → Result: {nextTry}\r\n");
+                    var analysis = await webView.ExecuteScriptAsync(analysisScript);
+                    var cleanAnalysis = analysis?.Trim('"').Replace("\\n", "\r\n");
+                    logTextBox.AppendText(cleanAnalysis + "\r\n\r\n");
 
-                        // Attendre le chargement du reel suivant
-                        int loadDelay = rand.Next(2500, 4500);
-                        logTextBox.AppendText($"  → Waiting {loadDelay}ms for next reel to load...\r\n");
-                        await Task.Delay(loadDelay, token);
+                    // PHASE 2: Tester le click sur le 2e bouton (next)
+                    logTextBox.AppendText("[PHASE 2] Testing next button click...\r\n");
+                    var clickTestScript = @"
+(async function(){
+  try {
+    var info = [];
+    
+    var dialog = document.querySelector('div[role=""dialog""]');
+    if (!dialog) return 'NO_DIALOG';
+    
+    // Stratégie 1: Chercher par aria-label
+    var nextBtn = Array.from(dialog.querySelectorAll('button')).find(b => {
+      var label = (b.getAttribute('aria-label') || '').toLowerCase();
+      return /next|suivant|nextpage|nextitem|flèche/.test(label);
+    });
+    info.push('Stratégie 1 (aria-label): ' + (nextBtn ? 'FOUND' : 'NOT_FOUND'));
+    
+    // Stratégie 2: Boutons de taille 32x32
+    if (!nextBtn) {
+      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {
+        var rect = b.getBoundingClientRect();
+        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0 && Math.round(rect.width) === 32 && Math.round(rect.height) === 32;
+      });
+      if (allBtns.length >= 1) {
+        // Trier par position x pour prendre le plus à droite (next)
+        allBtns.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        nextBtn = allBtns[allBtns.length - 1]; // Prendre le dernier (plus à droite)
+        info.push('Stratégie 2 (32x32 buttons): FOUND ' + allBtns.length + ', picked rightmost');
+      } else {
+        info.push('Stratégie 2 (32x32 buttons): NOT_FOUND');
+      }
+    }
+    
+    // Stratégie 3: 2e bouton visible si toujours pas trouvé
+    if (!nextBtn) {
+      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {
+        var rect = b.getBoundingClientRect();
+        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0;
+      });
+      if (allBtns.length >= 2) {
+        nextBtn = allBtns[1];
+        info.push('Stratégie 3 (2nd button): FOUND');
+      } else {
+        info.push('Stratégie 3 (2nd button): NOT_FOUND (only ' + allBtns.length + ' visible buttons)');
+      }
+    }
+    
+    if (!nextBtn) {
+      info.push('RESULT: NO_NEXT_BUTTON');
+      return info.join('\n');
+    }
+    
+    var rect = nextBtn.getBoundingClientRect();
+    info.push('\nButton details:');
+    info.push('  Size: ' + Math.round(rect.width) + 'x' + Math.round(rect.height));
+    info.push('  Position: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    info.push('  Visible: ' + (rect.width > 0 && rect.height > 0));
+    
+    // Scroll into view
+    nextBtn.scrollIntoView({block: 'nearest', inline: 'nearest'});
+    await new Promise(r => setTimeout(r, 100));
+    
+    // Recalculer après scroll
+    rect = nextBtn.getBoundingClientRect();
+    info.push('  After scroll: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    
+    // Calculer les coordonnées du click
+    var centerX = rect.left + rect.width / 2;
+    var centerY = rect.top + rect.height / 2;
+    var offsetX = (Math.random() - 0.5) * 10;
+    var offsetY = (Math.random() - 0.5) * 10;
+    var clientX = Math.floor(centerX + offsetX);
+    var clientY = Math.floor(centerY + offsetY);
+    
+    // Clamp dans les limites
+    clientX = Math.max(rect.left + 2, Math.min(clientX, rect.left + rect.width - 2));
+    clientY = Math.max(rect.top + 2, Math.min(clientY, rect.top + rect.height - 2));
+    
+    info.push('\nClick coordinates:');
+    info.push('  Center: ' + Math.round(centerX) + ',' + Math.round(centerY));
+    info.push('  Final: ' + clientX + ',' + clientY);
+    
+    // Mouvement souris simulé
+    var startX = clientX + (Math.random() * 60 - 30);
+    var startY = clientY + (Math.random() * 60 - 30);
+    
+    for (let i = 1; i <= 4; i++) {
+      var moveX = startX + (clientX - startX) * (i / 4);
+      var moveY = startY + (clientY - startY) * (i / 4);
+      nextBtn.dispatchEvent(new MouseEvent('mousemove', {bubbles: true, clientX: moveX, clientY: moveY}));
+      await new Promise(r => setTimeout(r, Math.random() * 30 + 20));
+    }
+    
+    await new Promise(r => setTimeout(r, Math.random() * 100 + 50));
+    
+    // Events
+    var opts = {bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0};
+    nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
+    nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
+    nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+    await new Promise(r => setTimeout(r, Math.random() * 80 + 30));
+    nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+    nextBtn.dispatchEvent(new MouseEvent('click', opts));
+    await new Promise(r => setTimeout(r, Math.random() * 50 + 25));
+    nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
+    
+    info.push('\nCLICK_SENT');
+    return info.join('\n');
+  } catch(e) {
+    return 'EXCEPTION: ' + e.message;
+  }
+})()";
 
-                        // Vérifier si on a bien avancé
-                        var checkAdvanced = await webView.ExecuteScriptAsync(@"
+                    var clickResult = await webView.ExecuteScriptAsync(clickTestScript);
+                    var cleanClickResult = clickResult?.Trim('"').Replace("\\n", "\r\n");
+                    logTextBox.AppendText(cleanClickResult + "\r\n\r\n");
+
+                    // PHASE 3: Vérifier si le reel a changé
+                    logTextBox.AppendText("[PHASE 3] Waiting 3s and checking if reel changed...\r\n");
+                    await Task.Delay(3000, token);
+
+                    var verifyScript = @"
 (function(){
-  const hasDialog = !!document.querySelector('div[role=""dialog""]');
-  const videos = document.querySelectorAll('video');
-  const hasVideo = videos.length > 0;
-  const videoPlaying = Array.from(videos).some(v => !v.paused);
-  return (hasDialog && hasVideo) ? 'true' : 'false';
-})()");
+  var info = [];
+  
+  // Récupérer l'ID du reel actuel
+  var match = window.location.href.match(/\/reel\/([^\/]+)/);
+  var reelId = match ? match[1] : 'NO_ID';
+  info.push('Current reel ID: ' + reelId);
+  
+  // Vérifier si le dialog est toujours ouvert
+  var hasDialog = !!document.querySelector('div[role=""dialog""]');
+  info.push('Dialog still open: ' + hasDialog);
+  
+  // Vérifier s'il y a une vidéo
+  var videos = document.querySelectorAll('video');
+  info.push('Video elements: ' + videos.length);
+  
+  return info.join('\n');
+})()";
 
-                        if (!JsBoolIsTrue(checkAdvanced))
-                        {
-                            logTextBox.AppendText("  ⚠ Warning: Modal may have closed or no video found\r\n");
-                            break;
-                        }
-                        else
-                        {
-                            logTextBox.AppendText("  ✓ Successfully advanced to next reel\r\n");
-                        }
-                    }
+                    var verifyResult = await webView.ExecuteScriptAsync(verifyScript);
+                    var cleanVerifyResult = verifyResult?.Trim('"').Replace("\\n", "\r\n");
+                    logTextBox.AppendText(cleanVerifyResult + "\r\n\r\n");
 
-                    logTextBox.AppendText("\r\n[TEST COMPLETE] All clicks tested successfully.\r\n");
+                    logTextBox.AppendText("[TEST] === TEST COMPLETED ===\r\n");
                 }
                 catch (OperationCanceledException)
                 {
-                    logTextBox.AppendText("\r\n[CANCELLED] Script stopped by user.\r\n");
+                    logTextBox.AppendText("\r\n[CANCELLED] Test stopped by user.\r\n");
                 }
                 catch (Exception ex)
                 {
