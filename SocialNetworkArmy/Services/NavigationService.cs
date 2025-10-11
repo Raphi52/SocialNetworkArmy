@@ -60,62 +60,62 @@ namespace SocialNetworkArmy.Services
         /// <summary>
         /// Clique sur le bouton Home pour revenir à l'accueil
         /// </summary>
-        public async Task<bool> ClickHomeButtonAsync(CancellationToken token = default)
-        {
-            logTextBox.AppendText("[NAV] Clicking Home button...\r\n");
+//        public async Task<bool> ClickHomeButtonAsync(CancellationToken token = default)
+//        {
+//            logTextBox.AppendText("[NAV] Clicking Home button...\r\n");
 
-            var homeScript = @"
-(function(){
-  try{
-    var homeEl = null;
+//            var homeScript = @"
+//(function(){
+//  try{
+//    var homeEl = null;
     
-    var svgs = Array.from(document.querySelectorAll('svg[aria-label]'));
-    var homeSvg = svgs.find(function(svg){ return /accueil|home/i.test(svg.getAttribute('aria-label')); });
-    if (homeSvg) {
-      homeEl = homeSvg.closest('a, span[role=""link""]');
-    }
+//    var svgs = Array.from(document.querySelectorAll('svg[aria-label]'));
+//    var homeSvg = svgs.find(function(svg){ return /accueil|home/i.test(svg.getAttribute('aria-label')); });
+//    if (homeSvg) {
+//      homeEl = homeSvg.closest('a, span[role=""link""]');
+//    }
     
-    if (!homeEl) {
-      homeEl = document.querySelector('a[href=""/""]');
-    }
+//    if (!homeEl) {
+//      homeEl = document.querySelector('a[href=""/""]');
+//    }
     
-    if (!homeEl) return 'NO_HOME_ELEMENT';
+//    if (!homeEl) return 'NO_HOME_ELEMENT';
     
-    var rect = homeEl.getBoundingClientRect();
-    var marginX = rect.width * 0.2;
-    var marginY = rect.height * 0.2;
-    var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
-    var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
-    var clientX = rect.left + offsetX;
-    var clientY = rect.top + offsetY;
+//    var rect = homeEl.getBoundingClientRect();
+//    var marginX = rect.width * 0.2;
+//    var marginY = rect.height * 0.2;
+//    var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
+//    var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
+//    var clientX = rect.left + offsetX;
+//    var clientY = rect.top + offsetY;
     
-    // Simulate mouse approach: 3-5 move events towards the target
-    var startX = clientX + (Math.random() * 100 - 50);  // Start offset
-    var startY = clientY + (Math.random() * 100 - 50);
-    for (let i = 1; i <= 5; i++) {
-      var moveX = startX + (clientX - startX) * (i / 5);
-      var moveY = startY + (clientY - startY) * (i / 5);
-      homeEl.dispatchEvent(new MouseEvent('mousemove', {bubbles: true, clientX: moveX, clientY: moveY}));
-    }
+//    // Simulate mouse approach: 3-5 move events towards the target
+//    var startX = clientX + (Math.random() * 100 - 50);  // Start offset
+//    var startY = clientY + (Math.random() * 100 - 50);
+//    for (let i = 1; i <= 5; i++) {
+//      var moveX = startX + (clientX - startX) * (i / 5);
+//      var moveY = startY + (clientY - startY) * (i / 5);
+//      homeEl.dispatchEvent(new MouseEvent('mousemove', {bubbles: true, clientX: moveX, clientY: moveY}));
+//    }
     
-    var opts = {bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0};
+//    var opts = {bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0};
     
-    homeEl.dispatchEvent(new MouseEvent('mousedown', opts));
-    homeEl.dispatchEvent(new MouseEvent('mouseup', opts));
-    homeEl.dispatchEvent(new MouseEvent('click', opts));
+//    homeEl.dispatchEvent(new MouseEvent('mousedown', opts));
+//    homeEl.dispatchEvent(new MouseEvent('mouseup', opts));
+//    homeEl.dispatchEvent(new MouseEvent('click', opts));
     
-    return 'HOME_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY);
-  } catch(e){
-    return 'ERR:' + (e.message || String(e));
-  }
-})()";
+//    return 'HOME_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY);
+//  } catch(e){
+//    return 'ERR:' + (e.message || String(e));
+//  }
+//})()";
 
-            var homeResult = await webView.ExecuteScriptAsync(homeScript);
-            logTextBox.AppendText($"[NAV] Home click result: {homeResult}\r\n");
+//            var homeResult = await webView.ExecuteScriptAsync(homeScript);
+//            logTextBox.AppendText($"[NAV] Home click result: {homeResult}\r\n");
 
-            await Task.Delay(rand.Next(1500, 2500), token);
-            return homeResult.Contains("HOME_CLICKED");
-        }
+//            await Task.Delay(rand.Next(1500, 2500), token);
+//            return homeResult.Contains("HOME_CLICKED");
+//        }
 
         /// <summary>
         /// Navigue vers un profil en utilisant la recherche (méthode humaine)
@@ -131,7 +131,7 @@ namespace SocialNetworkArmy.Services
                 logTextBox.AppendText($"[NAV] Waiting {preDelay}ms before search...\r\n");
                 await Task.Delay(preDelay, token);
 
-                // ========== ÉTAPE 1: CLIQUER SUR LA LOUPE ==========
+                // ========== ÉTAPE 1: CLIQUER SUR LA LOUPE (CORRIGÉ) ==========
                 if (string.IsNullOrEmpty(searchLabel))
                 {
                     await DetectLanguageAsync(token);
@@ -142,24 +142,53 @@ namespace SocialNetworkArmy.Services
                 var searchScript = $@"
 (function(){{
   try{{
+    // CRITIQUE: Fonction pour vérifier qu'un élément n'est PAS dans une modale
+    function isNotInModal(el) {{
+      var current = el;
+      while (current && current !== document.body) {{
+        if (current.getAttribute('role') === 'dialog' || 
+            current.getAttribute('aria-modal') === 'true' ||
+            current.classList.contains('modal') ||
+            current.style.position === 'fixed' && current.style.zIndex > 1000) {{
+          return false; // L'élément est dans une modale
+        }}
+        current = current.parentElement;
+      }}
+      return true; // L'élément n'est PAS dans une modale
+    }}
+    
     var searchEl = null;
     
-    // Méthode 1: Par aria-label du SVG
+    // Méthode 1: Par aria-label du SVG (EN EXCLUANT LES MODALES)
     var svgs = Array.from(document.querySelectorAll('svg[aria-label]'));
-    var searchSvg = svgs.find(function(svg){{ return /{searchLabel}/i.test(svg.getAttribute('aria-label')); }});
+    var searchSvg = svgs.find(function(svg){{ 
+      var matches = /{searchLabel}/i.test(svg.getAttribute('aria-label'));
+      return matches && isNotInModal(svg);
+    }});
+    
     if (searchSvg) {{
       searchEl = searchSvg.closest('a, span[role=""link""]');
+      // Double-check que le parent n'est pas dans une modale
+      if (searchEl && !isNotInModal(searchEl)) {{
+        searchEl = null;
+      }}
     }}
     
-    // Méthode 2: Par href=""/explore/""
+    // Méthode 2: Par href=""/explore/"" (EN EXCLUANT LES MODALES)
     if (!searchEl) {{
-      searchEl = document.querySelector('a[href=""/explore/""], a[href^=""/explore""]');
+      var exploreLinks = Array.from(document.querySelectorAll('a[href=""/explore/""], a[href^=""/explore""]'));
+      searchEl = exploreLinks.find(function(link) {{
+        return isNotInModal(link);
+      }});
     }}
     
-    // Méthode 3: Par texte ""Recherche"" ou ""Search""
+    // Méthode 3: Par texte ""Recherche"" ou ""Search"" (EN EXCLUANT LES MODALES)
     if (!searchEl) {{
       var allNavLinks = Array.from(document.querySelectorAll('a, span[role=""link""]'));
-      searchEl = allNavLinks.find(function(el){{ return /{searchLabel}/i.test(el.innerText || el.textContent); }});
+      searchEl = allNavLinks.find(function(el){{ 
+        var matches = /{searchLabel}/i.test(el.innerText || el.textContent);
+        return matches && isNotInModal(el);
+      }});
     }}
     
     if (!searchEl) return 'NO_SEARCH_ELEMENT';

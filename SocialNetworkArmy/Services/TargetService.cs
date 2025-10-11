@@ -493,6 +493,276 @@ namespace SocialNetworkArmy.Services
 
                             await RandomHumanPauseAsync(token);
 
+                            // Petit filtre pour skipper les vieux reels avec 67% de chance
+                            bool shouldComment = false;
+                            bool isOld = false;
+                            if (reelDate != "NO_DATE_FOUND")
+                            {
+                                try
+                                {
+                                    using var doc = JsonDocument.Parse(reelDate);
+                                    string datetimeStr = doc.RootElement.GetProperty("datetime").GetString();
+                                    if (datetimeStr != "NO_DATETIME")
+                                    {
+                                        if (DateTimeOffset.TryParse(datetimeStr, out var reelTime))
+                                        {
+                                            var now = DateTimeOffset.UtcNow;
+                                            var age = now - reelTime;
+                                            if (age.TotalHours < 24)
+                                            {
+                                                shouldComment = true;
+                                            }
+                                            else
+                                            {
+                                                isOld = true;
+                                            }
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    logTextBox.AppendText($"[DATE_PARSE_ERROR] {ex.Message}\r\n");
+                                }
+                            }
+
+                            while (isOld && rand.NextDouble() < 0.67 && reelNum < maxReels)
+                            {
+                                int skipDelay = rand.Next(500, 2501);
+                                logTextBox.AppendText($"[SKIP] Waiting {skipDelay}ms then skipping old reel...\r\n");
+                                await Task.Delay(skipDelay, token);
+
+                                nextClickCounter++;
+                                bool useArrowKey = (nextClickCounter % 15 == 0);
+                                string nextScript;
+                                if (useArrowKey)
+                                {
+                                    logTextBox.AppendText("[SKIP] Using ArrowRight fallback (1/15)\r\n");
+                                    nextScript = @"
+(function(){
+  try{
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    document.body.dispatchEvent(new KeyboardEvent('keyup', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    return 'ARROW_KEY_USED';
+  }catch(e){ return 'JSERR: ' + String(e); }
+})()";
+                                }
+                                else
+                                {
+                                    nextScript = $@"
+(async function(){{
+  try {{
+    var info = [];
+    
+    var dialog = document.querySelector('div[role=""dialog""]');
+    if (!dialog) return 'NO_DIALOG';
+    
+    // Stratégie 1: Chercher par aria-label
+    var nextBtn = Array.from(dialog.querySelectorAll('button')).find(b => {{
+      var label = (b.getAttribute('aria-label') || '').toLowerCase();
+      return /next|suivant|nextpage|nextitem|flèche/.test(label);
+    }});
+    info.push('Stratégie 1 (aria-label): ' + (nextBtn ? 'FOUND' : 'NOT_FOUND'));
+    
+    // Stratégie 2: Boutons de taille 32x32
+    if (!nextBtn) {{
+      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
+        var rect = b.getBoundingClientRect();
+        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0 && Math.round(rect.width) === 32 && Math.round(rect.height) === 32;
+      }});
+      if (allBtns.length >= 1) {{
+        // Trier par position x pour prendre le plus à droite (next)
+        allBtns.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        nextBtn = allBtns[allBtns.length - 1]; // Prendre le dernier (plus à droite)
+        info.push('Stratégie 2 (32x32 buttons): FOUND ' + allBtns.length + ', picked rightmost');
+      }} else {{
+        info.push('Stratégie 2 (32x32 buttons): NOT_FOUND');
+      }}
+    }}
+    
+    // Stratégie 3: 2e bouton visible si toujours pas trouvé
+    if (!nextBtn) {{
+      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
+        var rect = b.getBoundingClientRect();
+        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0;
+      }});
+      if (allBtns.length >= 2) {{
+        nextBtn = allBtns[1];
+        info.push('Stratégie 3 (2nd button): FOUND');
+      }} else {{
+        info.push('Stratégie 3 (2nd button): NOT_FOUND (only ' + allBtns.length + ' visible buttons)');
+      }}
+    }}
+    
+    if (!nextBtn) {{
+      info.push('RESULT: NO_NEXT_BUTTON');
+      return info.join('\\n');
+    }}
+    
+    var rect = nextBtn.getBoundingClientRect();
+    info.push('\\nButton details:');
+    info.push('  Size: ' + Math.round(rect.width) + 'x' + Math.round(rect.height));
+    info.push('  Position: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    info.push('  Visible: ' + (rect.width > 0 && rect.height > 0));
+    
+    // Scroll into view
+    nextBtn.scrollIntoView({{block: 'nearest', inline: 'nearest'}});
+    await new Promise(r => setTimeout(r, 100));
+    
+    // Recalculer après scroll
+    rect = nextBtn.getBoundingClientRect();
+    info.push('  After scroll: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
+    
+    // Calculer les coordonnées du click
+    var centerX = rect.left + rect.width / 2;
+    var centerY = rect.top + rect.height / 2;
+    var offsetX = (Math.random() - 0.5) * 10;
+    var offsetY = (Math.random() - 0.5) * 10;
+    var clientX = Math.floor(centerX + offsetX);
+    var clientY = Math.floor(centerY + offsetY);
+    
+    // Clamp dans les limites
+    clientX = Math.max(rect.left + 2, Math.min(clientX, rect.left + rect.width - 2));
+    clientY = Math.max(rect.top + 2, Math.min(clientY, rect.top + rect.height - 2));
+    
+    info.push('\\nClick coordinates:');
+    info.push('  Center: ' + Math.round(centerX) + ',' + Math.round(centerY));
+    info.push('  Final: ' + clientX + ',' + clientY);
+    
+    // Mouvement souris simulé
+    var startX = clientX + (Math.random() * 60 - 30);
+    var startY = clientY + (Math.random() * 60 - 30);
+    
+    for (let i = 1; i <= 4; i++) {{
+      var moveX = startX + (clientX - startX) * (i / 4);
+      var moveY = startY + (clientY - startY) * (i / 4);
+      nextBtn.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+      await new Promise(r => setTimeout(r, Math.random() * 30 + 20));
+    }}
+    
+    await new Promise(r => setTimeout(r, Math.random() * 100 + 50));
+    
+    // Events
+    var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
+    nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
+    nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
+    nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
+    await new Promise(r => setTimeout(r, Math.random() * 80 + 30));
+    nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
+    nextBtn.dispatchEvent(new MouseEvent('click', opts));
+    await new Promise(r => setTimeout(r, Math.random() * 50 + 25));
+    nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
+    
+    info.push('\\nCLICK_SENT');
+    return info.join('\\n');
+  }} catch(e) {{
+    return 'EXCEPTION: ' + e.message;
+  }}
+}})()";
+                                }
+
+                                var nextTry = await webView.ExecuteScriptAsync(nextScript);
+                                logTextBox.AppendText($"[SKIP] {nextTry}\r\n");
+
+                                
+
+                                int retryCount = 0;
+                                const int maxRetries = 3;
+                                string newReelId = null;
+                                while (retryCount < maxRetries)
+                                {
+                                    await Task.Delay(rand.Next(1500, 3000), token);
+                                    newReelId = await webView.ExecuteScriptAsync(reelIdScript);
+                                    newReelId = newReelId?.Trim('"').Trim();
+
+                                    var checkAdvanced = await webView.ExecuteScriptAsync(@"
+(function(){
+  const hasDialog = !!document.querySelector('div[role=""dialog""]');
+  const videos = document.querySelectorAll('video');
+  const hasVideo = videos.length > 0;
+  const videoPlaying = Array.from(videos).some(v => !v.paused);
+  return (hasDialog && hasVideo) ? 'true' : 'false';
+})()");
+
+                                    if (newReelId != reelId && newReelId != "NO_ID" && JsBoolIsTrue(checkAdvanced))
+                                    {
+                                        logTextBox.AppendText("[SKIP] ✓ Successfully advanced to next reel\r\n");
+                                        break;
+                                    }
+
+                                    logTextBox.AppendText($"[SKIP RETRY {retryCount + 1}] Stuck on {reelId}, retrying...\r\n");
+
+                                    logTextBox.AppendText("[SKIP RETRY] Forcing ArrowRight fallback...\r\n");
+                                    nextScript = @"
+(function(){
+  try{
+    document.body.dispatchEvent(new KeyboardEvent('keydown', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    document.body.dispatchEvent(new KeyboardEvent('keyup', {key:'ArrowRight', code:'ArrowRight', keyCode:39, bubbles:true}));
+    return 'ARROW_KEY_RETRY';
+  }catch(e){ return 'JSERR: ' + String(e); }
+})()";
+
+                                    nextTry = await webView.ExecuteScriptAsync(nextScript);
+                                    logTextBox.AppendText($"[SKIP RETRY] {nextTry}\r\n");
+
+
+                                    retryCount++;
+                                }
+
+                                if (retryCount >= maxRetries)
+                                {
+                                    logTextBox.AppendText($"[SKIP ERROR] Max retries reached, stuck on {reelId}. Stopping reel loop.\r\n");
+                                    break;
+                                }
+
+                                // Re-extract id and date
+                                reelId = newReelId;
+                                logTextBox.AppendText($"[REEL_ID] New: {reelId}\r\n");
+
+                                reelDateRaw = await webView.ExecuteScriptAsync(dateScript);
+                                try
+                                {
+                                    reelDate = JsonSerializer.Deserialize<string>(reelDateRaw);
+                                }
+                                catch (JsonException ex)
+                                {
+                                    logTextBox.AppendText($"[DATE_DESERIALIZE_ERROR] {ex.Message}\r\n");
+                                    reelDate = "NO_DATE_FOUND";
+                                }
+                                logTextBox.AppendText($"[DATE] New: {reelDate}\r\n");
+
+                                // Re-compute shouldComment and isOld
+                                shouldComment = false;
+                                isOld = false;
+                                if (reelDate != "NO_DATE_FOUND")
+                                {
+                                    try
+                                    {
+                                        using var doc = JsonDocument.Parse(reelDate);
+                                        string datetimeStr = doc.RootElement.GetProperty("datetime").GetString();
+                                        if (datetimeStr != "NO_DATETIME")
+                                        {
+                                            if (DateTimeOffset.TryParse(datetimeStr, out var reelTime))
+                                            {
+                                                var now = DateTimeOffset.UtcNow;
+                                                var age = now - reelTime;
+                                                if (age.TotalHours < 24)
+                                                {
+                                                    shouldComment = true;
+                                                }
+                                                else
+                                                {
+                                                    isOld = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        logTextBox.AppendText($"[DATE_PARSE_ERROR] {ex.Message}\r\n");
+                                    }
+                                }
+                            }
+
                             // Watch delay with possible pause
                             int watchTime = rand.Next(5000, 10001);
                             await Task.Delay(watchTime / 2, token);  // Watch half first
@@ -596,32 +866,6 @@ namespace SocialNetworkArmy.Services
                             }
 
                             // Comment (si < 24h)
-                            bool shouldComment = false;
-                            if (reelDate != "NO_DATE_FOUND")
-                            {
-                                try
-                                {
-                                    using var doc = JsonDocument.Parse(reelDate);
-                                    string datetimeStr = doc.RootElement.GetProperty("datetime").GetString();
-                                    if (datetimeStr != "NO_DATETIME")
-                                    {
-                                        if (DateTimeOffset.TryParse(datetimeStr, out var reelTime))
-                                        {
-                                            var now = DateTimeOffset.UtcNow;
-                                            var age = now - reelTime;
-                                            if (age.TotalHours < 24)
-                                            {
-                                                shouldComment = true;
-                                            }
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    logTextBox.AppendText($"[DATE_PARSE_ERROR] {ex.Message}\r\n");
-                                }
-                            }
-
                             if (shouldComment)
                             {
                                 string randomComment = comments[rand.Next(comments.Count)];
@@ -1199,9 +1443,6 @@ namespace SocialNetworkArmy.Services
 
                         // Close the reel modal after processing all reels
                         await CloseReelModalAsync(lang, token);
-
-                        // Click home to return to home page for next target
-                        await navigationService.ClickHomeButtonAsync(token);
 
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");
                         await RandomHumanPauseAsync(token, 5000, 15000, 0.1, 30000, 120000);
