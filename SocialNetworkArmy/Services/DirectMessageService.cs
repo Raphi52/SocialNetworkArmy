@@ -143,36 +143,33 @@ namespace SocialNetworkArmy.Services
                         var opened = await _messageService.TryOpenKebabMenuAsync(runToken);
                         Log(opened ? "[KEBAB] Menu ouvert" : "[KEBAB] Menu introuvable");
 
-                        if (opened)
+                        if (!opened)
+                        {
+                            Log("[KEBAB] Échec ouverture menu → passage au suivant");
+                        }
+                        else
                         {
                             var itemClicked = await _messageService.ClickSendItemInMenuAsync(runToken);
                             Log(itemClicked ? "[K-ITEM] Item cliqué" : "[K-ITEM] Item introuvable");
 
                             if (itemClicked)
                             {
+                                // ✅ Le clic est passé → on fait confiance, pas besoin de EnsureOnDmPageAsync
+                                Log("[KEBAB] Clic effectué → on suppose la page DM ouverte");
                                 await Task.Delay(WaitAfterKItemMs, runToken);
-                                var st = await _messageService.EnsureOnDmPageAsync(runToken, 12000, "[READY-KEBAB] ");
 
-                                if (st == "dialog")
-                                {
-                                    if (await _messageService.AdvanceDialogIfNeededAsync(runToken))
-                                    {
-                                        await Task.Delay(900, runToken);
-                                        st = await _messageService.EnsureOnDmPageAsync(runToken, 12000, "[READY-AFTER-ADV] ");
-                                    }
-                                }
-
-                                if (st == "editor" || st == "url")
-                                {
-                                    messageSent = await SendOnDmPageAsync(msg, runToken);
-                                }
-                                else
-                                {
-                                    Log("Page DM non prête après kebab → échec");
-                                }
+                                // 🔥 On transpose directement le scénario stable qui marche
+                                messageSent = await SendOnDmPageAsync(msg, runToken);
+                            }
+                            else
+                            {
+                                Log("[K-ITEM] Aucun item message cliqué → échec");
                             }
                         }
                     }
+
+
+
                     // ========== CAS 5: ERREUR ==========
                     else if (buttonResult.StartsWith("error"))
                     {

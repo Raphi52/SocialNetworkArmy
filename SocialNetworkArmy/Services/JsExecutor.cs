@@ -40,21 +40,23 @@ namespace SocialNetworkArmy.Services
 
         private static async Task<string> ExecuteScriptWithCancellationAsync(WebView2 webView, string script, CancellationToken token)
         {
-            if (webView?.CoreWebView2 == null) throw new InvalidOperationException("WebView2 non initialisé.");
+            if (webView?.CoreWebView2 == null)
+                throw new InvalidOperationException("WebView2 non initialisé.");
+
             var execTask = webView.ExecuteScriptAsync(script);
             var cancelTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            using (token.Register(() =>
-            {
-                try { webView.CoreWebView2.Stop(); } catch { }
-                cancelTcs.TrySetResult(true);
-            }))
+            using (token.Register(() => cancelTcs.TrySetResult(true)))
             {
                 var done = await Task.WhenAny(execTask, cancelTcs.Task).ConfigureAwait(true);
-                if (done == cancelTcs.Task) throw new OperationCanceledException(token);
+
+                if (done == cancelTcs.Task)
+                    throw new OperationCanceledException(token);
+
                 return await execTask.ConfigureAwait(true);
             }
         }
+
 
         private static string UnQ(string s)
         {

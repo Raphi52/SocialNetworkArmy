@@ -35,6 +35,43 @@ namespace SocialNetworkArmy.Services
             if (!string.IsNullOrEmpty(tag)) _log(tag + result);
             return result;
         }
+       private async Task<string> ExecJsAwaitableAsync(string js, CancellationToken token, string tag = null)
+        {
+            string wrapped = $@"
+        (function() {{
+          window.__awaitable_result = null;
+          (async function() {{
+            try {{
+              // 👉 le return ici RELAYE la valeur du script
+              const result = await (async () => {{ return await (async () => {{ {js} }})(); }})();
+              window.__awaitable_result = result ?? '';
+            }} catch (e) {{
+              window.__awaitable_result = 'ERR:' + (e.message || e);
+            }}
+          }})();
+        }})();";
+
+
+            await _webView.ExecuteScriptAsync(wrapped);
+
+            // On poll toutes les 250ms jusqu’à obtenir un résultat
+            for (int i = 0; i < 80; i++) // 20 secondes max
+            {
+                token.ThrowIfCancellationRequested();
+                var res = await _webView.ExecuteScriptAsync("window.__awaitable_result || ''");
+                res = res.Trim('"');
+                if (!string.IsNullOrEmpty(res) && res != "null" && res != "undefined")
+                {
+                    if (!string.IsNullOrEmpty(tag))
+                        _log($"[{tag}] Résultat JS: {res}");
+                    return res;
+                }
+                await Task.Delay(250, token);
+            }
+
+            return "TIMEOUT";
+        }
+
 
         private static async Task<string> ExecuteScriptWithCancellationAsync(WebView2 webView, string script, CancellationToken token)
         {
@@ -53,11 +90,9 @@ namespace SocialNetworkArmy.Services
                 return await execTask.ConfigureAwait(true);
             }
         }
-        // ====== FRAPPE HUMANISÉE - VERSION CORRIGÉE ======
-        // ====== FRAPPE HUMANISÉE - VERSION CORRIGÉE ======
         public async Task<bool> TypeMessageImprovedAsync(string text, CancellationToken token)
         {
-            string escapedMsg = text
+            string escaped = text
                 .Replace("\\", "\\\\")
                 .Replace("\u2018", "'")
                 .Replace("\u2019", "'")
@@ -65,272 +100,106 @@ namespace SocialNetworkArmy.Services
                 .Replace("\n", "\\n")
                 .Replace("\r", "");
 
-            for (int attempt = 0; attempt < 3; attempt++)
-            {
-                token.ThrowIfCancellationRequested();
+            string script = $@"
+(async function() {{
+  try {{
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const randomDelay = (min, max) => Math.floor(min + Math.random() * (max - min + 1));
+    const text = '{escaped}';
+    const chars = Array.from(text);
 
-                if (attempt > 0)
-                {
-                    _log($"  → Retry {attempt}/3...");
-                    await ExecJsAsync(@"
-(function(){ 
-  var scope = document.querySelector('div[role=""dialog""]') || document;
-  var ta = scope.querySelector('textarea');
-  var ce = scope.querySelector('div[contenteditable=""true""][role=""textbox""]');
-  var input = ta || ce;
-  if (input) { 
-    if (ta) { 
-      ta.value = ''; 
-      ta.dispatchEvent(new Event('input', {bubbles: true})); 
-    } else { 
-      ce.textContent = ''; 
-      ce.dispatchEvent(new Event('input', {bubbles: true})); 
-    } 
-  } 
-  return 'cleared'; 
-})();", token);
-                    await Task.Delay(800, token);
-                }
+    let input = document.querySelector('[data-test-input=""true""]')
+             || document.querySelector('div[data-lexical-editor] div[contenteditable=""true""]')
+             || document.querySelector('div[contenteditable=""true""][role=""textbox""]')
+             || document.querySelector('textarea');
 
-                var typingScript = $@"
-(async function(){{
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  
-  function randomDelay(min, max) {{
-    return Math.floor(min + Math.random() * (max - min + 1));
-  }}
-  
-  const text = '{escapedMsg}';
-  const chars = Array.from(text);
-  
-  // CORRECTION 1: Détecter l'input AVANT de commencer la frappe
-  let input = document.querySelector('[data-test-input=""true""]');
-  if (!input) {{
-    var allInputs = document.querySelectorAll('textarea, div[contenteditable=""true""], input[type=""text""], div[role=""textbox""]');
-    
-    var messageInputs = [];
-    for (var i = 0; i < allInputs.length; i++) {{
-        var el = allInputs[i];
-        var rect = el.getBoundingClientRect();
-        var style = getComputedStyle(el);
-        
-        if (rect.width === 0 || rect.height === 0 || 
-            style.display === 'none' || style.visibility === 'hidden') {{
-            continue;
-        }}
-        
-        var placeholder = (el.getAttribute('placeholder') || '').toLowerCase();
-        var ariaLabel = (el.getAttribute('aria-label') || '').toLowerCase();
-        
-        if (placeholder.indexOf('message') !== -1 || 
-            placeholder.indexOf('écrire') !== -1 ||
-            ariaLabel.indexOf('message') !== -1 ||
-            ariaLabel.indexOf('écrire') !== -1) {{
-            
-            messageInputs.push({{
-                index: i,
-                tag: el.tagName,
-                contenteditable: el.getAttribute('contenteditable')
-            }});
-        }}
-    }}
-    
-    if (messageInputs.length === 0) {{
-        return 'NO_INPUT';
-    }}
-    
-    var targetIndex = messageInputs[0].index;
-    allInputs[targetIndex].setAttribute('data-test-input', 'true');
-    
-    input = allInputs[targetIndex];
-  }}
-  
-  const isTextarea = input.tagName === 'TEXTAREA' || input.tagName === 'INPUT';
-  
-  // CORRECTION 2: Scroll et focus AVANT de commencer à taper
-  input.scrollIntoView({{behavior:'instant', block:'center'}});
-  await sleep(randomDelay(150, 250));
-  
-  const rect = input.getBoundingClientRect();
-  var marginX = rect.width * 0.2;
-  var marginY = rect.height * 0.2;
-  var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
-  var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
-  const clientX = rect.left + offsetX;
-  const clientY = rect.top + offsetY;
-  
-  // Mouvement de souris progressif
-  var startX = clientX + (Math.random() * 100 - 50);
-  var startY = clientY + (Math.random() * 100 - 50);
-  for (let i = 1; i <= 5; i++) {{
-    var moveX = startX + (clientX - startX) * (i / 5);
-    var moveY = startY + (clientY - startY) * (i / 5);
-    input.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
-  }}
-  
-  const opts = {{bubbles:true, cancelable:true, clientX:clientX, clientY:clientY, button:0}};
-  
-  input.dispatchEvent(new MouseEvent('mousedown', opts));
-  input.dispatchEvent(new MouseEvent('mouseup', opts));
-  input.dispatchEvent(new MouseEvent('click', opts));
-  
-  // CORRECTION 3: Délai après le clic pour laisser l'UI réagir
-  await sleep(randomDelay(200, 350));
-  input.focus();
-  
-  // CORRECTION 4: Vérifier que l'input est bien focus avant de commencer
-  if (document.activeElement !== input) {{
-    return 'FOCUS_FAILED';
-  }}
-  
-  // CORRECTION 5: Délai après le focus pour stabiliser
-  await sleep(randomDelay(150, 250));
-  
-  // CORRECTION 6: VIDER L'INPUT AVANT DE COMMENCER (c'est ça le vrai problème!)
-  if (isTextarea) {{
-    const proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-    desc.set.call(input, '');
-    input.dispatchEvent(new Event('input', {{bubbles: true}}));
-  }} else {{
-    input.textContent = '';
-    input.dispatchEvent(new Event('input', {{bubbles: true}}));
-  }}
-  
-  // CORRECTION 7: Délai final avant de commencer à taper (pour être SÛR!)
-  await sleep(randomDelay(250, 400));
-  
-  // Maintenant on commence la frappe
-  for (let i = 0; i < chars.length; i++) {{
-    const char = chars[i];
-    
-    // CORRECTION 5: Re-vérifier l'input à chaque caractère
-    input = document.querySelector('[data-test-input=""true""]');
-    if (!input) return 'INPUT_LOST_AT_' + i;
-    
-    // CORRECTION 6: Re-focus si nécessaire (sans délai pour ne pas ralentir)
-    if (document.activeElement !== input) {{
-      input.focus();
-    }}
-    
-    try {{
-      if (isTextarea) {{
-        const currentValue = input.value;
-        const proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-        const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-        desc.set.call(input, currentValue + char);
-        
-        input.dispatchEvent(new Event('input', {{bubbles: true}}));
-        input.dispatchEvent(new Event('change', {{bubbles: true}}));
-      }} else {{
-        document.execCommand('insertText', false, char);
-      }}
-    }} catch(e) {{
-      return 'TYPE_ERROR_AT_' + i + ': ' + (e.message || String(e));
-    }}
-    
-    let delay;
-    
-    if (char === ',' || char === ';') {{
-      delay = randomDelay(200, 400);
-    }} else if (char === '.' || char === '!' || char === '?') {{
-      delay = randomDelay(300, 500);
-    }} else if (char === ' ') {{
-      delay = randomDelay(80, 150);
-    }} else {{
-      delay = randomDelay(50, 150);
-    }}
-    
-    // Simulation d'erreurs de frappe occasionnelles
-    if (Math.random() < 0.05 && i < chars.length - 1) {{
-      await sleep(delay);
-      
-      const wrongChars = 'qwertyuiopasdfghjklzxcvbnm';
-      const wrongChar = wrongChars[Math.floor(Math.random() * wrongChars.length)];
-      
-      input = document.querySelector('[data-test-input=""true""]');
-      if (!input) return 'INPUT_LOST_ERROR_AT_' + i;
-      
+    if (!input) return 'NO_INPUT_FOUND';
+
+    input.scrollIntoView({{behavior:'instant', block:'center'}});
+    input.focus();
+    await sleep(150);
+
+    const rect = input.getBoundingClientRect();
+    const opts = {{bubbles:true, cancelable:true, clientX:rect.left+rect.width/2, clientY:rect.top+rect.height/2}};
+    ['pointerdown','mousedown','mouseup','click'].forEach(ev =>
+      input.dispatchEvent(new MouseEvent(ev, opts))
+    );
+
+    await sleep(200);
+    input.focus();
+
+    document.execCommand('selectAll', false, null);
+    document.execCommand('delete', false, null);
+    await sleep(100);
+
+    for (let i = 0; i < chars.length; i++) {{
+      const c = chars[i];
       try {{
-        if (isTextarea) {{
-          const currentValue = input.value;
-          const proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-          desc.set.call(input, currentValue + wrongChar);
-          input.dispatchEvent(new Event('input', {{bubbles: true}}));
-        }} else {{
-          document.execCommand('insertText', false, wrongChar);
-        }}
+        document.execCommand('insertText', false, c);
       }} catch(e) {{
-        return 'ERROR_TYPE_AT_' + i + ': ' + (e.message || String(e));
+        input.textContent += c;
       }}
-      
-      await sleep(randomDelay(100, 250));
-      
-      input = document.querySelector('[data-test-input=""true""]');
-      if (!input) return 'INPUT_LOST_DELETE_AT_' + i;
-      
-      try {{
-        if (isTextarea) {{
-          const currentValue = input.value;
-          const proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-          desc.set.call(input, currentValue.slice(0, -1));
-          input.dispatchEvent(new Event('input', {{bubbles: true}}));
-        }} else {{
-          document.execCommand('delete', false);
-        }}
-      }} catch(e) {{
-        return 'DELETE_ERROR_AT_' + i + ': ' + (e.message || String(e));
-      }}
-      
       await sleep(randomDelay(50, 120));
     }}
-    
-    // Pause aléatoire occasionnelle
-    if (Math.random() < 0.02) {{
-      await sleep(randomDelay(400, 800));
+
+    await sleep(200);
+
+    const val = (input.value || input.textContent || '').trim();
+    if (val.length > 0) {{
+      const evOpts = {{key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true, cancelable:true}};
+      input.dispatchEvent(new KeyboardEvent('keydown', evOpts));
+      input.dispatchEvent(new KeyboardEvent('keypress', evOpts));
+      input.dispatchEvent(new KeyboardEvent('keyup', evOpts));
+      return 'TYPED_SUCCESSFULLY';
+    }} else {{
+      return 'EMPTY_AFTER_TYPING';
     }}
-    
-    await sleep(delay);
+  }} catch(e) {{
+    return 'JS_ERROR:' + (e.message || e);
   }}
-  
-  await sleep(randomDelay(300, 600));
-  
-  return 'TYPED_SUCCESSFULLY';
 }})()";
 
-                int charCount = text.Length;
-                int baseTime = charCount * 100;
-                int punctuationCount = text.Count(c => ".!?,;".Contains(c));
-                int punctuationDelay = punctuationCount * 300;
-                int errorDelay = (int)(charCount * 0.05 * 500);
-                int totalTime = baseTime + punctuationDelay + errorDelay + 4500;
+            _log("[TYPING] Exécution du script unifié (modal ou DM)...");
+            var result = await ExecJsAwaitableAsync(script, token, "TYPING");
 
-                _log($"[TYPING] Starting... Attente maximale de {totalTime}ms...");
+            _log($"[TYPING] Résultat brut: {result}");
+            var clean = result?.Trim('"') ?? "";
 
-                // CORRECTION CRITIQUE: Pattern du TestService
-                var typingTask = _webView.ExecuteScriptAsync(typingScript);
-
-                _log($"[TYPING] Attente de {totalTime}ms...");
-                await Task.Delay(totalTime, token);
-
-                var typingResult = await typingTask;
-
-                _log($"[TYPING] Résultat brut: {typingResult}");
-
-                // Nettoyer la réponse (WebView2 peut retourner avec ou sans guillemets)
-                var cleanResult = typingResult?.Trim('"') ?? "";
-                _log($"[TYPING] Résultat nettoyé: {cleanResult}");
-
-                if (cleanResult == "TYPED_SUCCESSFULLY")
-                {
-                    _log($"[TYPING] ✓ Succès");
-                    return true;
-                }
+            // ✅ Cas de succès direct
+            if (clean == "TYPED_SUCCESSFULLY")
+            {
+                _log("[TYPING] ✓ Message saisi et envoyé avec succès");
+                return true;
             }
 
-            _log("[TYPING] ✗ Échec après 3 tentatives");
+            // 🕵️ Cas TIMEOUT / {} / vide → vérification manuelle
+            if (clean.Contains("TIMEOUT") || string.IsNullOrWhiteSpace(clean) || clean == "{}")
+            {
+                _log("[TYPING] TIMEOUT détecté, vérification du champ...");
+                var checkContent = await ExecJsAsync(@"
+        (function(){
+            var input = document.querySelector('[data-test-input=""true""]')
+                      || document.querySelector('div[data-lexical-editor] div[contenteditable=""true""]')
+                      || document.querySelector('div[contenteditable=""true""][role=""textbox""]')
+                      || document.querySelector('textarea');
+            if (!input) return 'NO_INPUT';
+            var val = (input.value || input.textContent || '').trim();
+            return val.length > 0 ? 'HAS_TEXT:' + val.length : 'EMPTY';
+        })()", token);
+
+                _log($"[TYPING] Vérification champ: {checkContent}");
+
+                if (checkContent.Contains("HAS_TEXT"))
+                {
+                    _log("[TYPING] ✓ Frappe confirmée par inspection visuelle (ignore TIMEOUT)");
+                    return true;
+                }
+
+                _log("[TYPING] ✗ Champ vide après TIMEOUT — échec réel");
+                return false;
+            }
+
+            _log("[TYPING] ✗ Échec frappe (" + clean + ")");
             return false;
         }
 
@@ -590,6 +459,76 @@ namespace SocialNetworkArmy.Services
             _log($"[OVERLAY TYPING] ✗ Échec");
             return false;
         }
+        public async Task<bool> PressEnterUniversalAsync(CancellationToken token)
+        {
+            const string script = @"
+(async function() {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // Trouver le champ actif (Lexical ou textarea)
+  let input = document.querySelector('[data-test-input=""true""]')
+           || document.querySelector('div[data-lexical-editor] div[contenteditable=""true""]')
+           || document.querySelector('div[contenteditable=""true""][role=""textbox""]')
+           || document.querySelector('textarea');
+  if (!input) return 'NO_INPUT';
+
+  input.scrollIntoView({behavior:'instant', block:'center'});
+  input.focus();
+  await sleep(150);
+
+  // Simulation d’un vrai clic/focus
+  try {
+    const rect = input.getBoundingClientRect();
+    const opts = {bubbles:true, cancelable:true, clientX:rect.left+rect.width/2, clientY:rect.top+rect.height/2};
+    ['pointerdown','mousedown','mouseup','click'].forEach(ev =>
+      input.dispatchEvent(new MouseEvent(ev, opts))
+    );
+    input.focus();
+  } catch(e) {}
+
+  await sleep(150);
+
+  // ✅ 1. Tenter Enter natif
+  const evOpts = {key:'Enter', code:'Enter', keyCode:13, which:13, bubbles:true, cancelable:true};
+  input.dispatchEvent(new KeyboardEvent('keydown', evOpts));
+  input.dispatchEvent(new KeyboardEvent('keypress', evOpts));
+  input.dispatchEvent(new KeyboardEvent('keyup', evOpts));
+
+  await sleep(400);
+
+  // ✅ 2. Si pas d’effet, fallback avec execCommand (Lexical-friendly)
+  const before = (input.value || input.textContent || '').trim();
+  if (before.length > 0) {
+    document.execCommand('insertText', false, '\n'); // Lexical interprète ça comme un vrai “Enter”
+    document.execCommand('insertText', false, ' ');  // pousse React à réévaluer
+    document.execCommand('delete', false, null);     // supprime l’espace
+  }
+
+  await sleep(600);
+
+  const after = (input.value || input.textContent || '').trim();
+  if (after.length === 0)
+    return 'MESSAGE_SENT';
+  else
+    return 'MESSAGE_NOT_CLEARED';
+})();";
+
+            _log("[SEND] Simulation Enter (Lexical-friendly)...");
+            var result = await ExecJsAwaitableAsync(script, token, "TYPING");
+
+            _log($"[SEND] Résultat brut: {result}");
+
+            var clean = result?.Trim('"') ?? "";
+            if (clean == "MESSAGE_SENT")
+            {
+                _log("[SEND] ✓ Message envoyé avec succès");
+                return true;
+            }
+
+            _log("[SEND] ✗ Échec d’envoi (" + clean + ")");
+            return false;
+        }
+
 
         // ====== BOUTON MESSAGE (PRO) - VERSION CORRIGÉE ======
         public async Task<string> TryClickMessageButtonAsync(CancellationToken token)
@@ -597,8 +536,8 @@ namespace SocialNetworkArmy.Services
             const string clickJs = @"
 (function(){
   try {
-    var norm = function(s) { return (s || '').replace(/\u00A0/g, ' ').trim().toLowerCase(); };
-    var isVis = function(el) {
+    var norm = s => (s || '').replace(/\u00A0/g, ' ').trim().toLowerCase();
+    var isVis = el => {
       if (!el) return false;
       try {
         var r = el.getBoundingClientRect();
@@ -606,30 +545,30 @@ namespace SocialNetworkArmy.Services
         return r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden';
       } catch(e) { return false; }
     };
-    
+
     var msgBtn = null;
     var buttons = document.querySelectorAll('button, div[role=""button""], a');
-    
-    for (var i = 0; i < buttons.length; i++) {
-      var b = buttons[i];
+
+    // Recherche du bouton Message / Contacter
+    for (var b of buttons) {
       if (!isVis(b)) continue;
       var text = norm(b.textContent);
       var label = norm(b.getAttribute('aria-label') || '');
-      if (text.indexOf('message') !== -1 || text.indexOf('contacter') !== -1 || 
-          text.indexOf('envoyer') !== -1 || text.indexOf('send') !== -1 ||
-          label.indexOf('message') !== -1 || label.indexOf('contacter') !== -1 ||
-          label.indexOf('envoyer') !== -1 || label.indexOf('send') !== -1) {
+      if (text.includes('message') || text.includes('contacter') ||
+          text.includes('envoyer') || text.includes('send') ||
+          label.includes('message') || label.includes('contacter') ||
+          label.includes('envoyer') || label.includes('send')) {
         msgBtn = b;
         break;
       }
     }
-    
+
+    // Recherche alternative via icônes SVG
     if (!msgBtn) {
       var svgs = document.querySelectorAll('svg[aria-label]');
-      for (var i = 0; i < svgs.length; i++) {
-        var svg = svgs[i];
+      for (var svg of svgs) {
         var label = norm(svg.getAttribute('aria-label') || '');
-        if (label.indexOf('message') !== -1 || label.indexOf('contacter') !== -1) {
+        if (label.includes('message') || label.includes('contacter')) {
           var btn = svg.closest('button, div[role=""button""], a');
           if (btn && isVis(btn)) {
             msgBtn = btn;
@@ -638,71 +577,75 @@ namespace SocialNetworkArmy.Services
         }
       }
     }
-    
-    if (!msgBtn) {
-      var directLinks = document.querySelectorAll('a[href*=""/direct/""]');
-      for (var i = 0; i < directLinks.length; i++) {
-        if (isVis(directLinks[i])) {
-          msgBtn = directLinks[i];
-          break;
-        }
+
+    if (!msgBtn) return 'no_button_found';
+
+    // 🚫 Protection 1 : ignorer le bouton 'Envoyer un message' de la page DM (inbox vide)
+    if (location.pathname.includes('/direct/')) {
+      const rightPane = document.querySelector('div[role=""presentation""]') || document.querySelector('main section');
+      if (rightPane && rightPane.contains(msgBtn)) {
+        return 'ignored_inbox_button';
       }
     }
-    
-    if (!msgBtn) return 'no_button_found';
-    
-    var isLink = msgBtn.tagName === 'A';
-    var href = msgBtn.getAttribute('href') || '';
-    
-    var rect = msgBtn.getBoundingClientRect();
-    if (rect.top < 0 || rect.bottom > window.innerHeight) {
-      msgBtn.scrollIntoView({behavior: 'instant', block: 'center'});
-      rect = msgBtn.getBoundingClientRect();
+
+    // 🚫 Protection 2 : ignorer tout lien <a> pointant vers /direct/ ou /inbox/
+    if (msgBtn.tagName === 'A') {
+      const href = msgBtn.getAttribute('href') || '';
+      if (href.includes('/direct/') || href.includes('/inbox')) {
+        return 'ignored_redirect_button';
+      }
+      // Sinon, empêcher navigation externe
+      msgBtn.addEventListener('click', e => e.preventDefault(), {once:true, capture:true});
     }
-    
+
+    // Simuler un vrai clic (sans scroll ni navigation)
+    var rect = msgBtn.getBoundingClientRect();
     var clickX = rect.left + rect.width / 2;
     var clickY = rect.top + rect.height / 2;
-    
-    var opts = {bubbles: true, cancelable: true, view: window, clientX: clickX, clientY: clickY, button: 0, buttons: 1};
-    
+    var opts = {bubbles:true, cancelable:true, view:window, clientX:clickX, clientY:clickY, button:0, buttons:1};
+
     msgBtn.dispatchEvent(new PointerEvent('pointerdown', opts));
     msgBtn.dispatchEvent(new MouseEvent('mousedown', opts));
     msgBtn.dispatchEvent(new PointerEvent('pointerup', opts));
     msgBtn.dispatchEvent(new MouseEvent('mouseup', opts));
     msgBtn.dispatchEvent(new MouseEvent('click', opts));
-    
-    if (isLink && href) return 'clicked_link:' + href;
-    
+
     return 'clicked';
   } catch(err) {
     return 'error:' + (err.message || 'unknown');
   }
-})();";
+})();
+";
 
             try
             {
                 _log("[BUTTON] Recherche et clic sur bouton Message...");
                 var clickResult = await ExecJsAsync(clickJs, token);
                 await Task.Delay(3000, token);
-                if (string.IsNullOrWhiteSpace(clickResult) || clickResult == "null") return "no_button_found";
+
+                if (string.IsNullOrWhiteSpace(clickResult) || clickResult == "null")
+                    return "no_button_found";
 
                 _log($"[BUTTON] Clic: {clickResult}");
 
-                if (clickResult.StartsWith("clicked_link:"))
+                // Gestion des cas d'ignorance
+                if (clickResult == "ignored_inbox_button")
                 {
-                    var url = clickResult.Substring("clicked_link:".Length);
-                    _log($"[BUTTON] Navigation forcée vers: {url}");
-                    await _webView.CoreWebView2.ExecuteScriptAsync($"window.location.href = '{url}';");
-                    await Task.Delay(3000, token);
-                    return "redirected_to_direct";
+                    _log("[BUTTON] Ignoré : bouton de l'inbox vide détecté");
+                    return "no_button_found";
+                }
+                if (clickResult == "ignored_redirect_button")
+                {
+                    _log("[BUTTON] Ignoré : lien vers /direct/inbox/ détecté");
+                    return "no_button_found";
                 }
 
-                if (clickResult != "clicked") return clickResult;
+                if (clickResult != "clicked")
+                    return clickResult;
 
                 await Task.Delay(2500, token);
                 _log("[BUTTON] Pas de détection → on suppose modale pro ouverte (comme TestService)");
                 return "pro_modal_opened";
-              
             }
             catch (Exception ex)
             {
@@ -711,44 +654,47 @@ namespace SocialNetworkArmy.Services
             }
         }
 
+
         // ====== VÉRIFICATION PAGE DM ======
         public async Task<string> EnsureOnDmPageAsync(CancellationToken token, int timeoutMs, string tag)
         {
             const string js = @"
 (function(){
+  // ✅ On considère la page comme une DM si on est dans /direct/
   if (location.pathname.indexOf('/direct/') !== -1) {
+    // D'abord, si un éditeur est déjà visible, c'est bon.
+    var editor = document.querySelector('textarea, div[contenteditable=""true""][role=""textbox""]');
+    if (editor) {
+      var r = editor.getBoundingClientRect();
+      var cs = getComputedStyle(editor);
+      if (r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden') {
+        return 'editor';
+      }
+    }
+
+    // Vérifie un loader, mais ignore ceux invisibles, minuscules ou hors de l'écran
     var loader = document.querySelector('[role=""progressbar""], .loading, [aria-label*=""Loading"" i], [aria-label*=""Chargement"" i]');
     if (loader) {
       var rect = loader.getBoundingClientRect();
       var style = getComputedStyle(loader);
-      if (rect.width > 0 && rect.height > 0 && style.display !== 'none') return 'loading';
-    }
-    
-    var editors = function() {
-      var sels = ['textarea', 'div[contenteditable=""true""][role=""textbox""]', '[data-lexical-editor] div[contenteditable=""true""]'];
-      for (var i = 0; i < sels.length; i++) {
-        var found = document.querySelectorAll(sels[i]);
-        for (var j = 0; j < found.length; j++) {
-          var e = found[j];
-          var r = e.getBoundingClientRect();
-          var cs = getComputedStyle(e);
-          if (r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden') return true;
-        }
+      var tooSmall = rect.height < 4 || rect.width < 4;
+      var offscreen = rect.bottom < 0 || rect.top > innerHeight;
+      if (!tooSmall && !offscreen && style.display !== 'none' && style.visibility !== 'hidden') {
+        return 'loading';
       }
-      return false;
-    };
+    }
 
-    if (editors()) return 'editor';
-    
+    // Vérifie la liste de conversations
     var conversationsList = document.querySelector('[role=""list""]');
     if (conversationsList) {
       var items = conversationsList.querySelectorAll('[role=""listitem""], a[href*=""/direct/t/""]');
       if (items.length > 0) return 'conversation_list';
     }
-    
+
     return 'url_only';
   }
 
+  // Vérifie s'il y a une modale (compte pro)
   var modal = document.querySelector('[role=""dialog""], [aria-modal=""true""]');
   if (modal) {
     var editors = function() {
@@ -764,13 +710,13 @@ namespace SocialNetworkArmy.Services
       }
       return false;
     };
-    
     if (editors()) return 'editor';
     return 'dialog';
   }
 
   return 'no';
-})()";
+})();";
+
 
             var start = Environment.TickCount;
             string last = null;

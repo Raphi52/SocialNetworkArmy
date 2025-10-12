@@ -57,69 +57,7 @@ namespace SocialNetworkArmy.Services
             }
         }
 
-        /// <summary>
-        /// Clique sur le bouton Home pour revenir à l'accueil
-        /// </summary>
-//        public async Task<bool> ClickHomeButtonAsync(CancellationToken token = default)
-//        {
-//            logTextBox.AppendText("[NAV] Clicking Home button...\r\n");
-
-//            var homeScript = @"
-//(function(){
-//  try{
-//    var homeEl = null;
-    
-//    var svgs = Array.from(document.querySelectorAll('svg[aria-label]'));
-//    var homeSvg = svgs.find(function(svg){ return /accueil|home/i.test(svg.getAttribute('aria-label')); });
-//    if (homeSvg) {
-//      homeEl = homeSvg.closest('a, span[role=""link""]');
-//    }
-    
-//    if (!homeEl) {
-//      homeEl = document.querySelector('a[href=""/""]');
-//    }
-    
-//    if (!homeEl) return 'NO_HOME_ELEMENT';
-    
-//    var rect = homeEl.getBoundingClientRect();
-//    var marginX = rect.width * 0.2;
-//    var marginY = rect.height * 0.2;
-//    var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
-//    var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
-//    var clientX = rect.left + offsetX;
-//    var clientY = rect.top + offsetY;
-    
-//    // Simulate mouse approach: 3-5 move events towards the target
-//    var startX = clientX + (Math.random() * 100 - 50);  // Start offset
-//    var startY = clientY + (Math.random() * 100 - 50);
-//    for (let i = 1; i <= 5; i++) {
-//      var moveX = startX + (clientX - startX) * (i / 5);
-//      var moveY = startY + (clientY - startY) * (i / 5);
-//      homeEl.dispatchEvent(new MouseEvent('mousemove', {bubbles: true, clientX: moveX, clientY: moveY}));
-//    }
-    
-//    var opts = {bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0};
-    
-//    homeEl.dispatchEvent(new MouseEvent('mousedown', opts));
-//    homeEl.dispatchEvent(new MouseEvent('mouseup', opts));
-//    homeEl.dispatchEvent(new MouseEvent('click', opts));
-    
-//    return 'HOME_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY);
-//  } catch(e){
-//    return 'ERR:' + (e.message || String(e));
-//  }
-//})()";
-
-//            var homeResult = await webView.ExecuteScriptAsync(homeScript);
-//            logTextBox.AppendText($"[NAV] Home click result: {homeResult}\r\n");
-
-//            await Task.Delay(rand.Next(1500, 2500), token);
-//            return homeResult.Contains("HOME_CLICKED");
-//        }
-
-        /// <summary>
-        /// Navigue vers un profil en utilisant la recherche (méthode humaine)
-        /// </summary>
+        
         public async Task<bool> NavigateToProfileViaSearchAsync(string profileUsername, CancellationToken token = default)
         {
             try
@@ -141,98 +79,80 @@ namespace SocialNetworkArmy.Services
 
                 var searchScript = $@"
 (function(){{
-  try{{
-    // CRITIQUE: Fonction pour vérifier qu'un élément n'est PAS dans une modale
-    function isNotInModal(el) {{
-      var current = el;
-      while (current && current !== document.body) {{
-        if (current.getAttribute('role') === 'dialog' || 
-            current.getAttribute('aria-modal') === 'true' ||
-            current.classList.contains('modal') ||
-            current.style.position === 'fixed' && current.style.zIndex > 1000) {{
-          return false; // L'élément est dans une modale
-        }}
-        current = current.parentElement;
+  try {{
+    function isVisible(el) {{
+      return el && el.offsetWidth > 0 && el.offsetHeight > 0;
+    }}
+    function isInSidebar(el) {{
+      while (el && el !== document.body) {{
+        if (el.getAttribute('role') === 'dialog' || el.closest('[aria-label*=""Saisie de la recherche""]')) return false;
+        el = el.parentElement;
       }}
-      return true; // L'élément n'est PAS dans une modale
+      return true;
     }}
-    
-    var searchEl = null;
-    
-    // Méthode 1: Par aria-label du SVG (EN EXCLUANT LES MODALES)
-    var svgs = Array.from(document.querySelectorAll('svg[aria-label]'));
-    var searchSvg = svgs.find(function(svg){{ 
-      var matches = /{searchLabel}/i.test(svg.getAttribute('aria-label'));
-      return matches && isNotInModal(svg);
-    }});
-    
-    if (searchSvg) {{
-      searchEl = searchSvg.closest('a, span[role=""link""]');
-      // Double-check que le parent n'est pas dans une modale
-      if (searchEl && !isNotInModal(searchEl)) {{
-        searchEl = null;
-      }}
-    }}
-    
-    // Méthode 2: Par href=""/explore/"" (EN EXCLUANT LES MODALES)
-    if (!searchEl) {{
-      var exploreLinks = Array.from(document.querySelectorAll('a[href=""/explore/""], a[href^=""/explore""]'));
-      searchEl = exploreLinks.find(function(link) {{
-        return isNotInModal(link);
-      }});
-    }}
-    
-    // Méthode 3: Par texte ""Recherche"" ou ""Search"" (EN EXCLUANT LES MODALES)
-    if (!searchEl) {{
-      var allNavLinks = Array.from(document.querySelectorAll('a, span[role=""link""]'));
-      searchEl = allNavLinks.find(function(el){{ 
-        var matches = /{searchLabel}/i.test(el.innerText || el.textContent);
-        return matches && isNotInModal(el);
-      }});
-    }}
-    
-    if (!searchEl) return 'NO_SEARCH_ELEMENT';
-    
-    if (searchEl.offsetWidth === 0 || searchEl.offsetHeight === 0) {{
-      return 'SEARCH_NOT_VISIBLE';
-    }}
-    
-    var rect = searchEl.getBoundingClientRect();
-    
-    // Cliquer sur un pixel aléatoire dans le bouton (éviter les bords de 20%)
-    var marginX = rect.width * 0.2;
-    var marginY = rect.height * 0.2;
-    var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
-    var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
-    var clientX = rect.left + offsetX;
-    var clientY = rect.top + offsetY;
-    
-    // Simulate mouse approach: 3-5 move events towards the target
-    var startX = clientX + (Math.random() * 100 - 50);  // Start offset
-    var startY = clientY + (Math.random() * 100 - 50);
-    for (let i = 1; i <= 5; i++) {{
-      var moveX = startX + (clientX - startX) * (i / 5);
-      var moveY = startY + (clientY - startY) * (i / 5);
-      searchEl.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
-    }}
-    
-    var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
-    
-    searchEl.dispatchEvent(new MouseEvent('mouseenter', opts));
-    searchEl.dispatchEvent(new MouseEvent('mouseover', opts));
+
+    // 🔍 Sélectionne UNIQUEMENT la loupe de la barre latérale principale
+    const candidates = Array.from(document.querySelectorAll('svg[aria-label=""Recherche""], svg[aria-label=""Search""]'));
+    let searchEl = candidates
+      .map(svg => svg.closest('a[role=""link""], div[role=""button""]'))
+      .find(el => el && isVisible(el) && isInSidebar(el));
+
+    if (!searchEl) return 'NO_SIDEBAR_SEARCH_FOUND';
+
+    // Clique naturel
+    const rect = searchEl.getBoundingClientRect();
+    const marginX = rect.width * 0.2;
+    const marginY = rect.height * 0.2;
+    const offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
+    const offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
+    const clientX = rect.left + offsetX;
+    const clientY = rect.top + offsetY;
+    const opts = {{ bubbles:true, cancelable:true, clientX, clientY, button:0 }};
+
+    searchEl.scrollIntoView({{behavior:'smooth', block:'center'}});
     searchEl.dispatchEvent(new MouseEvent('mousedown', opts));
     searchEl.dispatchEvent(new MouseEvent('mouseup', opts));
     searchEl.dispatchEvent(new MouseEvent('click', opts));
-    searchEl.dispatchEvent(new MouseEvent('mouseleave', opts));
-    
+
     return 'SEARCH_CLICKED:' + Math.round(clientX) + ',' + Math.round(clientY);
-  }} catch(e){{
+  }} catch(e) {{
     return 'ERR:' + (e.message || String(e));
   }}
 }})()";
 
+
+
                 var searchTry = await webView.ExecuteScriptAsync(searchScript);
                 logTextBox.AppendText($"[NAV] Search click: {searchTry}\r\n");
+                // 🔎 Attente que la vraie barre de recherche de profils soit visible (et non celle des DMs)
+                logTextBox.AppendText("[NAV] Waiting for profile search input to become visible...\r\n");
+
+                var waitVisible = await webView.ExecuteScriptAsync(@"
+(function(){
+  return new Promise(resolve=>{
+    let tries = 0;
+    const check = () => {
+      const input = document.querySelector('nav input[placeholder*=""echercher"" i], nav input[aria-label*=""Saisie de la recherche"" i], div[role=""dialog""] input[placeholder*=""echercher"" i]');
+      if (input) {
+        const r = input.getBoundingClientRect();
+        const cs = getComputedStyle(input);
+        if (r.width > 0 && r.height > 0 && cs.display !== 'none' && cs.visibility !== 'hidden') {
+          input.setAttribute('data-correct-profile-search', 'true');
+          resolve('VISIBLE');
+          return;
+        }
+      }
+      if (++tries > 30) {
+        resolve('TIMEOUT');
+        return;
+      }
+      setTimeout(check, 150);
+    };
+    check();
+  });
+})();");
+
+                logTextBox.AppendText($"[NAV] Input visibility check: {waitVisible}\r\n");
 
                 if (!searchTry.Contains("SEARCH_CLICKED"))
                 {
@@ -247,11 +167,14 @@ namespace SocialNetworkArmy.Services
                 // Vérifier qu'on est sur la page de recherche
                 var checkSearch = await webView.ExecuteScriptAsync(@"
 (function(){
-  var url = window.location.href;
-  var hasExplore = url.includes('/explore');
-  var hasSearchBox = !!document.querySelector('input[placeholder*=""herch""], input[placeholder*=""earch""]');
-  return (hasExplore || hasSearchBox) ? 'true' : 'false';
+  // Vérifie si on est soit dans /explore/, soit dans la vue DM avec input recherche
+  const url = window.location.href;
+  const hasExplore = url.includes('/explore');
+  const dmInput = document.querySelector('input[aria-label*=""Saisie de la recherche"" i], input[placeholder*=""echercher"" i]');
+  const sidebarActive = !!document.activeElement && document.activeElement.tagName.toLowerCase() === 'input';
+  return (hasExplore || dmInput || sidebarActive) ? 'true' : 'false';
 })()");
+
 
                 if (!JsBoolIsTrue(checkSearch))
                 {
@@ -271,155 +194,76 @@ namespace SocialNetworkArmy.Services
                     .Replace("'", "\\'");
 
                 var typingScript = $@"
-(async function(){{
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  
-  function randomDelay(min, max) {{
-    return Math.floor(min + Math.random() * (max - min + 1));
-  }}
-  
-  const dlg = document.querySelector('div[role=""dialog""]');
-  const root = dlg || document;
-  
-  const text = '{escapedSearch}';
-  const chars = Array.from(text);
-  
-  let ta = root.querySelector('input[placeholder*=""herch""], input[placeholder*=""earch""]');
-  let ce = null;
-  
-  if (!ta) {{
-    ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-    if (!ce) return 'NO_SEARCH_INPUT_INITIAL';
-  }}
-  
-  const initialTarget = ta || ce;
-  
-  initialTarget.scrollIntoView({{behavior:'smooth', block:'center'}});
-  await sleep(randomDelay(200, 400));
-  
-  const rect = initialTarget.getBoundingClientRect();
-  const x = rect.left + rect.width / 2;
-  const y = rect.top + rect.height / 2;
-  const opts = {{bubbles:true, cancelable:true, clientX:x, clientY:y, button:0}};
-  
-  initialTarget.dispatchEvent(new MouseEvent('mousedown', opts));
-  initialTarget.dispatchEvent(new MouseEvent('mouseup', opts));
-  initialTarget.dispatchEvent(new MouseEvent('click', opts));
-  
-  await sleep(randomDelay(100, 250));
-  initialTarget.focus();
-  
-  for (let i = 0; i < chars.length; i++) {{
-    const char = chars[i];
-    
-    ta = root.querySelector('input[placeholder*=""herch""], input[placeholder*=""earch""]');
-    ce = null;
-    
-    if (!ta) {{
-      ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-      if (!ce) return 'NO_SEARCH_INPUT_AT_' + i;
+(async function() {{
+  try {{
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    function randomDelay(min, max) {{
+      return Math.floor(min + Math.random() * (max - min + 1));
     }}
-    
-    const currentTarget = ta || ce;
-    
-    try {{
-      if (ta) {{
-        const currentValue = ta.value;
-        const proto = HTMLInputElement.prototype;
-        const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-        desc.set.call(ta, currentValue + char);
-        
-        ta.dispatchEvent(new Event('input', {{bubbles: true}}));
-        ta.dispatchEvent(new Event('change', {{bubbles: true}}));
-      }} else {{
-        document.execCommand('insertText', false, char);
-      }}
-    }} catch(e) {{
-      return 'TYPE_ERROR_AT_' + i + ': ' + (e.message || String(e));
+
+    // 1️⃣ Trouver le bon champ de saisie (logique TestService)
+    let active = document.activeElement;
+    if (!active || active.tagName.toLowerCase() !== 'input') {{
+      const allInputs = Array.from(document.querySelectorAll('input[placeholder*=""echercher"" i], input[type=""text""]'));
+      // Barre de recherche du menu latéral = visible et dans la partie haute
+      active = allInputs.find(i => 
+        i.offsetTop < window.innerHeight * 0.5 && 
+        i.offsetWidth > 0 && i.offsetHeight > 0 && 
+        getComputedStyle(i).visibility !== 'hidden' && 
+        getComputedStyle(i).display !== 'none'
+      );
     }}
-    
-    let delay;
-    
-    if (char === ',' || char === ';') {{
-      delay = randomDelay(300, 500);
-    }} else if (char === '.' || char === '!' || char === '?') {{
-      delay = randomDelay(400, 600);
-    }} else if (char === ' ') {{
-      delay = randomDelay(150, 250);
-    }} else {{
-      delay = randomDelay(100, 300);
-    }}
-    
-    if (Math.random() < 0.05 && i < chars.length - 1) {{
+
+    if (!active) return 'NO_VISIBLE_INPUT';
+    active.focus();
+    active.scrollIntoView({{behavior:'smooth', block:'center'}});
+
+    const text = '{escapedSearch}';
+    const chars = Array.from(text);
+
+    // 2️⃣ Frappe humanisée (delay, erreurs, corrections)
+    for (let i = 0; i < chars.length; i++) {{
+      const c = chars[i];
+      const val = active.value;
+      const proto = HTMLInputElement.prototype;
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+      desc.set.call(active, val + c);
+      active.dispatchEvent(new Event('input', {{bubbles:true}}));
+      active.dispatchEvent(new Event('change', {{bubbles:true}}));
+
+      // délai variable selon le caractère
+      let delay;
+      if (c === ',' || c === ';') delay = randomDelay(300, 500);
+      else if ('.!?'.includes(c)) delay = randomDelay(400, 600);
+      else if (c === ' ') delay = randomDelay(150, 250);
+      else delay = randomDelay(90, 180);
       await sleep(delay);
-      
-      const wrongChars = 'qwertyuiopasdfghjklzxcvbnm';
-      const wrongChar = wrongChars[Math.floor(Math.random() * wrongChars.length)];
-      
-      ta = root.querySelector('input[placeholder*=""herch""], input[placeholder*=""earch""]');
-      ce = null;
-      
-      if (!ta) {{
-        ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-        if (!ce) return 'NO_SEARCH_INPUT_ERROR_AT_' + i;
+
+      // 5% de chances de taper une faute + corriger
+      if (Math.random() < 0.05 && i < chars.length - 1) {{
+        const wrongChars = 'azertyuiopqsdfghjklmwxcvbn';
+        const wrong = wrongChars[Math.floor(Math.random() * wrongChars.length)];
+        const val2 = active.value;
+        desc.set.call(active, val2 + wrong);
+        active.dispatchEvent(new Event('input', {{bubbles:true}}));
+        await sleep(randomDelay(200, 300));
+        // backspace (supprime le caractère erroné)
+        desc.set.call(active, active.value.slice(0, -1));
+        active.dispatchEvent(new Event('input', {{bubbles:true}}));
+        await sleep(randomDelay(150, 250));
       }}
-      
-      const currentTargetError = ta || ce;
-      
-      try {{
-        if (ta) {{
-          const currentValue = currentTargetError.value;
-          const proto = HTMLInputElement.prototype;
-          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-          desc.set.call(currentTargetError, currentValue + wrongChar);
-          currentTargetError.dispatchEvent(new Event('input', {{bubbles: true}}));
-        }} else {{
-          document.execCommand('insertText', false, wrongChar);
-        }}
-      }} catch(e) {{
-        return 'ERROR_TYPE_AT_' + i + ': ' + (e.message || String(e));
-      }}
-      
-      await sleep(randomDelay(200, 400));
-      
-      ta = root.querySelector('input[placeholder*=""herch""], input[placeholder*=""earch""]');
-      ce = null;
-      
-      if (!ta) {{
-        ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-        if (!ce) return 'NO_SEARCH_INPUT_DELETE_AT_' + i;
-      }}
-      
-      const currentTargetDelete = ta || ce;
-      
-      try {{
-        if (ta) {{
-          const currentValue = currentTargetDelete.value;
-          const proto = HTMLInputElement.prototype;
-          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-          desc.set.call(currentTargetDelete, currentValue.slice(0, -1));
-          currentTargetDelete.dispatchEvent(new Event('input', {{bubbles: true}}));
-        }} else {{
-          document.execCommand('delete', false);
-        }}
-      }} catch(e) {{
-        return 'DELETE_ERROR_AT_' + i + ': ' + (e.message || String(e));
-      }}
-      
-      await sleep(randomDelay(100, 200));
+
+      // Petites pauses naturelles
+      if (Math.random() < 0.03) await sleep(randomDelay(400, 800));
     }}
-    
-    if (Math.random() < 0.03) {{
-      await sleep(randomDelay(500, 1000));
-    }}
-    
-    await sleep(delay);
+
+    await sleep(randomDelay(400, 700));
+    return 'TYPED_SUCCESSFULLY';
+  }} catch(e) {{
+    return 'ERR_TYPING:' + (e.message || e);
   }}
-  
-  await sleep(randomDelay(500, 800));
-  
-  return 'TYPED_SUCCESSFULLY';
-}})()";
+}})();";
+
 
                 int charCount = profileUsername.Length;
                 int baseTime = charCount * 200;
