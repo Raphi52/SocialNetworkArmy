@@ -373,9 +373,32 @@ namespace SocialNetworkArmy.Services
 
                 if (!clickResultTry.Contains("RESULT_CLICKED"))
                 {
-                    logTextBox.AppendText("[NAV] ✗ Failed to click result\r\n");
+                    logTextBox.AppendText("[NAV] ✗ Failed to click result, clearing search input...\r\n");
+
+                    var clearInputScript = @"
+    (function(){
+      try {
+        const input = document.querySelector('input[placeholder*=""echercher"" i], input[aria-label*=""Search"" i]');
+        if (input) {
+          const proto = HTMLInputElement.prototype;
+          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+          desc.set.call(input, '');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
+          input.blur();
+          return 'CLEARED';
+        }
+        return 'NO_INPUT';
+      } catch(e) {
+        return 'ERR:' + (e.message || String(e));
+      }
+    })()";
+
+                    var clearResult = await webView.ExecuteScriptAsync(clearInputScript);
+                    logTextBox.AppendText($"[NAV] Clear result: {clearResult}\r\n");
                     return false;
                 }
+
 
                 // Attendre le chargement du profil
                 await Task.Delay(rand.Next(2000, 4000), token);

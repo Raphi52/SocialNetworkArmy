@@ -19,7 +19,6 @@ namespace SocialNetworkArmy.Forms
         private PublishService publishService;
         private DirectMessageService dmService;
         private DownloadInstagramService downloadService;
-        private MixService mixService;
         private TestService testService;
         private readonly Profile profile;
         private readonly AutomationService automationService;
@@ -33,7 +32,7 @@ namespace SocialNetworkArmy.Forms
         private Button publishButton;
         private Button dmButton;
         private Button downloadButton;
-        private Button mixButton;
+        private Button scheduleButton;
         private Button testButton;
         private Button stopButton;
         private TextBox logTextBox;
@@ -42,6 +41,11 @@ namespace SocialNetworkArmy.Forms
         private Font yaheiBold12 = new Font("Microsoft YaHei", 12f, FontStyle.Bold);
         private System.Windows.Forms.Timer closeTimer;
         private CancellationTokenSource _cts;
+        private Panel toolbarPanel;
+        private Button backButton;
+        private Button forwardButton;
+        private Button refreshButton;
+        private TextBox urlTextBox;
         public InstagramBotForm(Profile profile)
         {
             this.profile = profile;
@@ -76,13 +80,86 @@ namespace SocialNetworkArmy.Forms
             this.Font = yaheiBold12;
             this.ClientSize = new Size(1200, 800);
             this.MinimumSize = new Size(1000, 700);
-            this.Text = $"Instagram Bot - {profile.Name}";
+            this.Text = profile.Name;
             this.StartPosition = FormStartPosition.CenterScreen;
-            // WebView
+            // Toolbar Panel at top
+            toolbarPanel = new Panel
+            {
+                Location = new Point(0, 0),
+                Size = new Size(this.ClientSize.Width, 40),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = Color.FromArgb(45, 45, 45)
+            };
+            // Back Button
+            backButton = new Button
+            {
+                Text = "Back",
+                Location = new Point(10, 5),
+                Size = new Size(80, 30),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold12
+            };
+            backButton.FlatAppearance.BorderSize = 2;
+            backButton.FlatAppearance.BorderColor = Color.FromArgb(33, 150, 243);
+            backButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
+            backButton.Click += BackButton_Click;
+            // Forward Button
+            forwardButton = new Button
+            {
+                Text = "Forward",
+                Location = new Point(100, 5),
+                Size = new Size(100, 30),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold12
+            };
+            forwardButton.FlatAppearance.BorderSize = 2;
+            forwardButton.FlatAppearance.BorderColor = Color.FromArgb(33, 150, 243);
+            forwardButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
+            forwardButton.Click += ForwardButton_Click;
+            // Refresh Button
+            refreshButton = new Button
+            {
+                Text = "Refresh",
+                Location = new Point(210, 5),
+                Size = new Size(100, 30),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold12
+            };
+            refreshButton.FlatAppearance.BorderSize = 2;
+            refreshButton.FlatAppearance.BorderColor = Color.FromArgb(33, 150, 243);
+            refreshButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
+            refreshButton.Click += RefreshButton_Click;
+            // URL TextBox
+            urlTextBox = new TextBox
+            {
+                Location = new Point(320, 5),
+                Size = new Size(this.ClientSize.Width - 330, 30),
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = yaheiBold12,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+            };
+            urlTextBox.KeyDown += UrlTextBox_KeyDown;
+            toolbarPanel.Controls.Add(backButton);
+            toolbarPanel.Controls.Add(forwardButton);
+            toolbarPanel.Controls.Add(refreshButton);
+            toolbarPanel.Controls.Add(urlTextBox);
+            this.Controls.Add(toolbarPanel);
+            // WebView (moved down)
             webView = new WebView2();
             webView.DefaultBackgroundColor = Color.Black;
-            webView.Location = new Point(0, 0);
-            webView.Size = new Size(this.ClientSize.Width, this.ClientSize.Height - 220);
+            webView.Location = new Point(0, 40);
+            webView.Size = new Size(this.ClientSize.Width, this.ClientSize.Height - 40 - 220);
             webView.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             this.Controls.Add(webView);
             // Bottom Panel (reduced height from 240 to 220)
@@ -182,21 +259,6 @@ namespace SocialNetworkArmy.Forms
             downloadButton.FlatAppearance.BorderColor = Color.FromArgb(0, 188, 212);
             downloadButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             downloadButton.Click += DownloadButton_Click;
-            mixButton = new Button
-            {
-                Text = "Mix",
-                Size = btnSize,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(45, 45, 45),
-                ForeColor = Color.White,
-                UseVisualStyleBackColor = false,
-                Font = yaheiBold12,
-                Margin = btnMargin
-            };
-            mixButton.FlatAppearance.BorderSize = 2;
-            mixButton.FlatAppearance.BorderColor = Color.FromArgb(255, 193, 7); // Yellow for Mix
-            mixButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
-            mixButton.Click += MixButton_Click;
             testButton = new Button
             {
                 Text = "Test",
@@ -233,7 +295,7 @@ namespace SocialNetworkArmy.Forms
             buttonsPanel.Controls.Add(publishButton);
             buttonsPanel.Controls.Add(dmButton);
             buttonsPanel.Controls.Add(downloadButton);
-            buttonsPanel.Controls.Add(mixButton);
+            buttonsPanel.Controls.Add(scheduleButton);
             buttonsPanel.Controls.Add(testButton);
             buttonsPanel.Controls.Add(stopButton);
             // Proxy Status Label (added to buttonsPanel, to the right, adjusted margin for better fit)
@@ -355,6 +417,7 @@ saveData: false
 delete navigator.proto.webdriver;
 ");
                 };
+                webView.NavigationCompleted += WebView_NavigationCompleted;
                 webView.CoreWebView2.Navigate("https://www.instagram.com/");
                 await Task.Delay(800);
                 webView.Focus();
@@ -365,7 +428,6 @@ delete navigator.proto.webdriver;
                 publishService = new PublishService(webView, logTextBox, this);
                 dmService = new DirectMessageService(webView, logTextBox, profile, this);
                 downloadService = new DownloadInstagramService(webView, logTextBox, profile, this);
-                mixService = new MixService(webView, logTextBox, profile, this);
                 testService = new TestService(webView, logTextBox, profile, this);
                 try { await monitoringService.TestFingerprintAsync(webView); } catch { /* ignore */ }
                 if (!string.IsNullOrEmpty(proxyUsed))
@@ -378,6 +440,44 @@ delete navigator.proto.webdriver;
             catch (Exception ex)
             {
                 logTextBox.AppendText($"[ERROR] WebView2 initialization error: {ex.Message}\r\n");
+            }
+        }
+        private void WebView_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            if (webView != null && webView.Source != null)
+            {
+                urlTextBox.Text = webView.Source.ToString();
+            }
+        }
+        private void BackButton_Click(object sender, EventArgs e)
+        {
+            if (webView.CoreWebView2.CanGoBack)
+            {
+                webView.CoreWebView2.GoBack();
+            }
+        }
+        private void ForwardButton_Click(object sender, EventArgs e)
+        {
+            if (webView.CoreWebView2.CanGoForward)
+            {
+                webView.CoreWebView2.GoForward();
+            }
+        }
+        private void RefreshButton_Click(object sender, EventArgs e)
+        {
+            webView.CoreWebView2.Reload();
+        }
+        private void UrlTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                string url = urlTextBox.Text;
+                if (!url.StartsWith("http://") && !url.StartsWith("https://"))
+                {
+                    url = "https://" + url;
+                }
+                webView.CoreWebView2.Navigate(url);
+                e.SuppressKeyPress = true;
             }
         }
         private async Task<string> GetPublicIpAsync()
@@ -591,7 +691,6 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             publishButton.Enabled = false;
             dmButton.Enabled = false;
             downloadButton.Enabled = false;
-            mixButton.Enabled = false;
             testButton.Enabled = false;
             logTextBox.AppendText($"Starting {actionName}...\r\n");
             if (webView?.CoreWebView2 != null)
@@ -625,7 +724,6 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             publishButton.Enabled = true;
             dmButton.Enabled = true;
             downloadButton.Enabled = true;
-            mixButton.Enabled = true;
             testButton.Enabled = true;
             logTextBox.AppendText("Script stopped successfully.\r\n");
         }
@@ -697,15 +795,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 logTextBox.AppendText($"[Download] ERROR: {ex.Message}\r\n");
             }
         }
-        private async void MixButton_Click(object sender, EventArgs e)
-        {
-            if (mixService == null)
-            {
-                logTextBox.AppendText("[INIT] Browser initializing... retry in 1-2s.\r\n");
-                return;
-            }
-            await mixService.RunAsync();
-        }
+
         private async void TestButton_Click(object sender, EventArgs e)
         {
             if (testService == null)
