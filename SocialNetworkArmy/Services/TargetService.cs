@@ -250,8 +250,17 @@ namespace SocialNetworkArmy.Services
                 try
                 {
                     // 1) Charger la liste des cibles
-                    var targetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "targets.txt");
+                    // 1) Charger la liste des cibles
+                    var dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+                    Directory.CreateDirectory(dataDir);
+
+                    var targetsPath = Path.Combine(dataDir, "targets.txt");
+                    var doneTargetsPath = Path.Combine(dataDir, "done_targets.txt");
+
                     var targets = new System.Collections.Generic.List<string>();
+                    var doneTargets = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    // Charger les targets.txt
                     if (File.Exists(targetsPath))
                     {
                         targets = File.ReadAllLines(targetsPath)
@@ -263,9 +272,29 @@ namespace SocialNetworkArmy.Services
                     {
                         logTextBox.AppendText($"Fichier targets.txt non trouvé à {targetsPath} !\r\n");
                     }
-                    if (!targets.Any())
+
+                    // Charger done_targets.txt
+                    if (File.Exists(doneTargetsPath))
                     {
-                        logTextBox.AppendText("Aucun target trouvé dans targets.txt !\r\n");
+                        doneTargets = new System.Collections.Generic.HashSet<string>(
+                            File.ReadAllLines(doneTargetsPath)
+                                .Where(line => !string.IsNullOrWhiteSpace(line))
+                                .Select(line => line.Trim()),
+                            StringComparer.OrdinalIgnoreCase
+                        );
+                    }
+                    else
+                    {
+                        File.Create(doneTargetsPath).Close();
+                        logTextBox.AppendText($"Fichier done_targets.txt créé à {doneTargetsPath}.\r\n");
+                    }
+
+                    // Filtrer les targets déjà traités
+                    var pendingTargets = targets.Where(t => !doneTargets.Contains(t)).ToList();
+
+                    if (!pendingTargets.Any())
+                    {
+                        logTextBox.AppendText("Aucun nouveau target à traiter — tous sont déjà dans done_targets.txt.\r\n");
                         form.StopScript();
                         return;
                     }
@@ -1445,6 +1474,16 @@ namespace SocialNetworkArmy.Services
                         await CloseReelModalAsync(lang, token);
 
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");
+                        try
+                        {
+                            File.AppendAllText(doneTargetsPath, currentTarget + Environment.NewLine);
+                            logTextBox.AppendText($"[DONE_TARGETS] Ajouté à done_targets.txt : {currentTarget}\r\n");
+                        }
+                        catch (Exception ex)
+                        {
+                            logTextBox.AppendText($"[DONE_TARGETS ERROR] Impossible d'ajouter {currentTarget} : {ex.Message}\r\n");
+                        }
+
                         await RandomHumanPauseAsync(token, 5000, 15000, 0.1, 30000, 120000);
                     }
 

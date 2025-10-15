@@ -28,7 +28,9 @@ namespace SocialNetworkArmy.Services
         private string instagramCookies;
         private string csrfToken;
         private string userId;
-        private string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+        private string userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
+        private readonly HttpClientHandler httpHandler;
+        private readonly SemaphoreSlim _navigationLock = new SemaphoreSlim(1, 1);
 
         public DownloadInstagramService(WebView2 webView, TextBox logTextBox, Profile profile, Form parentForm)
         {
@@ -36,12 +38,28 @@ namespace SocialNetworkArmy.Services
             this.logTextBox = logTextBox;
             this.profile = profile;
             this.parentForm = parentForm;
-            this.httpClient = new HttpClient();
+
+            this.httpHandler = new HttpClientHandler
+            {
+                UseCookies = false,
+                AllowAutoRedirect = true,
+                MaxAutomaticRedirections = 5,
+                AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
+            };
+
+            this.httpClient = new HttpClient(httpHandler);
             this.httpClient.DefaultRequestHeaders.Add("User-Agent", userAgent);
             this.httpClient.DefaultRequestHeaders.Add("x-ig-app-id", "936619743392459");
             this.httpClient.DefaultRequestHeaders.Add("Accept-Language", "en-US,en;q=0.9");
             this.httpClient.DefaultRequestHeaders.Add("Accept", "*/*");
             this.httpClient.Timeout = TimeSpan.FromMinutes(10);
+        }
+
+        public void Dispose()
+        {
+            httpClient?.Dispose();
+            httpHandler?.Dispose();
+            _navigationLock?.Dispose();
         }
 
         public async Task RunAsync()
@@ -65,7 +83,7 @@ namespace SocialNetworkArmy.Services
                         using var dialog = new FolderBrowserDialog
                         {
                             Description = "Choisir dossier de destination",
-                            SelectedPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) // Default Desktop
+                            SelectedPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
                         };
                         if (dialog.ShowDialog() != DialogResult.OK || string.IsNullOrWhiteSpace(dialog.SelectedPath))
                         {
@@ -73,11 +91,6 @@ namespace SocialNetworkArmy.Services
                             return;
                         }
                         destinationFolder = dialog.SelectedPath;
-                    }
-                    catch (System.Runtime.InteropServices.SEHException ex) // Catch Win32 bug
-                    {
-                        Logger.LogError("Erreur dialog dossier (SEH): " + ex.Message + ". Utilise default: Desktop.");
-                        destinationFolder = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
                     }
                     catch (Exception ex)
                     {
@@ -115,6 +128,9 @@ namespace SocialNetworkArmy.Services
                 await InitializeSessionAsync();
 
                 var token = instagramBotForm.GetCancellationToken();
+                await webView.CoreWebView2.ExecuteScriptAsync("location.reload()");
+                await Task.Delay(2000);
+                await InitializeSessionAsync();
 
                 foreach (var username in targets)
                 {
@@ -183,6 +199,7 @@ namespace SocialNetworkArmy.Services
                 Log($"@{username}");
                 string userFolder = Path.Combine(baseFolder, username);
                 Directory.CreateDirectory(userFolder);
+                string failedLogPath = Path.Combine(userFolder, "failed.txt");
 
                 await NavigateToUrlAsync($"https://www.instagram.com/{username}/");
                 await Task.Delay(3000, token);
@@ -196,6 +213,9 @@ namespace SocialNetworkArmy.Services
                 }
 
                 Log($"  {posts.Count} posts détectés");
+
+                // AJOUT : Attendre un peu avant de commencer les téléchargements
+                await Task.Delay(2000, token);
 
                 int success = 0;
                 for (int i = 0; i < posts.Count; i++)
@@ -231,7 +251,7 @@ namespace SocialNetworkArmy.Services
             var posts = new HashSet<(string, string)>();
             int previousCount = 0;
             int noNewCount = 0;
-            const int maxNoNew = 5;
+            const int maxNoNew = 9;
             int scrollAttempts = 0;
             const int maxScrolls = 100;
 
@@ -240,23 +260,38 @@ namespace SocialNetworkArmy.Services
                 while (scrollAttempts < maxScrolls)
                 {
                     var script = @"
-                        JSON.stringify(
-                            Array.from(document.querySelectorAll('a[href*=""/p/""], a[href*=""/reel/""]'))
-                                .map(a => a.href)
-                        )
-                    ";
+                JSON.stringify(
+                    Array.from(document.querySelectorAll('a[href*=""/p/""], a[href*=""/reel/""]'))
+                        .map(a => ({
+                            href: a.href,
+                            hasVideoIcon: a.querySelector('svg[aria-label*=""Clip""], svg[aria-label*=""Video""], svg[aria-label*=""Reel""]') !== null,
+                            hasReelClass: a.className.includes('reel') || a.href.includes('/reel/')
+                        }))
+                )
+            ";
 
                     var result = await webView.CoreWebView2.ExecuteScriptAsync(script);
-                    var urls = JArray.Parse(result.Trim('"').Replace("\\\"", "\""));
+                    var items = JArray.Parse(result.Trim('"').Replace("\\\"", "\""));
 
-                    foreach (var url in urls)
+                    foreach (var item in items)
                     {
-                        var match = Regex.Match(url.ToString(), @"/(p|reel)/([A-Za-z0-9_-]+)");
+                        string href = item["href"]?.ToString();
+                        bool hasVideoIcon = item["hasVideoIcon"]?.ToObject<bool>() ?? false;
+                        bool hasReelClass = item["hasReelClass"]?.ToObject<bool>() ?? false;
+
+                        var match = Regex.Match(href, @"/(p|reel)/([A-Za-z0-9_-]+)");
                         if (match.Success)
                         {
-                            string type = match.Groups[1].Value;
+                            string urlType = match.Groups[1].Value;
                             string shortcode = match.Groups[2].Value;
-                            posts.Add((shortcode, type));
+                            string finalType = urlType;
+
+                            if (urlType == "p" && (hasVideoIcon || hasReelClass))
+                            {
+                                finalType = "reel";
+                            }
+
+                            posts.Add((shortcode, finalType));
                         }
                     }
 
@@ -275,491 +310,243 @@ namespace SocialNetworkArmy.Services
                     }
 
                     previousCount = posts.Count;
-
+                    await ExecJsAsync("performance.clearResourceTimings();", token);
                     await webView.CoreWebView2.ExecuteScriptAsync("window.scrollBy(0, window.innerHeight * 1.5);");
                     await Task.Delay(1500, token);
-
-                    var endScript = @"
-                        (function() {
-                            var hasEnd = document.body.innerHTML.includes('Fin des publications') || 
-                                         document.body.innerHTML.includes('No more posts');
-                            var hasProgress = document.querySelector('[role=""progressbar""]') !== null;
-                            var atBottom = (window.innerHeight + window.scrollY) >= document.body.scrollHeight - 100;
-                            return hasEnd || (!hasProgress && atBottom);
-                        })()
-                    ";
-
-                    var isEnd = await webView.CoreWebView2.ExecuteScriptAsync(endScript);
-                    if (bool.TryParse(isEnd.Trim('"'), out bool endReached) && endReached)
-                    {
-                        break;
-                    }
 
                     scrollAttempts++;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Log($"Erreur extraction shortcodes: {ex.Message}");
+            }
 
             return posts.ToList();
         }
 
+      
+
         private async Task<bool> DownloadPostByShortcodeAsync(string shortcode, string postType, string userFolder, CancellationToken token)
         {
+            string failedLogPath = Path.Combine(userFolder, "failed.txt");
+
+            void LogFailure(string reason)
+            {
+                try
+                {
+                    File.AppendAllText(failedLogPath, $"{shortcode} | {postType} | {reason}{Environment.NewLine}");
+                }
+                catch (Exception ex)
+                {
+                    Log($"  [FAILED_LOG_ERROR] Impossible d'écrire dans failed.txt : {ex.Message}");
+                }
+            }
             try
             {
                 JObject postData = null;
                 string successMethod = null;
+                bool isReel = postType == "reel";
 
-                // STRATÉGIE 1: GraphQL direct (plus rapide, pas de navigation)
-                try
+                // ============================================
+                // STRATÉGIE 1: Performance API améliorée
+                // ============================================
+                if (isReel || postType == "p")
                 {
-                    postData = await TryGraphQLFetchAsync(shortcode, token);
-                    if (postData != null)
+                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token))
                     {
-                        successMethod = "GraphQL Direct";
-                        Log($"  [{shortcode}] ✓ Méthode: {successMethod}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log($"  [{shortcode}] GraphQL Direct échoué: {ex.Message}");
-                }
-
-                // STRATÉGIE 2: Alternative GraphQL (query_hash)
-                if (postData == null)
-                {
-                    try
-                    {
-                        postData = await TryAlternativeGraphQLAsync(shortcode, token);
-                        if (postData != null)
+                        cts.CancelAfter(TimeSpan.FromSeconds(15));
+                        try
                         {
-                            successMethod = "Alternative GraphQL";
-                            Log($"  [{shortcode}] ✓ Méthode: {successMethod}");
+                            string postUrl = $"https://www.instagram.com/{postType}/{shortcode}/";
+                            await NavigateToUrlAsync(postUrl);
+
+                            // Attendre le chargement
+                            await Task.Delay(3000, cts.Token);
+
+                            // Forcer le chargement de la vidéo
+                            await ExecJsAsync("document.querySelector('video')?.play();", cts.Token);
+                            await Task.Delay(3000, cts.Token);
+
+                            // --- Nouveau script : renvoie toutes les URLs MP4 trouvées ---
+                            string rawVideoListJson = await ExecJsAsync(@"
+(function() {
+  try {
+    const vids = performance.getEntriesByType('resource')
+      .filter(r => r.name.includes('.mp4') && (r.name.includes('cdninstagram') || r.name.includes('fbcdn')))
+      .map(r => r.name);
+    return JSON.stringify(vids);
+  } catch(e) {
+    return '[]';
+  }
+})();
+", cts.Token);
+
+                            string videoUrl = null;
+
+                            // --- Parsing JSON et sélection de la meilleure URL ---
+                            if (!string.IsNullOrEmpty(rawVideoListJson))
+                            {
+                                try
+                                {
+                                    var list = JsonConvert.DeserializeObject<List<string>>(rawVideoListJson);
+                                    if (list != null && list.Count > 0)
+                                    {
+                                        // Prioriser la plus longue URL (souvent la vraie vidéo principale)
+                                        string bestUrl = list.OrderByDescending(u => u.Length).FirstOrDefault();
+
+                                        if (IsValidVideoUrl(bestUrl))
+                                        {
+                                            videoUrl = CleanVideoUrl(bestUrl);
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log($"[PERF_PARSE] Erreur parsing vidéo: {ex.Message}");
+                                }
+                            }
+
+                            // --- Vérification et téléchargement ---
+                            if (!string.IsNullOrEmpty(videoUrl))
+                            {
+                                postData = new JObject
+                                {
+                                    ["__typename"] = "XDTGraphVideo",
+                                    ["video_url"] = videoUrl,
+                                    ["dimensions"] = new JObject { ["width"] = 720, ["height"] = 1280 }
+                                };
+
+                                successMethod = "Performance API";
+                                Log($"  [{shortcode}] ✓ {successMethod}");
+                                return await DownloadMediaFromPostDataAsync(shortcode, postType, postData, userFolder, token);
+                            }
+                        }
+                        catch
+                        {
+                            // Ignorer les erreurs silencieuses sur cette stratégie
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Log($"  [{shortcode}] Alternative GraphQL échoué: {ex.Message}");
-                    }
                 }
-                // STRATÉGIE 2.5: Raw HTML Extraction (direct regex on HTML)
-                if (postData == null)
+
+
+                // ============================================
+                // STRATÉGIE 2: GraphQL Direct (pas de navigation supplémentaire)
+                // ============================================
+                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token))
                 {
+                    cts.CancelAfter(TimeSpan.FromSeconds(5));
                     try
                     {
-                        postData = await TryRawHTMLExtractionAsync(shortcode, postType, token);
-                        if (postData != null)
+                        postData = await TryGraphQLFetchAsync(shortcode, cts.Token);
+                        if (postData != null && ValidatePostData(postData, isReel))
                         {
-                            successMethod = "Raw HTML Extraction";
-                            Log($"  [{shortcode}] ✓ Méthode: {successMethod}");
+                            successMethod = "GraphQL";
+                            Log($"  [{shortcode}] ✓ {successMethod}");
+                            return await DownloadMediaFromPostDataAsync(shortcode, postType, postData, userFolder, token);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Log($"  [{shortcode}] Raw HTML Extraction échoué: {ex.Message}");
-                    }
+                    catch { }
                 }
-                // STRATÉGIE 3: Extraction via WebView (navigation sur le post)
-                if (postData == null)
+
+                // ============================================
+                // STRATÉGIE 3: Raw HTML Extraction (pas de navigation supplémentaire)
+                // ============================================
+                using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token))
+                {
+                    cts.CancelAfter(TimeSpan.FromSeconds(4));
+                    try
+                    {
+                        postData = await TryRawHTMLExtractionAsync(shortcode, postType, cts.Token);
+                        if (postData != null && ValidatePostData(postData, isReel))
+                        {
+                            successMethod = "Raw HTML";
+                            Log($"  [{shortcode}] ✓ {successMethod}");
+                            return await DownloadMediaFromPostDataAsync(shortcode, postType, postData, userFolder, token);
+                        }
+                    }
+                    catch { }
+                }
+                // STRATÉGIE 4: WebView Extraction (ancien code)
+                if (postData == null && !isReel)
                 {
                     try
                     {
                         postData = await TryDirectWebViewExtractionAsync(shortcode, postType, token);
-                        if (postData != null)
+                        if (postData != null && ValidatePostData(postData, isReel))
                         {
                             successMethod = "WebView Extraction";
-                            Log($"  [{shortcode}] ✓ Méthode: {successMethod}");
-                        }
-                        else
-                        {
-                            Log($"  [{shortcode}] WebView Extraction: aucune donnée trouvée");
+                            Log($"  [{shortcode}] ✓ {successMethod}");
+                            return await DownloadMediaFromPostDataAsync(shortcode, postType, postData, userFolder, token);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Log($"  [{shortcode}] WebView Extraction échoué: {ex.Message}");
-                    }
+                    catch { }
                 }
 
-                // STRATÉGIE 4: HTML scraping via HttpClient
+                // ============================================
+                // STRATÉGIE 5: HTML Fetch via HttpClient
+                // ============================================
                 if (postData == null)
                 {
-                    try
+                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token))
                     {
-                        string url = $"https://www.instagram.com/{postType}/{shortcode}/";
-                        postData = await TryHTMLFetchAsync(url, token);
-                        if (postData != null)
+                        cts.CancelAfter(TimeSpan.FromSeconds(5));
+                        try
                         {
-                            successMethod = "HTML Fetch";
-                            Log($"  [{shortcode}] ✓ Méthode: {successMethod}");
+                            postData = await TryHTMLFetchAsync($"https://www.instagram.com/{postType}/{shortcode}/", cts.Token);
+                            if (postData != null && ValidatePostData(postData, isReel))
+                            {
+                                Log($"  [{shortcode}] ✓ HTML Fetch");
+                                return await DownloadMediaFromPostDataAsync(shortcode, postType, postData, userFolder, token);
+                            }
                         }
-                        else
-                        {
-                            Log($"  [{shortcode}] HTML Fetch: aucune donnée trouvée");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"  [{shortcode}] HTML Fetch échoué: {ex.Message}");
+                        catch { }
                     }
                 }
-
-                // STRATÉGIE 5: Embedded endpoint (undocumented)
-                if (postData == null)
-                {
-                    try
-                    {
-                        postData = await TryEmbedEndpointAsync(shortcode, token);
-                        if (postData != null)
-                        {
-                            successMethod = "Embed Endpoint";
-                            Log($"  [{shortcode}] ✓ Méthode: {successMethod}");
-                        }
-                        else
-                        {
-                            Log($"  [{shortcode}] Embed Endpoint: aucune donnée trouvée");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"  [{shortcode}] Embed Endpoint échoué: {ex.Message}");
-                    }
-                }
-
-                // STRATÉGIE 6: Last resort - essayer de capturer via Network interception
-                if (postData == null)
-                {
-                    try
-                    {
-                        postData = await TryNetworkInterceptionAsync(shortcode, postType, token);
-                        if (postData != null)
-                        {
-                            successMethod = "Network Interception";
-                            Log($"  [{shortcode}] ✓ Méthode: {successMethod}");
-                        }
-                        else
-                        {
-                            Log($"  [{shortcode}] Network Interception: aucune donnée trouvée");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"  [{shortcode}] Network Interception échoué: {ex.Message}");
-                    }
-                }
-
-                // NEW STRATÉGIE 7: Try direct URL access to check if post exists
-                if (postData == null)
-                {
-                    try
-                    {
-                        string url = $"https://www.instagram.com/{postType}/{shortcode}/";
-                        var response = await httpClient.GetAsync(url, token);
-
-                        if (response.StatusCode == HttpStatusCode.NotFound)
-                        {
-                            Log($"  [{shortcode}] ✗ Post supprimé ou introuvable (404)");
-                            return false;
-                        }
-                        else if (response.StatusCode == HttpStatusCode.Forbidden)
-                        {
-                            Log($"  [{shortcode}] ✗ Accès refusé (403) - Post privé ou restreint");
-                            return false;
-                        }
-                        else if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                        {
-                            Log($"  [{shortcode}] ✗ Rate limit atteint (429) - Trop de requêtes");
-                            return false;
-                        }
-                        else
-                        {
-                            Log($"  [{shortcode}] ⚠ Post existe (HTTP {(int)response.StatusCode}) mais données non extraites");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"  [{shortcode}] Vérification URL échouée: {ex.Message}");
-                    }
-                }
-
-                if (postData == null)
-                {
-                    Log($"  [{shortcode}] ✗ Échec final - Toutes les méthodes ont échoué");
-                    return false;
-                }
-
-                return await DownloadMediaFromPostDataAsync(shortcode, postType, postData, userFolder, token);
-
+                // Échec
+               LogFailure($"  [{shortcode}] Toutes stratégies échouées");
+                return false;
             }
             catch (Exception ex)
             {
-                Log($"  [{shortcode}] Erreur globale: {ex.Message}");
+                LogFailure(ex.Message);
                 return false;
             }
         }
-
-        private async Task<JObject> TryGraphQLFetchAsync(string shortcode, CancellationToken token)
+        private string CleanVideoUrl(string url)
         {
+            if (string.IsNullOrEmpty(url))
+                return url;
+
             try
             {
-                const string docId = "10015901848480474";
-                string lsd = !string.IsNullOrEmpty(csrfToken) ? csrfToken : "AVqbxe3J_YA";
+                // Nettoyer les caractères encodés
+                url = url
+                    .Replace("\\u0026", "&")
+                    .Replace(@"\/", "/")
+                    .Replace("&amp;", "&")
+                    .Trim();
 
-                var variables = new { shortcode = shortcode };
-                string variablesJson = JsonConvert.SerializeObject(variables);
+                // IMPORTANT: NE PAS supprimer tous les params !
+                // On garde les params d'authentification Instagram (efg, _nc_ht, _nc_cat, etc.)
+                // On supprime SEULEMENT les byte ranges qui causent des téléchargements partiels
+                var uri = new Uri(url);
+                var query = HttpUtility.ParseQueryString(uri.Query);
 
-                var formData = new Dictionary<string, string>
-                {
-                    { "variables", variablesJson },
-                    { "doc_id", docId }
-                };
+                // Supprimer UNIQUEMENT les params de range
+                query.Remove("bytestart");
+                query.Remove("byteend");
 
-                var request = new HttpRequestMessage(HttpMethod.Post, "https://www.instagram.com/api/graphql");
-                request.Content = new FormUrlEncodedContent(formData);
+                // Reconstruire l'URL avec les params nécessaires
+                url = new UriBuilder(uri) { Query = query.ToString() }.Uri.ToString();
 
-                var headers = new Dictionary<string, string>
-                {
-                    { "x-fb-lsd", lsd },
-                    { "x-asbd-id", "129477" },
-                    { "sec-fetch-site", "same-origin" },
-                    { "sec-fetch-mode", "cors" },
-                    { "sec-fetch-dest", "empty" },
-                    { "referer", $"https://www.instagram.com/p/{shortcode}/" }
-                };
-
-                foreach (var header in headers)
-                {
-                    if (!httpClient.DefaultRequestHeaders.Contains(header.Key))
-                        httpClient.DefaultRequestHeaders.Add(header.Key, header.Value);
-                }
-
-                var response = await httpClient.SendAsync(request, token);
-
-                // Log HTTP error details
-                if (!response.IsSuccessStatusCode)
-                {
-                    string errorBody = await response.Content.ReadAsStringAsync();
-                    Log($"  [{shortcode}] GraphQL HTTP {(int)response.StatusCode}: {errorBody.Substring(0, Math.Min(100, errorBody.Length))}");
-                    return null;
-                }
-
-                string responseString = await response.Content.ReadAsStringAsync();
-
-                // Check for empty or error responses
-                if (string.IsNullOrWhiteSpace(responseString))
-                {
-                    Log($"  [{shortcode}] GraphQL: réponse vide");
-                    return null;
-                }
-
-                JObject data = JObject.Parse(responseString);
-
-                // Check for GraphQL errors
-                if (data["errors"] != null)
-                {
-                    Log($"  [{shortcode}] GraphQL errors: {data["errors"].ToString()}");
-                    return null;
-                }
-
-                // ENHANCED: Try multiple response structures
-                JObject media = null;
-
-                // Structure 1: data.xdt_shortcode_media (most common)
-                media = data["data"]?["xdt_shortcode_media"] as JObject;
-
-                // Structure 2: data.items[0] (carousel/collection posts)
-                if (media == null)
-                {
-                    var items = data["data"]?["items"] as JArray;
-                    if (items != null && items.Count > 0)
-                    {
-                        media = items[0] as JObject;
-                        if (media != null)
-                        {
-                            Log($"  [{shortcode}] GraphQL: données trouvées dans items[0]");
-                        }
-                    }
-                }
-
-                // Structure 3: data.xdt_api__v1__media__shortcode__web_info.items[0]
-                if (media == null)
-                {
-                    var webInfo = data["data"]?["xdt_api__v1__media__shortcode__web_info"];
-                    if (webInfo != null)
-                    {
-                        var webInfoItems = webInfo["items"] as JArray;
-                        if (webInfoItems != null && webInfoItems.Count > 0)
-                        {
-                            media = webInfoItems[0] as JObject;
-                            if (media != null)
-                            {
-                                Log($"  [{shortcode}] GraphQL: données trouvées dans xdt_api__v1__media__shortcode__web_info.items[0]");
-                            }
-                        }
-                    }
-                }
-
-                // Structure 4: Recursively search entire response for media objects
-                if (media == null)
-                {
-                    media = FindPostDataRecursive(data);
-                    if (media != null)
-                    {
-                        Log($"  [{shortcode}] GraphQL: données trouvées via recherche récursive");
-                    }
-                }
-
-                if (media == null)
-                {
-                    // Save raw response for debugging
-                    string debugFile = Path.Combine(Path.GetTempPath(), $"ig_graphql_debug_{shortcode}.json");
-                    File.WriteAllText(debugFile, data.ToString(Formatting.Indented));
-                    Log($"  [{shortcode}] GraphQL: xdt_shortcode_media null - réponse sauvegardée: {debugFile}");
-                }
-
-                return media;
-            }
-            catch (Exception ex)
-            {
-                Log($"  [{shortcode}] GraphQL exception: {ex.GetType().Name} - {ex.Message}");
-                return null;
-            }
-        }
-
-        private async Task<JObject> TryAlternativeGraphQLAsync(string shortcode, CancellationToken token)
-        {
-            try
-            {
-                const string queryHash = "9f8827793ef34641b2fb195d4d41151c";
-
-                var variables = new { shortcode = shortcode };
-                string variablesJson = JsonConvert.SerializeObject(variables);
-
-                string requestUrl = $"https://www.instagram.com/graphql/query/?query_hash={queryHash}&variables={Uri.EscapeDataString(variablesJson)}";
-
-                var response = await httpClient.GetAsync(requestUrl, token);
-
-                if (!response.IsSuccessStatusCode)
-                    return null;
-
-                string responseString = await response.Content.ReadAsStringAsync();
-                JObject data = JObject.Parse(responseString);
-
-                return data["data"]?["shortcode_media"] as JObject;
+                return url;
             }
             catch
             {
-                return null;
+                return url;
             }
         }
-
-        private async Task<JObject> TryRawHTMLExtractionAsync(string shortcode, string postType, CancellationToken token)
-        {
-            try
-            {
-                string url = $"https://www.instagram.com/{postType}/{shortcode}/";
-
-                var response = await httpClient.GetAsync(url, token);
-                if (!response.IsSuccessStatusCode)
-                    return null;
-
-                string html = await response.Content.ReadAsStringAsync();
-
-                // Pattern 1: Look for video_url directly in HTML
-                var videoMatch = Regex.Match(html, @"""video_url""\s*:\s*""([^""]+)""");
-                if (videoMatch.Success)
-                {
-                    string videoUrl = videoMatch.Groups[1].Value.Replace(@"\u0026", "&");
-
-                    // Try to get dimensions
-                    var widthMatch = Regex.Match(html, @"""video_width""\s*:\s*(\d+)");
-                    var heightMatch = Regex.Match(html, @"""video_height""\s*:\s*(\d+)");
-
-                    int width = widthMatch.Success ? int.Parse(widthMatch.Groups[1].Value) : 0;
-                    int height = heightMatch.Success ? int.Parse(heightMatch.Groups[1].Value) : 0;
-
-                    return new JObject
-                    {
-                        ["__typename"] = "XDTGraphVideo",
-                        ["video_url"] = videoUrl,
-                        ["dimensions"] = new JObject { ["width"] = width, ["height"] = height }
-                    };
-                }
-
-                // Pattern 2: Look for display_url (images)
-                var imageMatch = Regex.Match(html, @"""display_url""\s*:\s*""([^""]+)""");
-                if (imageMatch.Success)
-                {
-                    string imageUrl = imageMatch.Groups[1].Value.Replace(@"\u0026", "&");
-
-                    var widthMatch = Regex.Match(html, @"""dimensions""\s*:\s*\{\s*""height""\s*:\s*(\d+)\s*,\s*""width""\s*:\s*(\d+)");
-                    int width = widthMatch.Success ? int.Parse(widthMatch.Groups[2].Value) : 0;
-                    int height = widthMatch.Success ? int.Parse(widthMatch.Groups[1].Value) : 0;
-
-                    return new JObject
-                    {
-                        ["__typename"] = "XDTGraphImage",
-                        ["display_url"] = imageUrl,
-                        ["dimensions"] = new JObject { ["width"] = width, ["height"] = height }
-                    };
-                }
-
-                // Pattern 3: Check for carousel (multiple images/videos)
-                if (html.Contains("edge_sidecar_to_children"))
-                {
-                    var carouselMatches = Regex.Matches(html, @"""(video_url|display_url)""\s*:\s*""([^""]+)""");
-                    if (carouselMatches.Count > 0)
-                    {
-                        var edges = new JArray();
-
-                        foreach (Match match in carouselMatches)
-                        {
-                            bool isVideo = match.Groups[1].Value == "video_url";
-                            string mediaUrl = match.Groups[2].Value.Replace(@"\u0026", "&");
-
-                            edges.Add(new JObject
-                            {
-                                ["node"] = new JObject
-                                {
-                                    ["__typename"] = isVideo ? "XDTGraphVideo" : "XDTGraphImage",
-                                    [match.Groups[1].Value] = mediaUrl,
-                                    ["dimensions"] = new JObject { ["width"] = 1080, ["height"] = 1080 }
-                                }
-                            });
-                        }
-
-                        if (edges.Count > 0)
-                        {
-                            return new JObject
-                            {
-                                ["__typename"] = "XDTGraphSidecar",
-                                ["edge_sidecar_to_children"] = new JObject { ["edges"] = edges }
-                            };
-                        }
-                    }
-                }
-
-                // Pattern 4: Try to find og:image meta tag as last resort
-                var ogImageMatch = Regex.Match(html, @"<meta\s+property=""og:image""\s+content=""([^""]+)""");
-                if (ogImageMatch.Success)
-                {
-                    string imageUrl = ogImageMatch.Groups[1].Value;
-                    return new JObject
-                    {
-                        ["__typename"] = "XDTGraphImage",
-                        ["display_url"] = imageUrl,
-                        ["dimensions"] = new JObject { ["width"] = 1080, ["height"] = 1080 }
-                    };
-                }
-
-                return null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         private async Task<JObject> TryDirectWebViewExtractionAsync(string shortcode, string postType, CancellationToken token)
         {
             string originalUrl = null;
@@ -769,100 +556,49 @@ namespace SocialNetworkArmy.Services
                 string postUrl = $"https://www.instagram.com/{postType}/{shortcode}/";
 
                 await NavigateToUrlAsync(postUrl);
-
-                // Attendre que la page charge complètement
                 await Task.Delay(4000, token);
 
-                // Forcer le rendu en scrollant légèrement
-                await webView.CoreWebView2.ExecuteScriptAsync("window.scrollBy(0, 100);");
-                await Task.Delay(500, token);
-
                 var extractScript = @"
-                    (function() {
-                        try
-                            {
-                                // Méthode 1: Chercher dans les scripts application/json
-                                var scripts = document.querySelectorAll('script[type=""application/json""]');
-                                for (var i = 0; i < scripts.length; i++) {
-                                    try
-                                        {
-                                            var data = JSON.parse(scripts[i].textContent);
-                                            
-                                            function deepSearch(obj, depth)
-                                            {
-                                                if (!obj || typeof obj !== 'object' || depth > 15) return null;
-                                                
-                                                if (obj.__typename) {
-                                                    var tn = obj.__typename;
-                                                    if ((tn.includes('Graph') || tn.includes('XDT')) && 
-                                                        (obj.display_url || obj.video_url || obj.edge_sidecar_to_children)) {
-                                                        return obj;
-                                                    }
-                                                }
-                                                
-                                                if (obj.shortcode_media) return obj.shortcode_media;
-                                                if (obj.xdt_shortcode_media) return obj.xdt_shortcode_media;
-                                                
-                                                for (var key in obj) {
-                                                    if (obj.hasOwnProperty(key)) {
-                                                        var found = deepSearch(obj[key], depth + 1);
-                                                        if (found) return found;
-                                                    }
-                                                }
-                                                return null;
-                                            }
-                                            
-                                            var result = deepSearch(data, 0);
-                                            if (result) return JSON.stringify(result);
-                                        } catch (e) {}
-                                }
+            (function() {
+                try {
+                    var scripts = document.querySelectorAll('script[type=""application/json""]');
+                    for (var i = 0; i < scripts.length; i++) {
+                        try {
+                            var data = JSON.parse(scripts[i].textContent);
+                            
+                            function deepSearch(obj, depth) {
+                                if (!obj || typeof obj !== 'object' || depth > 15) return null;
                                 
-                                // Méthode 2: window.__additionalDataLoaded
-                                if (window.__additionalDataLoaded) {
-                                    for (var key in window) {
-                                        if (key.startsWith('__additionalDataLoaded')) {
-                                            try {
-                                                var result = deepSearch(window[key], 0);
-                                                if (result) return JSON.stringify(result);
-                                            } catch (e) {}
-                                        }
+                                if (obj.__typename) {
+                                    var tn = obj.__typename;
+                                    if ((tn.includes('Graph') || tn.includes('XDT')) && 
+                                        (obj.display_url || obj.video_url || obj.edge_sidecar_to_children)) {
+                                        return obj;
                                     }
                                 }
                                 
-                                // Méthode 3: Analyser tous les scripts pour trouver des patterns JSON
-                                var allScripts = document.getElementsByTagName('script');
-                                for (var i = 0; i < allScripts.length; i++) {
-                                    var text = allScripts[i].textContent;
-                                    
-                                    // Chercher shortcode_media dans le texte
-                                    if (text.includes('shortcode_media') || text.includes('xdt_shortcode_media')) {
-                                        // Essayer d'extraire le JSON autour
-                                        var patterns = [
-                                            /shortcode_media[""']?\s*:\s*({[^}]+?display_url[^}]+?})/,
-                                            /xdt_shortcode_media[""']?\s*:\s*({[^}]+?display_url[^}]+?})/,
-                                            /""__typename"":""(XDTGraph|Graph)(Image|Video|Sidecar)""[^{]*?({[^{}]+?})/
-                                        ];
-                                        
-                                        for (var p = 0; p < patterns.length; p++) {
-                                            var match = text.match(patterns[p]);
-                                            if (match) {
-                                                try {
-                                                    var extracted = match[match.length - 1];
-                                                    // Valider que c'est du JSON valide
-                                                    JSON.parse(extracted);
-                                                    return extracted;
-                                                } catch (e) {}
-                                            }
-                                        }
+                                if (obj.shortcode_media) return obj.shortcode_media;
+                                if (obj.xdt_shortcode_media) return obj.xdt_shortcode_media;
+                                
+                                for (var key in obj) {
+                                    if (obj.hasOwnProperty(key)) {
+                                        var found = deepSearch(obj[key], depth + 1);
+                                        if (found) return found;
                                     }
                                 }
-                                
-                                return null;
-                            } catch (e) {
                                 return null;
                             }
-                        })()
-                    ";
+                            
+                            var result = deepSearch(data, 0);
+                            if (result) return JSON.stringify(result);
+                        } catch (e) {}
+                    }
+                    return null;
+                } catch (e) {
+                    return null;
+                }
+            })()
+        ";
 
                 var result = await webView.CoreWebView2.ExecuteScriptAsync(extractScript);
 
@@ -881,114 +617,18 @@ namespace SocialNetworkArmy.Services
             }
             finally
             {
-                // Retour à la page d'origine
                 if (!string.IsNullOrEmpty(originalUrl))
                 {
                     try
                     {
                         await NavigateToUrlAsync(originalUrl);
-                        await Task.Delay(500, token);
                     }
                     catch { }
                 }
             }
         }
 
-        private async Task<JObject> TryEmbedEndpointAsync(string shortcode, CancellationToken token)
-        {
-            try
-            {
-                // Instagram a un endpoint embed qui retourne parfois des données
-                string embedUrl = $"https://www.instagram.com/p/{shortcode}/embed/captioned/";
-
-                var response = await httpClient.GetAsync(embedUrl, token);
-
-                if (!response.IsSuccessStatusCode)
-                    return null;
-
-                string html = await response.Content.ReadAsStringAsync();
-
-                // Chercher les données JSON dans le HTML de l'embed
-                var patterns = new[]
-                {
-                    @"window\.__additionalDataLoaded\([^,]+,\s*({.+?})\);",
-                    @"<script type=""application/json"">(.+?)</script>",
-                    @"window\._sharedData\s*=\s*({.+?});</script>"
-                };
-
-                foreach (var pattern in patterns)
-                {
-                    var match = Regex.Match(html, pattern, RegexOptions.Singleline);
-                    if (match.Success)
-                    {
-                        try
-                        {
-                            var jsonStr = match.Groups[1].Value;
-                            var data = JObject.Parse(jsonStr);
-                            var found = FindPostDataRecursive(data);
-                            if (found != null)
-                                return found;
-                        }
-                        catch { }
-                    }
-                }
-
-                return null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        private async Task<JObject> TryNetworkInterceptionAsync(string shortcode, string postType, CancellationToken token)
-        {
-            try
-            {
-                JObject capturedData = null;
-                bool requestCompleted = false;
-
-                void NetworkResponseReceived(object sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
-                {
-                    try
-                    {
-                        var responseJson = JObject.Parse(e.ParameterObjectAsJson);
-                        var responseUrl = responseJson["response"]?["url"]?.ToString();
-
-                        if (!string.IsNullOrEmpty(responseUrl) &&
-                            (responseUrl.Contains("/graphql") || responseUrl.Contains("shortcode_media")))
-                        {
-                            // On a trouvé une requête GraphQL
-                            requestCompleted = true;
-                        }
-                    }
-                    catch { }
-                }
-
-                webView.CoreWebView2.GetDevToolsProtocolEventReceiver("Network.responseReceived").DevToolsProtocolEventReceived += NetworkResponseReceived;
-                await webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Network.enable", "{}");
-
-                string postUrl = $"https://www.instagram.com/{postType}/{shortcode}/";
-                await NavigateToUrlAsync(postUrl);
-                await Task.Delay(3000, token);
-
-                webView.CoreWebView2.GetDevToolsProtocolEventReceiver("Network.responseReceived").DevToolsProtocolEventReceived -= NetworkResponseReceived;
-                await webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Network.disable", "{}");
-
-                // Si on a capturé quelque chose, essayer de l'extraire via le script
-                if (requestCompleted)
-                {
-                    return await TryDirectWebViewExtractionAsync(shortcode, postType, token);
-                }
-
-                return null;
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
+        // Ajoutez cette méthode manquante
         private async Task<JObject> TryHTMLFetchAsync(string url, CancellationToken token)
         {
             try
@@ -1001,10 +641,10 @@ namespace SocialNetworkArmy.Services
 
                 var patterns = new[]
                 {
-                    (@"<script type=""application/json""[^>]*>(.+?)</script>", RegexOptions.Singleline),
-                    (@"window\._sharedData\s*=\s*({.+?});</script>", RegexOptions.Singleline),
-                    (@"window\.__additionalDataLoaded\([^,]+,\s*({.+?})\);", RegexOptions.Singleline)
-                };
+            (@"<script type=""application/json""[^>]*>(.+?)</script>", RegexOptions.Singleline),
+            (@"window\._sharedData\s*=\s*({.+?});</script>", RegexOptions.Singleline),
+            (@"window\.__additionalDataLoaded\([^,]+,\s*({.+?})\);", RegexOptions.Singleline)
+        };
 
                 foreach (var (pattern, options) in patterns)
                 {
@@ -1029,17 +669,265 @@ namespace SocialNetworkArmy.Services
                 return null;
             }
         }
-
-        private JObject FindPostDataRecursive(JToken token, int depth = 0)
+        // Helper pour valider les données avant téléchargement
+        private bool ValidatePostData(JObject postData, bool isReel)
         {
-            if (token == null || token.Type == JTokenType.Null || depth > 15)
+            if (postData == null) return false;
+
+            string typename = postData["__typename"]?.ToString();
+
+            if (isReel)
+            {
+                // Pour un reel, on DOIT avoir une video_url
+                bool hasVideoUrl = postData["video_url"] != null || FindVideoUrlRecursive(postData) != null;
+                if (!hasVideoUrl) return false;
+
+                // Rejeter si c'est marqué comme image
+                if (typename == "XDTGraphImage" || typename == "GraphImage") return false;
+            }
+
+            return true;
+        }
+
+        private async Task<string> ExecJsAsync(string script, CancellationToken token)
+        {
+            try
+            {
+                var result = await webView.CoreWebView2.ExecuteScriptAsync(script);
+                if (string.IsNullOrEmpty(result) || result == "null" || result == "\"\"")
+                    return null;
+
+                return result.Trim('"').Replace("\\\"", "\"").Replace("\\\\", "\\");
+            }
+            catch
+            {
                 return null;
+            }
+        }
+
+        private async Task<JObject> TryRawHTMLExtractionAsync(string shortcode, string postType, CancellationToken token)
+        {
+            try
+            {
+                string url = $"https://www.instagram.com/{postType}/{shortcode}/";
+                var response = await httpClient.GetAsync(url, token);
+                if (!response.IsSuccessStatusCode) return null;
+
+                string html = await response.Content.ReadAsStringAsync();
+
+                // Pour vidéos/reels: chercher video_url
+                var videoMatch = Regex.Match(html, @"""video_url""\s*:\s*""([^""]+)""");
+                if (videoMatch.Success)
+                {
+                    string videoUrl = videoMatch.Groups[1].Value
+                        .Replace(@"\u0026", "&")
+                        .Replace(@"\/", "/");
+
+                    if (IsValidVideoUrl(videoUrl))
+                    {
+                        return new JObject
+                        {
+                            ["__typename"] = "XDTGraphVideo",
+                            ["video_url"] = videoUrl,
+                            ["dimensions"] = new JObject { ["width"] = 640, ["height"] = 1280 }
+                        };
+                    }
+                }
+
+                // Pour images: chercher display_url
+                var imageMatch = Regex.Match(html, @"""display_url""\s*:\s*""([^""]+)""");
+                if (imageMatch.Success)
+                {
+                    string imageUrl = imageMatch.Groups[1].Value
+                        .Replace(@"\u0026", "&")
+                        .Replace(@"\/", "/");
+
+                    return new JObject
+                    {
+                        ["__typename"] = "XDTGraphImage",
+                        ["display_url"] = imageUrl,
+                        ["dimensions"] = new JObject { ["width"] = 1080, ["height"] = 1080 }
+                    };
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task<JObject> TryGraphQLFetchAsync(string shortcode, CancellationToken token)
+        {
+            try
+            {
+                const string docId = "10015901848480474";
+                string lsd = !string.IsNullOrEmpty(csrfToken) ? csrfToken : "AVqbxe3J_YA";
+
+                var variables = new { shortcode = shortcode };
+                string variablesJson = JsonConvert.SerializeObject(variables);
+
+                var formData = new Dictionary<string, string>
+                {
+                    { "variables", variablesJson },
+                    { "doc_id", docId }
+                };
+
+                var request = new HttpRequestMessage(HttpMethod.Post, "https://www.instagram.com/api/graphql");
+                request.Content = new FormUrlEncodedContent(formData);
+
+                request.Headers.TryAddWithoutValidation("x-fb-lsd", lsd);
+                request.Headers.TryAddWithoutValidation("x-asbd-id", "129477");
+                request.Headers.TryAddWithoutValidation("referer", $"https://www.instagram.com/p/{shortcode}/");
+
+                var response = await httpClient.SendAsync(request, token);
+                if (!response.IsSuccessStatusCode) return null;
+
+                string responseString = await response.Content.ReadAsStringAsync();
+                JObject data = JObject.Parse(responseString);
+
+                if (data["errors"] != null) return null;
+
+                // Chercher les données
+                JObject media = data["data"]?["xdt_shortcode_media"] as JObject;
+
+                if (media == null)
+                {
+                    var items = data["data"]?["items"] as JArray;
+                    if (items != null && items.Count > 0)
+                    {
+                        media = items[0] as JObject;
+                    }
+                }
+
+                if (media == null)
+                {
+                    media = FindPostDataRecursive(data);
+                }
+
+                return media;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private async Task<JObject> TryNetworkInterceptionAsync(string shortcode, string postType, CancellationToken token)
+        {
+            string capturedVideoUrl = null;
+
+            try
+            {
+                await webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Network.enable", "{}");
+
+                void OnResponseReceived(object sender, CoreWebView2DevToolsProtocolEventReceivedEventArgs e)
+                {
+                    try
+                    {
+                        var response = JObject.Parse(e.ParameterObjectAsJson);
+                        var url = response["response"]?["url"]?.ToString();
+                        var mimeType = response["response"]?["mimeType"]?.ToString();
+
+                        if (!string.IsNullOrEmpty(url) &&
+                            (url.Contains("cdninstagram.com") || url.Contains("fbcdn.net")) &&
+                            (mimeType?.StartsWith("video/") == true || url.Contains(".mp4")))
+                        {
+                            if (IsValidVideoUrl(url))
+                            {
+                                capturedVideoUrl = url;
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                var receiver = webView.CoreWebView2.GetDevToolsProtocolEventReceiver("Network.responseReceived");
+                receiver.DevToolsProtocolEventReceived += OnResponseReceived;
+
+                try
+                {
+                    string postUrl = $"https://www.instagram.com/{postType}/{shortcode}/";
+                    await NavigateToUrlAsync(postUrl);
+                    await Task.Delay(3000, token);
+                    await ExecJsAsync("performance.clearResourceTimings();", token);
+                    await webView.CoreWebView2.ExecuteScriptAsync("window.scrollBy(0, 500);");
+                    await Task.Delay(1000, token);
+
+                    if (!string.IsNullOrEmpty(capturedVideoUrl))
+                    {
+                        return new JObject
+                        {
+                            ["__typename"] = "XDTGraphVideo",
+                            ["video_url"] = capturedVideoUrl,
+                            ["dimensions"] = new JObject { ["width"] = 720, ["height"] = 1280 }
+                        };
+                    }
+                }
+                finally
+                {
+                    receiver.DevToolsProtocolEventReceived -= OnResponseReceived;
+                    await webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Network.disable", "{}");
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private bool IsValidVideoUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            if (!url.Contains("cdninstagram.com") && !url.Contains("fbcdn.net")) return false;
+            if (url.Contains("/t51.") || url.Contains("/v/t") || url.Contains("video")) return true;
+            if (url.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)) return true;
+            if (url.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase) ||
+                url.EndsWith(".jpeg", StringComparison.OrdinalIgnoreCase) ||
+                url.EndsWith(".png", StringComparison.OrdinalIgnoreCase)) return false;
+            return false;
+        }
+
+        private string FindVideoUrlRecursive(JToken token, int depth = 0)
+        {
+            if (token == null || depth > 10) return null;
 
             if (token.Type == JTokenType.Object)
             {
                 var obj = (JObject)token;
+                var videoUrl = obj["video_url"]?.ToString();
+                if (!string.IsNullOrEmpty(videoUrl)) return videoUrl;
 
+                foreach (var prop in obj.Properties())
+                {
+                    var result = FindVideoUrlRecursive(prop.Value, depth + 1);
+                    if (!string.IsNullOrEmpty(result)) return result;
+                }
+            }
+            else if (token.Type == JTokenType.Array)
+            {
+                foreach (var item in (JArray)token)
+                {
+                    var result = FindVideoUrlRecursive(item, depth + 1);
+                    if (!string.IsNullOrEmpty(result)) return result;
+                }
+            }
+
+            return null;
+        }
+
+        private JObject FindPostDataRecursive(JToken token, int depth = 0)
+        {
+            if (token == null || token.Type == JTokenType.Null || depth > 15) return null;
+
+            if (token.Type == JTokenType.Object)
+            {
+                var obj = (JObject)token;
                 string typename = obj["__typename"]?.ToString();
+
                 if (!string.IsNullOrEmpty(typename) &&
                     (typename.StartsWith("XDTGraph") || typename.StartsWith("Graph")))
                 {
@@ -1047,16 +935,10 @@ namespace SocialNetworkArmy.Services
                         return obj;
                 }
 
-                if (obj["xdt_shortcode_media"] != null)
-                    return obj["xdt_shortcode_media"] as JObject;
-                if (obj["shortcode_media"] != null)
-                    return obj["shortcode_media"] as JObject;
-
                 foreach (var prop in obj.Properties())
                 {
                     var result = FindPostDataRecursive(prop.Value, depth + 1);
-                    if (result != null)
-                        return result;
+                    if (result != null) return result;
                 }
             }
             else if (token.Type == JTokenType.Array)
@@ -1064,8 +946,7 @@ namespace SocialNetworkArmy.Services
                 foreach (var item in (JArray)token)
                 {
                     var result = FindPostDataRecursive(item, depth + 1);
-                    if (result != null)
-                        return result;
+                    if (result != null) return result;
                 }
             }
 
@@ -1081,8 +962,7 @@ namespace SocialNetworkArmy.Services
             if (typeName == "XDTGraphImage" || typeName == "GraphImage")
             {
                 logType = "Photo";
-                JArray resources = postData["display_resources"] as JArray;
-                string url = (resources != null && resources.Count > 0) ? resources.Last()["src"]?.ToString() : postData["display_url"]?.ToString();
+                string url = postData["display_url"]?.ToString();
                 if (!string.IsNullOrEmpty(url))
                 {
                     int width = postData["dimensions"]?["width"]?.ToObject<int>() ?? 0;
@@ -1093,12 +973,36 @@ namespace SocialNetworkArmy.Services
             else if (typeName == "XDTGraphVideo" || typeName == "GraphVideo")
             {
                 logType = "Vidéo/Reel";
-                string url = postData["video_url"]?.ToString();
-                if (!string.IsNullOrEmpty(url))
+                string videoUrl = postData["video_url"]?.ToString();
+
+                if (string.IsNullOrEmpty(videoUrl))
                 {
-                    int width = postData["dimensions"]?["width"]?.ToObject<int>() ?? 0;
-                    int height = postData["dimensions"]?["height"]?.ToObject<int>() ?? 0;
-                    mediaList.Add(new MediaInfo { Url = url, Type = "video", Width = width, Height = height });
+                    videoUrl = FindVideoUrlRecursive(postData);
+                }
+
+                if (!string.IsNullOrEmpty(videoUrl))
+                {
+                    videoUrl = videoUrl
+                        .Replace(@"\u0026", "&")
+                        .Replace(@"\/", "/")
+                        .Replace("&amp;", "&");
+
+                    if (IsValidVideoUrl(videoUrl))
+                    {
+                        int width = postData["dimensions"]?["width"]?.ToObject<int>() ?? 640;
+                        int height = postData["dimensions"]?["height"]?.ToObject<int>() ?? 1280;
+                        mediaList.Add(new MediaInfo { Url = videoUrl, Type = "video", Width = width, Height = height });
+                    }
+                    else
+                    {
+                        Log($"  [{shortcode}] ⚠ URL vidéo invalide");
+                        return false;
+                    }
+                }
+                else
+                {
+                    Log($"  [{shortcode}] ⚠ Pas de video_url trouvée");
+                    return false;
                 }
             }
             else if (typeName == "XDTGraphSidecar" || typeName == "GraphSidecar")
@@ -1111,21 +1015,31 @@ namespace SocialNetworkArmy.Services
                     {
                         var node = edge["node"];
                         string childType = node["__typename"]?.ToString();
-                        string url;
+                        string url = null;
+                        string mType = "image";
+
                         if (childType == "XDTGraphVideo" || childType == "GraphVideo")
                         {
                             url = node["video_url"]?.ToString();
+                            if (string.IsNullOrEmpty(url)) url = FindVideoUrlRecursive(node);
+
+                            if (!string.IsNullOrEmpty(url))
+                            {
+                                url = url.Replace(@"\u0026", "&").Replace(@"\/", "/");
+                                if (!IsValidVideoUrl(url)) continue;
+                            }
+                            mType = "video";
                         }
                         else
                         {
-                            JArray childResources = node["display_resources"] as JArray;
-                            url = (childResources != null && childResources.Count > 0) ? childResources.Last()["src"]?.ToString() : node["display_url"]?.ToString();
+                            url = node["display_url"]?.ToString();
+                            mType = "image";
                         }
+
                         if (!string.IsNullOrEmpty(url))
                         {
                             int width = node["dimensions"]?["width"]?.ToObject<int>() ?? 0;
                             int height = node["dimensions"]?["height"]?.ToObject<int>() ?? 0;
-                            string mType = (childType == "XDTGraphVideo" || childType == "GraphVideo") ? "video" : "image";
                             mediaList.Add(new MediaInfo { Url = url, Type = mType, Width = width, Height = height });
                         }
                     }
@@ -1147,26 +1061,22 @@ namespace SocialNetworkArmy.Services
 
             int downloaded = 0;
             var refererUrl = $"https://www.instagram.com/{postType}/{shortcode}/";
+
             for (int i = 0; i < mediaList.Count; i++)
             {
                 try
                 {
                     var media = mediaList[i];
-
-                    // IMPROVED: More robust retry logic with exponential backoff
                     byte[] contentBytes = null;
-                    int maxRetries = 5; // Increased from 3
+                    int maxRetries = 3;
 
                     for (int retry = 0; retry < maxRetries; retry++)
                     {
                         try
                         {
-                            // Add longer timeout for individual requests
                             using (var cts = CancellationTokenSource.CreateLinkedTokenSource(token))
                             {
-                                cts.CancelAfter(TimeSpan.FromSeconds(30)); // 30 second timeout per request
-
-                                var mediaResponse = await httpClient.GetAsync(media.Url, cts.Token);
+                                cts.CancelAfter(TimeSpan.FromSeconds(30));
 
                                 var decodedUrl = HttpUtility.HtmlDecode(media.Url)
                                     ?.Replace("\\u0026", "&")
@@ -1180,61 +1090,92 @@ namespace SocialNetworkArmy.Services
 
                                 using (var req = new HttpRequestMessage(HttpMethod.Get, decodedUrl))
                                 {
-                                    // Crucial for Instagram CDN
                                     try { req.Headers.Referrer = new Uri(refererUrl); } catch { }
+                                    req.Headers.TryAddWithoutValidation("User-Agent", userAgent);
 
-                                    // Light, permissive headers
-                                    req.Headers.TryAddWithoutValidation("Accept", "*/*");
-                                    req.Headers.TryAddWithoutValidation("Sec-Fetch-Site", "same-site");
-                                    req.Headers.TryAddWithoutValidation("Sec-Fetch-Mode", "no-cors");
-                                    req.Headers.TryAddWithoutValidation("Sec-Fetch-Dest", media.Type == "video" ? "video" : "image");
+                                    string acceptType = media.Type == "video" ? "video/*" : "image/*";
+                                    req.Headers.TryAddWithoutValidation("Accept", acceptType);
+
+                                    if (!string.IsNullOrEmpty(instagramCookies))
+                                    {
+                                        req.Headers.TryAddWithoutValidation("Cookie", instagramCookies);
+                                    }
+
+                                    var mediaResponse = await httpClient.SendAsync(req, cts.Token);
 
                                     if (mediaResponse.IsSuccessStatusCode)
                                     {
                                         contentBytes = await mediaResponse.Content.ReadAsByteArrayAsync();
+
+                                        // Validation: vérifier que c'est le bon type de fichier
+                                        string contentType = mediaResponse.Content.Headers.ContentType?.MediaType?.ToLower() ?? "";
+
+                                        if (media.Type == "video")
+                                        {
+                                            if (contentType.StartsWith("image/"))
+                                            {
+                                                Log($"    ✗ Média {i + 1}: Image reçue au lieu de vidéo");
+                                                contentBytes = null;
+                                                break;
+                                            }
+
+                                            if (contentBytes.Length >= 12)
+                                            {
+                                                if (IsImageFile(contentBytes))
+                                                {
+                                                    Log($"    ✗ Média {i + 1}: Fichier image détecté (magic bytes)");
+                                                    contentBytes = null;
+                                                    break;
+                                                }
+                                            }
+                                        }
+
                                         break;
                                     }
-                                    else if (mediaResponse.StatusCode == HttpStatusCode.TooManyRequests)
+                                    else if (mediaResponse.StatusCode == HttpStatusCode.Forbidden)
                                     {
-                                        Log($"    Rate limited, waiting...");
-                                        await Task.Delay(10000 * (retry + 1), token);
-                                        continue;
+                                        if (retry < maxRetries - 1)
+                                        {
+                                            await Task.Delay(2000 * (retry + 1), token);
+                                            continue;
+                                        }
                                     }
-                                    else
+                                    else if (mediaResponse.StatusCode == HttpStatusCode.NotFound)
                                     {
-                                        Log($"    ⚠ HTTP {(int)mediaResponse.StatusCode} (tentative {retry + 1}/{maxRetries})");
+                                        Log($"    ✗ Média supprimé (404)");
+                                        break;
                                     }
                                 }
                             }
                         }
                         catch (TaskCanceledException)
                         {
-                            Log($"    ⚠ Timeout (tentative {retry + 1}/{maxRetries})");
+                            if (retry < maxRetries - 1)
+                            {
+                                await Task.Delay(1000, token);
+                            }
                         }
                         catch (Exception ex)
                         {
-                            Log($"    ⚠ Erreur: {ex.Message} (tentative {retry + 1}/{maxRetries})");
-                        }
-
-                        if (retry < maxRetries - 1)
-                        {
-                            // Exponential backoff: 2s, 4s, 8s, 16s
-                            int delayMs = (int)Math.Pow(2, retry + 1) * 1000;
-                            await Task.Delay(delayMs, token);
+                            if (retry < maxRetries - 1)
+                            {
+                                await Task.Delay(1000, token);
+                            }
                         }
                     }
 
-                    // IMPROVED: More lenient validation
-                    if (contentBytes == null)
+                    if (contentBytes == null || contentBytes.Length == 0)
                     {
-                        Log($"    ✗ Fichier {i + 1}: échec du téléchargement après {maxRetries} tentatives");
+                        Log($"    ✗ Fichier {i + 1}: échec du téléchargement");
+                        File.AppendAllText(Path.Combine(userFolder, "failed.txt"), $"{shortcode} | Media {i + 1} | échec du téléchargement{Environment.NewLine}");
+
                         continue;
                     }
 
-                    int minSize = media.Type == "video" ? 10 * 1024 : 5 * 1024; // 10KB for video, 5KB for image
+                    int minSize = media.Type == "video" ? 10 * 1024 : 5 * 1024;
                     if (contentBytes.Length < minSize)
                     {
-                        Log($"    ✗ Fichier {i + 1} trop petit ({contentBytes.Length / 1024}KB < {minSize / 1024}KB)");
+                        Log($"    ✗ Fichier {i + 1} trop petit ({contentBytes.Length / 1024}KB)");
                         continue;
                     }
 
@@ -1245,15 +1186,38 @@ namespace SocialNetworkArmy.Services
 
                     string filePath = Path.Combine(userFolder, fileName);
 
-                    // Check if file already exists and has similar size
                     if (File.Exists(filePath))
                     {
                         var existingInfo = new FileInfo(filePath);
-                        if (Math.Abs(existingInfo.Length - contentBytes.Length) < 1024) // Within 1KB
+
+                        if (existingInfo.Length > 0)
                         {
-                            Log($"    ⊚ {fileName} existe déjà");
-                            downloaded++;
-                            continue;
+                            if (media.Type == "video")
+                            {
+                                byte[] existingBytes = File.ReadAllBytes(filePath);
+
+                                if (IsImageFile(existingBytes))
+                                {
+                                    Log($"    ⚠ {fileName} existe mais c'est une image, re-téléchargement...");
+                                    string backupPath = filePath.Replace(".mp4", "_old.jpg");
+                                    try { File.Move(filePath, backupPath); } catch { }
+                                }
+                                else if (existingBytes.Length >= contentBytes.Length * 0.9)
+                                {
+                                    Log($"    ⊚ {fileName} existe déjà (vidéo valide)");
+                                    downloaded++;
+                                    continue;
+                                }
+                            }
+                            else
+                            {
+                                if (Math.Abs(existingInfo.Length - contentBytes.Length) < 1024)
+                                {
+                                    Log($"    ⊚ {fileName} existe déjà");
+                                    downloaded++;
+                                    continue;
+                                }
+                            }
                         }
                     }
 
@@ -1278,17 +1242,71 @@ namespace SocialNetworkArmy.Services
             return false;
         }
 
+        private bool IsImageFile(byte[] data)
+        {
+            if (data == null || data.Length < 4) return false;
+
+            // JPEG: FF D8 FF
+            if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
+                return true;
+
+            // PNG: 89 50 4E 47
+            if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47)
+                return true;
+
+            // GIF: 47 49 46 38
+            if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38)
+                return true;
+
+            // WebP
+            if (data.Length >= 12 && data[0] == 0x52 && data[1] == 0x49 &&
+                data[2] == 0x46 && data[3] == 0x46 &&
+                data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50)
+                return true;
+
+            return false;
+        }
+
         private async Task NavigateToUrlAsync(string url)
         {
-            var tcs = new TaskCompletionSource<bool>();
-            void Handler(object s, CoreWebView2NavigationCompletedEventArgs e)
+            await _navigationLock.WaitAsync();
+            try
             {
-                webView.CoreWebView2.NavigationCompleted -= Handler;
-                tcs.TrySetResult(e.IsSuccess);
+                var tcs = new TaskCompletionSource<bool>();
+                var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+                void Handler(object s, CoreWebView2NavigationCompletedEventArgs e)
+                {
+                    webView.CoreWebView2.NavigationCompleted -= Handler;
+                    tcs.TrySetResult(e.IsSuccess);
+                }
+
+                cts.Token.Register(() =>
+                {
+                    webView.CoreWebView2.NavigationCompleted -= Handler;
+                    tcs.TrySetCanceled();
+                });
+
+                webView.CoreWebView2.NavigationCompleted += Handler;
+
+                try
+                {
+                    webView.CoreWebView2.Navigate(url);
+                    await tcs.Task;
+                }
+                catch (OperationCanceledException)
+                {
+                    throw new TimeoutException($"Navigation timeout vers {url}");
+                }
+                finally
+                {
+                    cts.Dispose();
+                }
             }
-            webView.CoreWebView2.NavigationCompleted += Handler;
-            webView.CoreWebView2.Navigate(url);
-            await tcs.Task;
+            finally
+            {
+                _navigationLock.Release();
+            }
         }
 
         private void Log(string message)

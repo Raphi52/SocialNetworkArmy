@@ -48,11 +48,8 @@ namespace SocialNetworkArmy.Services
 
                 try
                 {
-                   
-
                     Random rand = new Random();
-                    int maxReels = rand.Next(50, 101); // Random between 50 and 100 inclusive
-                    logTextBox.AppendText($"[SCROLL] Will process {maxReels} reels.\r\n");
+                    logTextBox.AppendText($"[SCROLL] Starting continuous reels processing (until stopped by user).\r\n");
 
                     // 3) Aller sur la page Reels
                     var targetUrl = $"https://www.instagram.com/reels/";
@@ -72,6 +69,7 @@ namespace SocialNetworkArmy.Services
   }
   return true;
 })()");
+
                     await Task.Delay(rand.Next(2500, 4501), token);
 
                     // Check for reels feed to load before starting the loop
@@ -119,16 +117,19 @@ namespace SocialNetworkArmy.Services
                     Directory.CreateDirectory(dataDir);
                     string targetFile = Path.Combine(dataDir, "FutureTargets.txt");
 
-                    // ======================= BOUCLE POUR REELS (HUMAN SCROLL + WATCH + LIKE + LOG CREATOR/COMMENTS) =======================
+                    // ======================= BOUCLE INFINIE POUR REELS (S'ARRETE QUAND TOKEN CANCEL) =======================
                     string previousCreator = null;
-                    for (int reelNum = 1; reelNum <= maxReels; reelNum++)
+                    int reelNum = 0;
+
+                    while (!token.IsCancellationRequested)
                     {
-                        token.ThrowIfCancellationRequested();
+                        reelNum++;
+                        try
+                        {
+                            logTextBox.AppendText($"[REEL {reelNum}] Début interaction...\r\n");
 
-                        logTextBox.AppendText($"[REEL {reelNum}/{maxReels}] Début interaction...\r\n");
-
-                        // Extract creator name from visible Reel
-                        var creatorScript = @"
+                            // Extract creator name from visible Reel
+                            var creatorScript = @"
 (function(){
   try {
     const videos = document.querySelectorAll('video');
@@ -157,12 +158,12 @@ namespace SocialNetworkArmy.Services
   }
 })();
 ";
-                        var creatorName = await webView.ExecuteScriptAsync(creatorScript);
-                        creatorName = creatorName?.Trim('"').Trim(); // Clean up
-                        logTextBox.AppendText($"[CREATOR] {creatorName}\r\n");
+                            var creatorName = await webView.ExecuteScriptAsync(creatorScript);
+                            creatorName = creatorName?.Trim('"').Trim(); // Clean up
+                            logTextBox.AppendText($"[CREATOR] {creatorName}\r\n");
 
-                        // Extract comment count from visible Reel using the working getCurrentComments
-                        var commentScript = $@"
+                            // Extract comment count from visible Reel using the working getCurrentComments
+                            var commentScript = $@"
 function getCurrentComments() {{
   const commentBtns = document.querySelectorAll('[role=""button""]:has(svg[aria-label=""{commentLabel}""])');
   let mostVisible = null;
@@ -180,59 +181,59 @@ function getCurrentComments() {{
 }}
 getCurrentComments();
 ";
-                        var commentCount = await webView.ExecuteScriptAsync(commentScript);
-                        logTextBox.AppendText($"[COMMENTS] {commentCount}\r\n");
+                            var commentCount = await webView.ExecuteScriptAsync(commentScript);
+                            logTextBox.AppendText($"[COMMENTS] {commentCount}\r\n");
 
-                        // Parse comments to handle K (thousands) and check >300
-                        string cleanCount = commentCount.Trim().Trim('"').ToLower(); // Normalize input
-                        int comments = 0;
+                            // Parse comments to handle K (thousands) and check >300
+                            string cleanCount = commentCount.Trim().Trim('"').ToLower(); // Normalize input
+                            int comments = 0;
 
-                        if (cleanCount.EndsWith("k"))
-                        {
-                            // Remove "K" and parse the numeric part
-                            string numericPart = new string(cleanCount.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
-                            if (double.TryParse(numericPart, out double number))
+                            if (cleanCount.EndsWith("k"))
                             {
-                                comments = (int)(number * 1000); // Convert to thousands
-                            }
-                        }
-                        else
-                        {
-                            // Original logic for plain numbers
-                            string digitsOnly = new string(cleanCount.Where(char.IsDigit).ToArray());
-                            int.TryParse(digitsOnly, out comments);
-                        }
-
-                        if (comments > 300 && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
-                        {
-                            // Check if already in file
-                            bool alreadyExists = false;
-                            if (File.Exists(targetFile))
-                            {
-                                var lines = File.ReadAllLines(targetFile).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-                                alreadyExists = lines.Contains(creatorName.Trim());
-                            }
-                            if (!alreadyExists)
-                            {
-                                File.AppendAllText(targetFile, creatorName.Trim() + "\r\n");
-                                logTextBox.AppendText($"[TARGET] Added {creatorName} to FutureTargets.txt (comments: {comments})\r\n");
+                                // Remove "K" and parse the numeric part
+                                string numericPart = new string(cleanCount.TakeWhile(c => char.IsDigit(c) || c == '.').ToArray());
+                                if (double.TryParse(numericPart, out double number))
+                                {
+                                    comments = (int)(number * 1000); // Convert to thousands
+                                }
                             }
                             else
                             {
-                                logTextBox.AppendText($"[TARGET] {creatorName} already in FutureTargets.txt (comments: {comments})\r\n");
+                                // Original logic for plain numbers
+                                string digitsOnly = new string(cleanCount.Where(char.IsDigit).ToArray());
+                                int.TryParse(digitsOnly, out comments);
                             }
-                        }
 
-                        // Human-like watch time: 5-15s
-                        int watchTime = rand.Next(5000, 15001);
-                        await Task.Delay(watchTime, token);
+                            if (comments > 300 && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
+                            {
+                                // Check if already in file
+                                bool alreadyExists = false;
+                                if (File.Exists(targetFile))
+                                {
+                                    var lines = File.ReadAllLines(targetFile).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+                                    alreadyExists = lines.Contains(creatorName.Trim());
+                                }
+                                if (!alreadyExists)
+                                {
+                                    File.AppendAllText(targetFile, creatorName.Trim() + "\r\n");
+                                    logTextBox.AppendText($"[TARGET] Added {creatorName} to FutureTargets.txt (comments: {comments})\r\n");
+                                }
+                                else
+                                {
+                                    logTextBox.AppendText($"[TARGET] {creatorName} already in FutureTargets.txt (comments: {comments})\r\n");
+                                }
+                            }
 
-                        // Like seulement 9% des reels
-                        bool shouldLike = rand.NextDouble() < 0.09;
-                        if (shouldLike)
-                        {
-                            // LIKE on visible Reel
-                            var likeScript = $@"
+                            // Human-like watch time: 5-15s
+                            int watchTime = rand.Next(5000, 15001);
+                            await Task.Delay(watchTime, token);
+
+                            // Like seulement ~9% des reels
+                            bool shouldLike = rand.NextDouble() < 0.09;
+                            if (shouldLike)
+                            {
+                                // LIKE on visible Reel
+                                var likeScript = $@"
 (function(){{
   const likeSVGs = document.querySelectorAll('svg[aria-label*=""{likeContains}""]');
   let visibleBtn = null;
@@ -258,46 +259,41 @@ getCurrentComments();
   return /{unlikeRegex}/i.test(newAria) ? 'OK:LIKED' : 'CLICKED';
 }})();
 ";
-                            var likeTry = await webView.ExecuteScriptAsync(likeScript);
-                            logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
+                                var likeTry = await webView.ExecuteScriptAsync(likeScript);
+                                logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
 
-                            // Post-like pause
-                            await Task.Delay(rand.Next(1500, 3500), token);
-                        }
+                                // Post-like pause
+                                await Task.Delay(rand.Next(1500, 3500), token);
+                            }
 
-                        // Random "distraction" pause
-                        if (rand.NextDouble() < 0.2)
-                        {
-                            await Task.Delay(rand.Next(1000, 3000), token);
-                        }
+                            // Random "distraction" pause
+                            if (rand.NextDouble() < 0.2)
+                            {
+                                await Task.Delay(rand.Next(1000, 3000), token);
+                            }
 
-                        // Scroll to next reel if not last
-                        if (reelNum < maxReels)
-                        {
+                            // Scroll to next reel (attempt)
                             var scrollResult = await webView.ExecuteScriptAsync(@"
 (function() {
-  // More precise scroller detection: look for the main reels container
-  let scroller = document.querySelector('div[role=""main""] > div') || // Common reels wrapper
-                 document.querySelector('div[data-testid=""reels-tab""]') || // Reels tab container
+  let scroller = document.querySelector('div[role=""main""] > div') ||
+                 document.querySelector('div[data-testid=""reels-tab""]') ||
                  Array.from(document.querySelectorAll('div')).find(div => {
                    const style = window.getComputedStyle(div);
-                   return (style.overflowY === 'scroll' || style.overflowY === 'auto') && div.clientHeight >= window.innerHeight * 0.8; // Filter for tall scrollers
-                 }) || document.body; // Fallback to body instead of window for better control
+                   return (style.overflowY === 'scroll' || style.overflowY === 'auto') && div.clientHeight >= window.innerHeight * 0.8;
+                 }) || document.body;
 
   if (!scroller) return 'NO_SCROLLER_FOUND';
 
   const startY = scroller.scrollTop;
-  const targetY = startY + window.innerHeight; // Assume full viewport snap
-  const duration = 800 + Math.random() * 400; // Vary duration for human-like feel (800-1200ms)
+  const targetY = startY + window.innerHeight;
+  const duration = 800 + Math.random() * 400;
   const startTime = performance.now();
 
   function scrollStep(currentTime) {
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
-    const easeOut = 1 - Math.pow(1 - progress, 3); // Cubic ease-out for smooth snap
-
+    const easeOut = 1 - Math.pow(1 - progress, 3);
     scroller.scrollTo(0, startY + (targetY - startY) * easeOut);
-
     if (progress < 1) {
       requestAnimationFrame(scrollStep);
     }
@@ -310,7 +306,7 @@ getCurrentComments();
                             logTextBox.AppendText($"[SCROLL] Result: {scrollResult}\r\n");
                             await Task.Delay(rand.Next(2000, 4001), token); // Stabilize
 
-                            // Post-scroll verification
+                            // Post-scroll verification & small retry loop if stuck
                             int retryCount = 0;
                             const int maxRetries = 3;
                             string newCreator = null;
@@ -320,14 +316,14 @@ getCurrentComments();
                                 newCreator = await webView.ExecuteScriptAsync(creatorScript);
                                 newCreator = newCreator?.Trim('"').Trim();
 
-                                if (newCreator != previousCreator && newCreator != "NO_VISIBLE_VIDEO" && newCreator != "NO_CREATOR")
+                                if (!string.IsNullOrEmpty(newCreator) && newCreator != previousCreator && newCreator != "NO_VISIBLE_VIDEO" && newCreator != "NO_CREATOR")
                                 {
                                     break; // Successfully advanced
                                 }
 
-                                logTextBox.AppendText($"[SCROLL RETRY {retryCount + 1}] Stuck on {previousCreator}, retrying...\r\n");
+                                logTextBox.AppendText($"[SCROLL RETRY {retryCount + 1}] Possibly stuck on {previousCreator ?? "unknown"}, retrying...\r\n");
 
-                                // Retry scroll with slight variation (e.g., overscroll by 10-50px)
+                                // Retry scroll nudge
                                 await webView.ExecuteScriptAsync($@"
 (function() {{
   const scroller = document.querySelector('div[role=""main""] > div') || 
@@ -344,19 +340,27 @@ getCurrentComments();
 
                             if (retryCount >= maxRetries)
                             {
-                                logTextBox.AppendText($"[SCROLL ERROR] Max retries reached, still stuck on {previousCreator}. Skipping.\r\n");
-                                // Optional: Break loop or handle error
+                                logTextBox.AppendText($"[SCROLL ERROR] Max retries reached, still possibly stuck on {previousCreator ?? "unknown"}. Continuing.\r\n");
                             }
 
-                            previousCreator = newCreator; // Update for next iteration
+                            previousCreator = newCreator ?? creatorName;
                         }
-                        else
+                        catch (OperationCanceledException)
                         {
-                            previousCreator = creatorName; // For first reel
+                            logTextBox.AppendText("Script cancelled during reel loop.\r\n");
+                            break;
                         }
-                    }
+                        catch (Exception ex)
+                        {
+                            // Log and continue to next reel (resilience)
+                            logTextBox.AppendText($"[REEL EXCEPTION] {ex.Message}\r\n");
+                            Logger.LogError($"ScrollService.RunAsync reel loop: {ex}");
+                            // small backoff before continuing
+                            await Task.Delay(rand.Next(2000, 5000), token);
+                        }
+                    } // end while loop
 
-                    logTextBox.AppendText("[FLOW] Tous les reels traités.\r\n");
+                    logTextBox.AppendText("[FLOW] Continuous reels processing stopped (token triggered or exit).\r\n");
                 }
                 catch (OperationCanceledException)
                 {

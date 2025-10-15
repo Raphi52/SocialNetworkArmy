@@ -159,7 +159,7 @@ namespace SocialNetworkArmy.Forms
             // Schedule Button (NEW!)
             scheduleButton = new Button
             {
-                Text = "Schedule OFF",
+                Text = "Start Schedule",
                 Location = new Point(372, buttonY),
                 Size = new Size(140, 35),
                 FlatStyle = FlatStyle.Flat,
@@ -362,14 +362,14 @@ namespace SocialNetworkArmy.Forms
                 // Update button text and color based on state
                 if (scheduleService.IsRunning)
                 {
-                    scheduleButton.Text = "Schedule ON";
+                    scheduleButton.Text = "End Schedule";
                     scheduleButton.FlatAppearance.BorderColor = Color.FromArgb(76, 175, 80); // Green
                     statusLabel.Text = "Scheduler started - Bots will open automatically";
                     statusLabel.ForeColor = Color.LightGreen;
                 }
                 else
                 {
-                    scheduleButton.Text = "Schedule OFF";
+                    scheduleButton.Text = "Start Schedule";
                     scheduleButton.FlatAppearance.BorderColor = Color.FromArgb(255, 193, 7); // Yellow
                     statusLabel.Text = "Scheduler stopped";
                     statusLabel.ForeColor = Color.LightGray;

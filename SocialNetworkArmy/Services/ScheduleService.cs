@@ -232,7 +232,7 @@ namespace SocialNetworkArmy.Services
                             };
 
                             // Validate activity
-                            var validActivities = new[] { "publish", "scroll", "target", "dm", "download", "stop" };
+                            var validActivities = new[] { "publish", "scroll", "target", "dm", "download", "stop", "close" };
                             if (!validActivities.Contains(task.Activity))
                             {
                                 LogToUI($"[Schedule] Line {lineNumber} skipped: unknown activity '{task.Activity}'");
@@ -331,7 +331,7 @@ namespace SocialNetworkArmy.Services
                     lock (_lockObj)
                     {
                         tasksToExecute = _tasks
-                            .Where(t => !t.Executed && t.Date <= now)
+                           .Where(t => !t.Executed && t.Date <= now && t.Date > now.AddMinutes(-2))
                             .OrderBy(t => t.Date)
                             .ToList();
                     }
@@ -386,6 +386,12 @@ namespace SocialNetworkArmy.Services
                     return;
                 }
 
+                if (task.Activity == "close")
+                {
+                    await CloseAccountFormAsync(key);
+                    return;
+                }
+
                 // Mark as running
                 _runningActivities[key] = true;
 
@@ -427,14 +433,24 @@ namespace SocialNetworkArmy.Services
             if (_activeForms.ContainsKey(key) && _activeForms[key] != null && !_activeForms[key].IsDisposed)
             {
                 var existingForm = _activeForms[key];
-                LogToUI($"[Schedule] Using existing window for {account}");
+                LogToUI($"[Schedule] ✓ Using existing window for {account}");
 
-                // Bring to front if needed
-                existingForm.Invoke(new Action(() =>
+                try
                 {
-                    if (existingForm.WindowState == FormWindowState.Minimized)
-                        existingForm.WindowState = FormWindowState.Normal;
-                }));
+                    existingForm.Invoke(new Action(() =>
+                    {
+                        if (existingForm.WindowState == FormWindowState.Minimized)
+                        {
+                            existingForm.WindowState = FormWindowState.Normal;
+                            LogToUI($"[Schedule] Window restored for {account}");
+                        }
+                        existingForm.BringToFront();
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    LogToUI($"[Schedule] Error restoring window: {ex.Message}");
+                }
 
                 return existingForm;
             }
@@ -451,17 +467,42 @@ namespace SocialNetworkArmy.Services
             }
 
             Form form = null;
+            var formReadyTcs = new TaskCompletionSource<bool>();
 
-            // Create form based on platform
+            // Create form based on platform - IMPORTANT: Do this on UI thread
             if (platform.Equals("Instagram", StringComparison.OrdinalIgnoreCase))
             {
-                LogToUI($"[Schedule] 🚀 Opening Instagram bot for {account}...");
-                form = new InstagramBotForm(profile);
+                LogToUI($"[Schedule] 🚀 Creating Instagram bot window for {account}...");
+
+                try
+                {
+                    // Create form on UI thread using logTextBox
+                    logTextBox.Invoke(new Action(() =>
+                    {
+                        try
+                        {
+                            form = new InstagramBotForm(profile);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogToUI($"[Schedule] ❌ Error creating form: {ex.Message}");
+                        }
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    LogToUI($"[Schedule] ❌ Error invoking form creation: {ex.Message}");
+                }
+
+                if (form == null)
+                {
+                    LogToUI($"[Schedule] ❌ Failed to create form for {account}");
+                    return null;
+                }
             }
             else if (platform.Equals("TikTok", StringComparison.OrdinalIgnoreCase))
             {
                 LogToUI($"[Schedule] ⚠️ TikTok support not yet implemented");
-                // form = new TikTokBotForm(profile);
                 return null;
             }
             else
@@ -480,16 +521,44 @@ namespace SocialNetworkArmy.Services
                     _runningActivities.Remove(key);
                 };
 
+                // Handle form shown (to know when it's ready)
+                form.Shown += (s, e) =>
+                {
+                    LogToUI($"[Schedule] ✓ Window fully loaded for {account}");
+                    formReadyTcs.TrySetResult(true);
+                };
+
                 _activeForms[key] = form;
 
-                // Show form (can be minimized to save screen space)
-                form.Show();
-                form.WindowState = FormWindowState.Minimized; // Start minimized to save RAM/screen
+                // Show form on UI thread
+                try
+                {
+                    logTextBox.Invoke(new Action(() =>
+                    {
+                        form.Show();
+                        LogToUI($"[Schedule] ✓ Window shown for {account}");
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    LogToUI($"[Schedule] ❌ Error showing form: {ex.Message}");
+                    return null;
+                }
 
-                LogToUI($"[Schedule] ✓ Window opened for {account} (minimized)");
+                // Wait for form to be fully shown OR timeout after 5 seconds
+                var timeoutTask = Task.Delay(5000);
+                var completedTask = await Task.WhenAny(formReadyTcs.Task, timeoutTask);
 
-                // Wait for WebView2 initialization
-                await Task.Delay(3000);
+                if (completedTask == timeoutTask)
+                {
+                    LogToUI($"[Schedule] ⚠️ Form shown but waiting for full initialization...");
+                }
+
+                // Wait additional time for WebView2 initialization
+                LogToUI($"[Schedule] Waiting for WebView2 initialization (5 seconds)...");
+                await Task.Delay(5000);
+
+                LogToUI($"[Schedule] ✓ Window ready for {account}");
             }
 
             return form;
@@ -499,87 +568,163 @@ namespace SocialNetworkArmy.Services
         {
             if (form.IsDisposed || form == null)
             {
-                LogToUI($"[Schedule] Form is disposed, cannot execute activity");
+                LogToUI($"[Schedule] ❌ Form is disposed, cannot execute activity");
                 return;
             }
 
-            await Task.Run(() =>
+            LogToUI($"[Schedule] Preparing to execute {task.Activity} on {task.Account}...");
+
+            try
             {
-                try
+                if (form.InvokeRequired)
                 {
                     form.Invoke(new Action(() =>
                     {
-                        if (form is InstagramBotForm instagramForm)
-                        {
-                            // Use reflection to access private buttons and services
-                            var formType = instagramForm.GetType();
-
-                            switch (task.Activity)
-                            {
-                                case "target":
-                                    TriggerButton(instagramForm, "targetButton");
-                                    break;
-
-                                case "scroll":
-                                    TriggerButton(instagramForm, "scrollButton");
-                                    break;
-
-                                case "publish":
-                                    TriggerButton(instagramForm, "publishButton");
-                                    break;
-
-                                case "dm":
-                                    TriggerButton(instagramForm, "dmButton");
-                                    break;
-
-                                case "download":
-                                    TriggerButton(instagramForm, "downloadButton");
-                                    break;
-
-                                default:
-                                    LogToUI($"[Schedule] Unknown activity: {task.Activity}");
-                                    break;
-                            }
-                        }
+                        ExecuteActivityOnFormInternal(form, task);
                     }));
                 }
-                catch (Exception ex)
+                else
                 {
-                    LogToUI($"[Schedule] Activity execution error: {ex.Message}");
+                    ExecuteActivityOnFormInternal(form, task);
                 }
-            });
+
+                // Give some time for the activity to start
+                await Task.Delay(1000, token);
+            }
+            catch (Exception ex)
+            {
+                LogToUI($"[Schedule] ❌ Activity execution error: {ex.Message}");
+                LogToUI($"[Schedule] Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        private void ExecuteActivityOnFormInternal(Form form, ScheduledTask task)
+        {
+            if (form is InstagramBotForm instagramForm)
+            {
+                LogToUI($"[Schedule] Form type confirmed: InstagramBotForm");
+
+                switch (task.Activity)
+                {
+                    case "target":
+                        LogToUI($"[Schedule] Triggering TARGET button...");
+                        TriggerButton(instagramForm, "targetButton");
+                        break;
+
+                    case "scroll":
+                        LogToUI($"[Schedule] Triggering SCROLL button...");
+                        TriggerButton(instagramForm, "scrollButton");
+                        break;
+
+                    case "publish":
+                        LogToUI($"[Schedule] Triggering PUBLISH button...");
+                        TriggerButton(instagramForm, "publishButton");
+                        break;
+
+                    case "dm":
+                        LogToUI($"[Schedule] Triggering DM button...");
+                        TriggerButton(instagramForm, "dmButton");
+                        break;
+
+                    case "download":
+                        LogToUI($"[Schedule] Triggering DOWNLOAD button...");
+                        TriggerButton(instagramForm, "downloadButton");
+                        break;
+
+                    default:
+                        LogToUI($"[Schedule] ❌ Unknown activity: {task.Activity}");
+                        break;
+                }
+            }
+            else
+            {
+                LogToUI($"[Schedule] ❌ Form is not InstagramBotForm, type: {form.GetType().Name}");
+            }
         }
 
         private void TriggerButton(Form form, string buttonName)
         {
             try
             {
+                LogToUI($"[Schedule] Looking for button: {buttonName}");
+
                 var formType = form.GetType();
                 var buttonField = formType.GetField(buttonName,
                     System.Reflection.BindingFlags.NonPublic |
                     System.Reflection.BindingFlags.Instance);
 
-                if (buttonField != null)
+                if (buttonField == null)
                 {
-                    var button = buttonField.GetValue(form) as Button;
-                    if (button != null && button.Enabled)
-                    {
-                        button.PerformClick();
-                        LogToUI($"[Schedule] ✓ Triggered {buttonName}");
-                    }
-                    else
-                    {
-                        LogToUI($"[Schedule] ⚠️ Button {buttonName} is disabled or null");
-                    }
+                    LogToUI($"[Schedule] ❌ Button field '{buttonName}' not found");
+
+                    // Try to list all fields for debugging
+                    var allFields = formType.GetFields(
+                        System.Reflection.BindingFlags.NonPublic |
+                        System.Reflection.BindingFlags.Instance)
+                        .Where(f => f.FieldType == typeof(Button))
+                        .Select(f => f.Name)
+                        .ToList();
+
+                    LogToUI($"[Schedule] Available button fields: {string.Join(", ", allFields)}");
+                    return;
                 }
-                else
+
+                var button = buttonField.GetValue(form) as Button;
+
+                if (button == null)
                 {
-                    LogToUI($"[Schedule] ❌ Button {buttonName} not found via reflection");
+                    LogToUI($"[Schedule] ❌ Button '{buttonName}' is null");
+                    return;
                 }
+
+                LogToUI($"[Schedule] Button found - Enabled: {button.Enabled}, Visible: {button.Visible}");
+
+                if (!button.Enabled)
+                {
+                    LogToUI($"[Schedule] ⚠️ Button '{buttonName}' is DISABLED - waiting for WebView2 initialization");
+                    LogToUI($"[Schedule] TIP: The browser might still be loading. Try increasing wait time.");
+                    return;
+                }
+
+                if (!button.Visible)
+                {
+                    LogToUI($"[Schedule] ⚠️ Button '{buttonName}' is not visible");
+                    return;
+                }
+
+                LogToUI($"[Schedule] ✓ Clicking button '{buttonName}'...");
+                button.PerformClick();
+                LogToUI($"[Schedule] ✓ Button clicked successfully!");
             }
             catch (Exception ex)
             {
-                LogToUI($"[Schedule] Error triggering {buttonName}: {ex.Message}");
+                LogToUI($"[Schedule] ❌ Error triggering '{buttonName}': {ex.Message}");
+                LogToUI($"[Schedule] Stack trace: {ex.StackTrace}");
+            }
+        }
+        private async Task CloseAccountFormAsync(string key)
+        {
+            LogToUI($"[Schedule] ❌ CLOSE requested for {key}");
+
+            if (_activeForms.ContainsKey(key))
+            {
+                var form = _activeForms[key];
+                if (form != null && !form.IsDisposed)
+                {
+                    form.Invoke(new Action(() =>
+                    {
+                        LogToUI($"[Schedule] Closing form for {key}...");
+                        form.Close();
+                    }));
+
+                    _activeForms.Remove(key);
+                    _runningActivities.Remove(key);
+                    LogToUI($"[Schedule] ✓ Form closed for {key}");
+                }
+            }
+            else
+            {
+                LogToUI($"[Schedule] ⚠️ No active window found for {key}");
             }
         }
 
@@ -642,5 +787,14 @@ namespace SocialNetworkArmy.Services
         }
     }
 
-   
+    public class ScheduledTask
+    {
+        public DateTime Date { get; set; }
+        public string Platform { get; set; }
+        public string Account { get; set; }
+        public string Activity { get; set; }
+        public string MediaPath { get; set; }
+        public string Description { get; set; }
+        public bool Executed { get; set; }
+    }
 }
