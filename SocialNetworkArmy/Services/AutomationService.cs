@@ -15,17 +15,16 @@ namespace SocialNetworkArmy.Services
     {
         private readonly FingerprintService fingerprintService;
         private readonly ProxyService proxyService;
-        private readonly LimitsService limitsService;
+        
         private readonly CleanupService cleanupService;
         private readonly MonitoringService monitoringService;
         private readonly Profile profile; // Ajouté pour constructeur
 
         // Constructeur corrigé : Ajoute Profile en paramètre
-        public AutomationService(FingerprintService fingerprintService, ProxyService proxyService, LimitsService limitsService, CleanupService cleanupService, MonitoringService monitoringService, Profile profile)
+        public AutomationService(FingerprintService fingerprintService, ProxyService proxyService, CleanupService cleanupService, MonitoringService monitoringService, Profile profile)
         {
             this.fingerprintService = fingerprintService;
             this.proxyService = proxyService;
-            this.limitsService = limitsService;
             this.cleanupService = cleanupService;
             this.monitoringService = monitoringService;
             this.profile = profile; // Stocké pour cleanup
@@ -93,11 +92,7 @@ namespace SocialNetworkArmy.Services
 
         public async Task<bool> ExecuteActionWithLimitsAsync(WebView2 webView, string actionType, string subAction, Func<Task> actionFunc)
         {
-            if (!limitsService.CanPerformAction(actionType, subAction))
-            {
-                Logger.LogWarning($"Limite atteinte pour {subAction}. Skip.");
-                return false;
-            }
+            
 
             // Check CAPTCHA
             if (await monitoringService.DetectCaptchaAsync(webView))
@@ -107,7 +102,7 @@ namespace SocialNetworkArmy.Services
             }
 
             await actionFunc();
-            limitsService.IncrementAction(actionType, subAction);
+            
             return true;
         }
 

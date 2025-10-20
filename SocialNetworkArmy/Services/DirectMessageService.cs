@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using Microsoft.Web.WebView2.WinForms;
+using System.Collections.Generic;
 
 namespace SocialNetworkArmy.Services
 {
@@ -21,7 +22,7 @@ namespace SocialNetworkArmy.Services
         private readonly MessageService _messageService;
 
         // Timings
-        private const int WaitAfterDirectMs = 3000; // Réduit car TryClickMessageButtonAsync attend déjà
+        private const int WaitAfterDirectMs = 3000;
         private const int WaitAfterKItemMs = 5000;
         private const int InterProfileMs = 5000;
 
@@ -48,14 +49,41 @@ namespace SocialNetworkArmy.Services
                 var dataDir = "data";
                 var messagesPath = Path.Combine(dataDir, "dm_messages.txt");
                 var targetsPath = Path.Combine(dataDir, "dm_targets.txt");
+                var sentPath = Path.Combine(dataDir, "dm_sent.txt");
 
                 if (!File.Exists(messagesPath)) { Log("Fichier dm_messages.txt manquant."); return; }
                 var messages = File.ReadAllLines(messagesPath).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
                 if (messages.Count == 0) { Log("Aucun message valide."); return; }
 
                 if (!File.Exists(targetsPath)) { Log("Fichier dm_targets.txt manquant."); return; }
-                var targets = File.ReadAllLines(targetsPath).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-                if (targets.Count == 0) { Log("Aucune cible valide."); return; }
+                var allTargets = File.ReadAllLines(targetsPath).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+                if (allTargets.Count == 0) { Log("Aucune cible valide."); return; }
+
+                // Charger les comptes déjà traités
+                var sentAccounts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (File.Exists(sentPath))
+                {
+                    var sentLines = File.ReadAllLines(sentPath);
+                    foreach (var line in sentLines)
+                    {
+                        if (!string.IsNullOrWhiteSpace(line))
+                        {
+                            sentAccounts.Add(line.Trim());
+                        }
+                    }
+                    Log($"Comptes déjà traités : {sentAccounts.Count}");
+                }
+
+                // Filtrer les cibles non traitées
+                var targets = allTargets.Where(t => !sentAccounts.Contains(t.Trim())).ToList();
+
+                if (targets.Count == 0)
+                {
+                    Log("Tous les comptes ont déjà été traités !");
+                    return;
+                }
+
+                Log($"Comptes à traiter : {targets.Count}/{allTargets.Count}");
 
                 foreach (var target in targets)
                 {
@@ -154,11 +182,8 @@ namespace SocialNetworkArmy.Services
 
                             if (itemClicked)
                             {
-                                // ✅ Le clic est passé → on fait confiance, pas besoin de EnsureOnDmPageAsync
                                 Log("[KEBAB] Clic effectué → on suppose la page DM ouverte");
                                 await Task.Delay(WaitAfterKItemMs, runToken);
-
-                                // 🔥 On transpose directement le scénario stable qui marche
                                 messageSent = await SendOnDmPageAsync(msg, runToken);
                             }
                             else
@@ -167,9 +192,6 @@ namespace SocialNetworkArmy.Services
                             }
                         }
                     }
-
-
-
                     // ========== CAS 5: ERREUR ==========
                     else if (buttonResult.StartsWith("error"))
                     {
@@ -180,7 +202,26 @@ namespace SocialNetworkArmy.Services
                         Log($"Résultat inattendu ({buttonResult}) → échec");
                     }
 
-                    Log(messageSent ? "✓ Message envoyé avec succès" : "✗ Échec total pour ce profil");
+                    // ========== SAUVEGARDE SI SUCCÈS ==========
+                    if (messageSent)
+                    {
+                        Log("✓ Message envoyé avec succès");
+
+                        // Ajouter le compte au fichier dm_sent.txt
+                        try
+                        {
+                            File.AppendAllText(sentPath, target.Trim() + Environment.NewLine);
+                            Log($"✓ Compte '{target}' enregistré dans dm_sent.txt");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"⚠ Erreur sauvegarde : {ex.Message}");
+                        }
+                    }
+                    else
+                    {
+                        Log("✗ Échec total pour ce profil");
+                    }
 
                     await Task.Delay(800, runToken);
                     await Task.Delay(InterProfileMs, runToken);

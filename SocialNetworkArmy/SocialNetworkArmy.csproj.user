@@ -7,6 +7,9 @@
     <Compile Update="Forms\MainForm.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Update="Forms\StoryPosterForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Update="Forms\TiktokBotForm.cs">
       <SubType>Form</SubType>
     </Compile>

@@ -237,7 +237,7 @@ namespace SocialNetworkArmy.Services
             return true;
         }
 
-        public async Task RunAsync(CancellationToken token = default)
+        public async Task RunAsync(CancellationToken token = default, string customTargetsPath = null)
         {
             await webView.EnsureCoreWebView2Async(null);
 
@@ -250,27 +250,50 @@ namespace SocialNetworkArmy.Services
                 try
                 {
                     // 1) Charger la liste des cibles
-                    // 1) Charger la liste des cibles
                     var dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
                     Directory.CreateDirectory(dataDir);
 
-                    var targetsPath = Path.Combine(dataDir, "targets.txt");
+                    // MODIFICATION ICI : Utiliser le chemin personnalisé OU le défaut
+                    string targetsPath;
+                    if (!string.IsNullOrWhiteSpace(customTargetsPath))
+                    {
+                        // Chemin personnalisé depuis le schedule
+                        targetsPath = customTargetsPath;
+
+                        // Si c'est un chemin relatif, le combiner avec le répertoire de base
+                        if (!Path.IsPathRooted(targetsPath))
+                        {
+                            targetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, targetsPath);
+                        }
+
+                        logTextBox.AppendText($"[TARGET] Using custom targets file: {targetsPath}\r\n");
+                    }
+                    else
+                    {
+                        // Comportement par défaut
+                        targetsPath = Path.Combine(dataDir, "targets.txt");
+                        logTextBox.AppendText($"[TARGET] Using default targets file: {targetsPath}\r\n");
+                    }
+
                     var doneTargetsPath = Path.Combine(dataDir, "done_targets.txt");
 
                     var targets = new System.Collections.Generic.List<string>();
                     var doneTargets = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                    // Charger les targets.txt
+                    // Charger le fichier targets
                     if (File.Exists(targetsPath))
                     {
                         targets = File.ReadAllLines(targetsPath)
                                       .Where(line => !string.IsNullOrWhiteSpace(line))
                                       .Select(line => line.Trim())
                                       .ToList();
+                        logTextBox.AppendText($"[TARGET] Loaded {targets.Count} targets from {Path.GetFileName(targetsPath)}\r\n");
                     }
                     else
                     {
-                        logTextBox.AppendText($"Fichier targets.txt non trouvé à {targetsPath} !\r\n");
+                        logTextBox.AppendText($"[TARGET] ❌ Targets file not found: {targetsPath}\r\n");
+                        form.StopScript();
+                        return;
                     }
 
                     // Charger done_targets.txt
@@ -286,7 +309,7 @@ namespace SocialNetworkArmy.Services
                     else
                     {
                         File.Create(doneTargetsPath).Close();
-                        logTextBox.AppendText($"Fichier done_targets.txt créé à {doneTargetsPath}.\r\n");
+                        logTextBox.AppendText($"[TARGET] Created done_targets.txt at {doneTargetsPath}\r\n");
                     }
 
                     // Filtrer les targets déjà traités
@@ -294,11 +317,10 @@ namespace SocialNetworkArmy.Services
 
                     if (!pendingTargets.Any())
                     {
-                        logTextBox.AppendText("Aucun nouveau target à traiter — tous sont déjà dans done_targets.txt.\r\n");
+                        logTextBox.AppendText("[TARGET] No new targets to process — all done.\r\n");
                         form.StopScript();
                         return;
                     }
-
                     // 1bis) Charger commentaires
                     var commentsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "comments.txt");
                     var comments = new System.Collections.Generic.List<string>();

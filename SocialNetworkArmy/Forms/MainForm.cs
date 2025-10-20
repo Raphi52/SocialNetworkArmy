@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -29,8 +29,11 @@ namespace SocialNetworkArmy.Forms
         private Button scheduleButton;
         private Label statusLabel;
         private TextBox scheduleLogTextBox;
+        private ComboBox dataFilesComboBox;
+        private Button openDataFileButton;
 
-        private Font yaheiBold12 = new Font("Microsoft YaHei", 11f, FontStyle.Bold);
+        private Font yaheiBold12 = new Font("Microsoft YaHei", 9f, FontStyle.Bold);
+        private Font yaheiBold10 = new Font("Microsoft YaHei", 9f, FontStyle.Bold);
 
         public MainForm()
         {
@@ -44,6 +47,7 @@ namespace SocialNetworkArmy.Forms
             scheduleService = new ScheduleService(scheduleLogTextBox, profileService);
 
             PopulateProfilesList();
+            LoadDataFiles();
         }
 
         private void InitializeComponent()
@@ -103,7 +107,7 @@ namespace SocialNetworkArmy.Forms
 
             // Buttons Row
             int buttonY = 265;
-            Size btnSize = new Size(110, 35);
+            Size btnSize = new Size(145, 45);
 
             // Create Button
             createButton = new Button
@@ -115,7 +119,7 @@ namespace SocialNetworkArmy.Forms
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
                 UseVisualStyleBackColor = false,
-                Font = yaheiBold12
+                Font = yaheiBold10
             };
             createButton.FlatAppearance.BorderSize = 2;
             createButton.FlatAppearance.BorderColor = Color.FromArgb(33, 150, 243); // Blue
@@ -126,13 +130,13 @@ namespace SocialNetworkArmy.Forms
             deleteButton = new Button
             {
                 Text = "Delete",
-                Location = new Point(132, buttonY),
+                Location = new Point(167, buttonY),
                 Size = btnSize,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
                 UseVisualStyleBackColor = false,
-                Font = yaheiBold12
+                Font = yaheiBold10
             };
             deleteButton.FlatAppearance.BorderSize = 2;
             deleteButton.FlatAppearance.BorderColor = Color.FromArgb(244, 67, 54); // Red
@@ -143,64 +147,109 @@ namespace SocialNetworkArmy.Forms
             launchButton = new Button
             {
                 Text = "Open",
-                Location = new Point(252, buttonY),
+                Location = new Point(322, buttonY),
                 Size = btnSize,
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
                 UseVisualStyleBackColor = false,
-                Font = yaheiBold12
+                Font = yaheiBold10
             };
             launchButton.FlatAppearance.BorderSize = 2;
             launchButton.FlatAppearance.BorderColor = Color.FromArgb(76, 175, 80); // Green
             launchButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             launchButton.Click += LaunchButton_Click;
 
-            // Schedule Button (NEW!)
-            scheduleButton = new Button
+            // Open Phone Button
+            Button openPhone = new Button
             {
-                Text = "Start Schedule",
-                Location = new Point(372, buttonY),
-                Size = new Size(140, 35),
+                Text = "Open Phone",
+                Location = new Point(477, buttonY),
+                Size = new Size(145, 45),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
                 UseVisualStyleBackColor = false,
-                Font = yaheiBold12
+                Font = yaheiBold10
+            };
+            openPhone.FlatAppearance.BorderSize = 2;
+            openPhone.FlatAppearance.BorderColor = Color.FromArgb(156, 39, 176); // Purple
+            openPhone.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
+            openPhone.Click += StoryButton_Click;
+
+            // Schedule Button
+            scheduleButton = new Button
+            {
+                Text = "Start Schedule",
+                Location = new Point(632, buttonY),
+                Size = new Size(180, 45),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold10
             };
             scheduleButton.FlatAppearance.BorderSize = 2;
             scheduleButton.FlatAppearance.BorderColor = Color.FromArgb(255, 193, 7); // Yellow
             scheduleButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             scheduleButton.Click += ScheduleButton_Click;
 
+            // Data Files ComboBox - Same row as inputs, on the right side
+            dataFilesComboBox = new ComboBox
+            {
+                Location = new Point(790, 225),
+                Size = new Size(180, 30),
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                Font = yaheiBold10
+            };
+
+            // Open Data File Button - Same row as buttons, aligned to the right
+            openDataFileButton = new Button
+            {
+                Text = "Open File",
+                Location = new Point(820, buttonY),
+                Size = new Size(150, 45),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.FromArgb(45, 45, 45),
+                ForeColor = Color.White,
+                UseVisualStyleBackColor = false,
+                Font = yaheiBold10
+            };
+            openDataFileButton.FlatAppearance.BorderSize = 2;
+            openDataFileButton.FlatAppearance.BorderColor = Color.White;
+            openDataFileButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
+            openDataFileButton.Click += OpenDataFileButton_Click;
+
             // Status Label
             statusLabel = new Label
             {
-                Location = new Point(12, 310),
+                Location = new Point(12, 320),
                 Size = new Size(800, 20),
                 Text = "Ready",
                 AutoSize = true,
                 ForeColor = Color.LightGray,
-                Font = yaheiBold12
+                Font = yaheiBold10
             };
 
-            // Schedule Log TextBox (NEW!)
+            // Schedule Log TextBox
             scheduleLogTextBox = new TextBox
             {
-                Location = new Point(12, 340),
-                Size = new Size(960, 150),
+                Location = new Point(12, 350),
+                Size = new Size(960, 140),
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
                 ReadOnly = true,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle,
-                Font = new Font("Microsoft YaHei", 9f, FontStyle.Regular),
+                Font = new Font("Microsoft YaHei", 8f, FontStyle.Regular),
                 Text = "[Schedule] Ready. Click 'Schedule ON' to start global scheduler.\r\n"
             };
 
             // Form settings
-            this.ClientSize = new Size(1000, 510);
+            this.ClientSize = new Size(1000, 500);
             this.Text = "SocialNetworkArmy";
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -215,8 +264,11 @@ namespace SocialNetworkArmy.Forms
             this.Controls.Add(deleteButton);
             this.Controls.Add(launchButton);
             this.Controls.Add(scheduleButton);
+            this.Controls.Add(openPhone);
             this.Controls.Add(statusLabel);
             this.Controls.Add(scheduleLogTextBox);
+            this.Controls.Add(dataFilesComboBox);
+            this.Controls.Add(openDataFileButton);
 
             // Handle form closing
             this.FormClosing += MainForm_FormClosing;
@@ -344,10 +396,11 @@ namespace SocialNetworkArmy.Forms
                     botForm.Show();
                     statusLabel.Text = $"Bot launched for '{name}'!";
                 }
-                else
+                else if (selectedProfile.Platform == "TikTok")
                 {
-                    MessageBox.Show("Only Instagram platform is supported for now.");
-                    statusLabel.Text = "Platform not supported.";
+                    var botForm = new TiktokBotForm(selectedProfile);
+                    botForm.Show();
+                    statusLabel.Text = $"Bot launched for '{name}'!";
                 }
             }
         }
@@ -382,6 +435,123 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
+        private void StoryButton_Click(object sender, EventArgs e)
+        {
+            if (profilesListBox.SelectedIndex < 0)
+            {
+                MessageBox.Show("Select a profile first!");
+                return;
+            }
+
+            string selected = profilesListBox.SelectedItem.ToString();
+            string name = selected.Split(' ')[0];
+            var selectedProfile = profiles.FirstOrDefault(p => p.Name == name);
+
+            if (selectedProfile != null)
+            {
+                statusLabel.Text = $"Opening Story Poster for '{name}'...";
+
+                if (selectedProfile.Platform == "Instagram")
+                {
+                    var storyForm = new StoryPosterForm(selectedProfile);
+                    storyForm.Show();
+                    statusLabel.Text = $"Story Poster opened for '{name}'!";
+                }
+                else if (selectedProfile.Platform == "TikTok")
+                {
+                    MessageBox.Show("TikTok story posting coming soon!");
+                }
+                else
+                {
+                    MessageBox.Show("Platform not supported for stories.");
+                }
+            }
+        }
+
+        private void LoadDataFiles()
+        {
+            try
+            {
+                dataFilesComboBox.Items.Clear();
+
+                string dataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+
+                if (!Directory.Exists(dataPath))
+                {
+                    Directory.CreateDirectory(dataPath);
+                    dataFilesComboBox.Items.Add("(No files)");
+                    return;
+                }
+
+                // Charger tous les fichiers .txt, .csv, .json
+                string[] extensions = { "*.txt", "*.csv" };
+                var files = new List<string>();
+
+                foreach (var ext in extensions)
+                {
+                    files.AddRange(Directory.GetFiles(dataPath, ext));
+                }
+
+                if (files.Count == 0)
+                {
+                    dataFilesComboBox.Items.Add("(No files)");
+                    return;
+                }
+
+                // Ajouter seulement les noms de fichiers (pas le chemin complet)
+                foreach (var file in files.OrderBy(f => f))
+                {
+                    dataFilesComboBox.Items.Add(Path.GetFileName(file));
+                }
+
+                if (dataFilesComboBox.Items.Count > 0)
+                {
+                    dataFilesComboBox.SelectedIndex = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading Data files: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void OpenDataFileButton_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                if (dataFilesComboBox.SelectedItem == null ||
+                    dataFilesComboBox.SelectedItem.ToString() == "(No files)")
+                {
+                    MessageBox.Show("No file selected!", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                string fileName = dataFilesComboBox.SelectedItem.ToString();
+                string dataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
+                string fullPath = Path.Combine(dataPath, fileName);
+
+                if (!File.Exists(fullPath))
+                {
+                    MessageBox.Show($"File not found: {fileName}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    LoadDataFiles(); // Rafraîchir la liste
+                    return;
+                }
+
+                // Ouvrir avec le programme par défaut
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = fullPath,
+                    UseShellExecute = true
+                });
+
+                statusLabel.Text = $"Opened: {fileName}";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error opening file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         private void ProfilesListBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             // Optional: Load profile details
@@ -392,6 +562,7 @@ namespace SocialNetworkArmy.Forms
             if (disposing)
             {
                 yaheiBold12.Dispose();
+                yaheiBold10.Dispose();
             }
             base.Dispose(disposing);
         }

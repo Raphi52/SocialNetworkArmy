@@ -23,7 +23,7 @@ namespace SocialNetworkArmy.Forms
         private readonly Profile profile;
         private readonly AutomationService automationService;
         private readonly ProxyService proxyService;
-        private readonly LimitsService limitsService;
+        
         private readonly CleanupService cleanupService;
         private readonly MonitoringService monitoringService;
         private WebView2 webView;
@@ -38,7 +38,7 @@ namespace SocialNetworkArmy.Forms
         private TextBox logTextBox;
         private Label lblProxyStatus;
         private bool isScriptRunning = false;
-        private Font yaheiBold12 = new Font("Microsoft YaHei", 12f, FontStyle.Bold);
+        private Font yaheiBold12 = new Font("Microsoft YaHei", 10f, FontStyle.Bold);
         private System.Windows.Forms.Timer closeTimer;
         private CancellationTokenSource _cts;
         private Panel toolbarPanel;
@@ -49,11 +49,11 @@ namespace SocialNetworkArmy.Forms
         public InstagramBotForm(Profile profile)
         {
             this.profile = profile;
-            limitsService = new LimitsService(profile.Name);
+            
             cleanupService = new CleanupService();
             monitoringService = new MonitoringService();
             proxyService = new ProxyService();
-            automationService = new AutomationService(new FingerprintService(), proxyService, limitsService, cleanupService, monitoringService, profile);
+            automationService = new AutomationService(new FingerprintService(), proxyService, cleanupService, monitoringService, profile);
             InitializeComponent();
             this.Icon = new System.Drawing.Icon("Data\\Icons\\Insta.ico");
             targetButton.Enabled = false;
@@ -86,7 +86,7 @@ namespace SocialNetworkArmy.Forms
             toolbarPanel = new Panel
             {
                 Location = new Point(0, 0),
-                Size = new Size(this.ClientSize.Width, 40),
+                Size = new Size(this.ClientSize.Width, 39),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.FromArgb(45, 45, 45)
             };
@@ -94,8 +94,8 @@ namespace SocialNetworkArmy.Forms
             backButton = new Button
             {
                 Text = "Back",
-                Location = new Point(10, 5),
-                Size = new Size(80, 30),
+                Location = new Point(10, 2),
+                Size = new Size(80, 35),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
@@ -110,8 +110,8 @@ namespace SocialNetworkArmy.Forms
             forwardButton = new Button
             {
                 Text = "Forward",
-                Location = new Point(100, 5),
-                Size = new Size(100, 30),
+                Location = new Point(100, 2),
+                Size = new Size(100, 35),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
@@ -126,8 +126,8 @@ namespace SocialNetworkArmy.Forms
             refreshButton = new Button
             {
                 Text = "Refresh",
-                Location = new Point(210, 5),
-                Size = new Size(100, 30),
+                Location = new Point(210, 2),
+                Size = new Size(100, 35),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
@@ -141,7 +141,7 @@ namespace SocialNetworkArmy.Forms
             // URL TextBox
             urlTextBox = new TextBox
             {
-                Location = new Point(320, 5),
+                Location = new Point(320, 7),
                 Size = new Size(this.ClientSize.Width - 330, 30),
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
@@ -181,8 +181,8 @@ namespace SocialNetworkArmy.Forms
                 WrapContents = false,
                 BackColor = Color.FromArgb(30, 30, 30)
             };
-            Size btnSize = new Size(120, 36);
-            Padding btnMargin = new Padding(0, 0, 10, 0);
+            Size btnSize = new Size(135, 36);
+            Padding btnMargin = new Padding(0, 0, 8, 0);
             targetButton = new Button
             {
                 Text = "Target",
@@ -231,8 +231,8 @@ namespace SocialNetworkArmy.Forms
             publishButton.Click += PublishButton_Click;
             dmButton = new Button
             {
-                Text = "Direct Messages",
-                Size = new Size(160, 36),
+                Text = "Send Messages",
+                Size = new Size(155, 36),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(45, 45, 45),
                 ForeColor = Color.White,
@@ -259,21 +259,21 @@ namespace SocialNetworkArmy.Forms
             downloadButton.FlatAppearance.BorderColor = Color.FromArgb(0, 188, 212);
             downloadButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
             downloadButton.Click += DownloadButton_Click;
-            testButton = new Button
-            {
-                Text = "Test",
-                Size = btnSize,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(45, 45, 45),
-                ForeColor = Color.White,
-                UseVisualStyleBackColor = false,
-                Font = yaheiBold12,
-                Margin = btnMargin
-            };
-            testButton.FlatAppearance.BorderSize = 2;
-            testButton.FlatAppearance.BorderColor = Color.FromArgb(63, 81, 181); // Indigo for Test
-            testButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
-            testButton.Click += TestButton_Click;
+            //testButton = new Button
+            //{
+            //    Text = "Test",
+            //    Size = btnSize,
+            //    FlatStyle = FlatStyle.Flat,
+            //    BackColor = Color.FromArgb(45, 45, 45),
+            //    ForeColor = Color.White,
+            //    UseVisualStyleBackColor = false,
+            //    Font = yaheiBold12,
+            //    Margin = btnMargin
+            //};
+            //testButton.FlatAppearance.BorderSize = 2;
+            //testButton.FlatAppearance.BorderColor = Color.FromArgb(63, 81, 181); // Indigo for Test
+            //testButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(55, 55, 55);
+            //testButton.Click += TestButton_Click;
             stopButton = new Button
             {
                 Text = "Stop",
@@ -305,7 +305,7 @@ namespace SocialNetworkArmy.Forms
                 Text = "Checking Proxy...",
                 ForeColor = Color.White,
                 Font = new Font("Microsoft YaHei", 10f, FontStyle.Regular),
-                Margin = new Padding(20, 7, 0, 0), // Reduced left padding from 30 to 20 for better spacing
+                Margin = new Padding(15, 7, 0, 0),
                 TextAlign = ContentAlignment.MiddleLeft
             };
             buttonsPanel.Controls.Add(lblProxyStatus);
@@ -439,7 +439,7 @@ delete navigator.proto.webdriver;
             }
             catch (Exception ex)
             {
-                logTextBox.AppendText($"[ERROR] WebView2 initialization error: {ex.Message}\r\n");
+                
             }
         }
         private void WebView_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -691,7 +691,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             publishButton.Enabled = false;
             dmButton.Enabled = false;
             downloadButton.Enabled = false;
-            testButton.Enabled = false;
+            //testButton.Enabled = false;
             logTextBox.AppendText($"Starting {actionName}...\r\n");
             if (webView?.CoreWebView2 != null)
                 await webView.ExecuteScriptAsync("window.isRunning = true; console.log('Script started');");
@@ -724,7 +724,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             publishButton.Enabled = true;
             dmButton.Enabled = true;
             downloadButton.Enabled = true;
-            testButton.Enabled = true;
+            //testButton.Enabled = true;
             logTextBox.AppendText("Script stopped successfully.\r\n");
         }
         private async void TargetButton_Click(object sender, EventArgs e)
