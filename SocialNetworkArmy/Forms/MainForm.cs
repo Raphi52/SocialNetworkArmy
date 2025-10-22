@@ -312,10 +312,29 @@ namespace SocialNetworkArmy.Forms
             string platform = platformComboBox.SelectedItem.ToString();
             string proxy = string.IsNullOrWhiteSpace(proxyTextBox.Text) ? "" : proxyTextBox.Text.Trim();
 
+            // VALIDATION DU FORMAT
             if (!string.IsNullOrEmpty(proxy) && !IsValidProxy(proxy))
             {
                 MessageBox.Show("Invalid proxy format! Ex: IP:port or http://user:pass@IP:port");
                 return;
+            }
+
+            // VALIDATION DE LA WHITELIST
+            if (!string.IsNullOrEmpty(proxy))
+            {
+                var proxyService = new ProxyService();
+                if (!proxyService.ValidateProxyWhitelist(proxy, out string errorMessage))
+                {
+                    MessageBox.Show(
+                        errorMessage,
+                        "Proxy Not Authorized Contact Owner If You Need To Buy More Proxys",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                    proxyTextBox.Focus();
+                    proxyTextBox.SelectAll();
+                    return;
+                }
             }
 
             if (profiles.Any(p => p.Name == name))

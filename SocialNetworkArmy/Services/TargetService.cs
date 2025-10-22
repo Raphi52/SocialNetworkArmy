@@ -54,7 +54,38 @@ namespace SocialNetworkArmy.Services
                 await Task.Delay(shortDelay, token);
             }
         }
+        private void MarkTargetAsDone(string target, string doneTargetsPath, string reason = "")
+        {
+            try
+            {
+                // Vérifier si déjà présent pour éviter les doublons
+                var existingDone = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (File.Exists(doneTargetsPath))
+                {
+                    existingDone = new HashSet<string>(
+                        File.ReadAllLines(doneTargetsPath)
+                            .Where(line => !string.IsNullOrWhiteSpace(line))
+                            .Select(line => line.Trim()),
+                        StringComparer.OrdinalIgnoreCase
+                    );
+                }
 
+                if (!existingDone.Contains(target))
+                {
+                    File.AppendAllText(doneTargetsPath, target + Environment.NewLine);
+                    string emoji = reason.Contains("succès") || reason.Contains("success") ? "✓" : "⚠️";
+                    logTextBox.AppendText($"[DONE_TARGETS] {emoji} Ajouté à done_targets.txt : {target} {reason}\r\n");
+                }
+                else
+                {
+                    logTextBox.AppendText($"[DONE_TARGETS] ℹ️ Déjà présent dans done_targets.txt : {target}\r\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[DONE_TARGETS ERROR] Impossible d'ajouter {target} : {ex.Message}\r\n");
+            }
+        }
         private async Task RandomHumanNoiseAsync(CancellationToken token)
         {
             if (rand.NextDouble() < 0.3)  // 30% chance for noise
@@ -275,7 +306,13 @@ namespace SocialNetworkArmy.Services
                         logTextBox.AppendText($"[TARGET] Using default targets file: {targetsPath}\r\n");
                     }
 
-                    var doneTargetsPath = Path.Combine(dataDir, "done_targets.txt");
+                    string targetsFileName = Path.GetFileNameWithoutExtension(targetsPath); // Ex: "Targets_1" ou "targets"
+                    string doneTargetsFileName = targetsFileName.StartsWith("Targets_", StringComparison.OrdinalIgnoreCase)
+                        ? "done_" + targetsFileName + ".txt"  // Ex: "done_Targets_1.txt"
+                        : "done_targets.txt";  // Fallback pour "targets.txt" → "done_targets.txt"
+
+                    var doneTargetsPath = Path.Combine(dataDir, doneTargetsFileName);
+                    logTextBox.AppendText($"[TARGET] Using done file: {doneTargetsFileName}\r\n");
 
                     var targets = new System.Collections.Generic.List<string>();
                     var doneTargets = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -314,10 +351,12 @@ namespace SocialNetworkArmy.Services
 
                     // Filtrer les targets déjà traités
                     var pendingTargets = targets.Where(t => !doneTargets.Contains(t)).ToList();
-
+                    logTextBox.AppendText($"[TARGET] Total targets: {targets.Count}\r\n");
+                    logTextBox.AppendText($"[TARGET] Already done: {doneTargets.Count}\r\n");
+                    logTextBox.AppendText($"[TARGET] Pending targets: {pendingTargets.Count}\r\n");
                     if (!pendingTargets.Any())
                     {
-                        logTextBox.AppendText("[TARGET] No new targets to process — all done.\r\n");
+                        logTextBox.AppendText("[TARGET] ✓ No new targets to process — all done.\r\n");
                         form.StopScript();
                         return;
                     }
@@ -353,7 +392,7 @@ namespace SocialNetworkArmy.Services
                     // Compteur global pour le fallback Arrow (1 fois sur 15)
                     int nextClickCounter = 0;
 
-                    foreach (var target in targets)
+                    foreach (var target in pendingTargets)
                     {
                         token.ThrowIfCancellationRequested();
 
@@ -368,11 +407,11 @@ namespace SocialNetworkArmy.Services
                         if (!navigationSuccess)
                         {
                             logTextBox.AppendText($"[TARGET] Failed to navigate to profile '{currentTarget}'\r\n");
+                            MarkTargetAsDone(currentTarget, doneTargetsPath, "(échec navigation)");
                             continue;
                         }
 
-                        await RandomHumanPauseAsync(token);
-
+                        await RandomHumanNoiseAsync(token);
                         await RandomHumanNoiseAsync(token);
 
                         // Click on Reels tab
@@ -380,6 +419,7 @@ namespace SocialNetworkArmy.Services
                         if (!reelsSuccess)
                         {
                             logTextBox.AppendText($"[TARGET] Failed to navigate to reels for '{currentTarget}'\r\n");
+                            MarkTargetAsDone(currentTarget, doneTargetsPath, "(échec reels)");
                             continue;
                         }
 
@@ -1496,15 +1536,8 @@ namespace SocialNetworkArmy.Services
                         await CloseReelModalAsync(lang, token);
 
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");
-                        try
-                        {
-                            File.AppendAllText(doneTargetsPath, currentTarget + Environment.NewLine);
-                            logTextBox.AppendText($"[DONE_TARGETS] Ajouté à done_targets.txt : {currentTarget}\r\n");
-                        }
-                        catch (Exception ex)
-                        {
-                            logTextBox.AppendText($"[DONE_TARGETS ERROR] Impossible d'ajouter {currentTarget} : {ex.Message}\r\n");
-                        }
+                        MarkTargetAsDone(currentTarget, doneTargetsPath, "(succès)");
+                        
 
                         await RandomHumanPauseAsync(token, 5000, 15000, 0.1, 30000, 120000);
                     }

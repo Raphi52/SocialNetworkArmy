@@ -121,8 +121,11 @@ appsettings.Local.json
 Data/Logs/
 Data/profiles.json
 Data/*.log
-# Data/*.csv  # Vire si tu veux commiter schedule.csv
-# Data/*.txt  # Vire si tu veux commiter targets.txt
+Data/*.csv
+Data/*.txt
+Data/Profiles/
+!Data/Icons/
+!Data/*.example.csv
 
 # ===== ReSharper / Analyzers =====
 _ReSharper*/

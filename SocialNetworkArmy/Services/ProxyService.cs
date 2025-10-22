@@ -477,7 +477,39 @@ namespace SocialNetworkArmy.Services
         {
             return currentProxyAddress;
         }
+        public bool ValidateProxyWhitelist(string proxyAddress, out string errorMessage)
+        {
+            errorMessage = null;
 
+            if (string.IsNullOrWhiteSpace(proxyAddress))
+            {
+                errorMessage = "Aucun proxy spécifié.";
+                return false;
+            }
+
+            // Normaliser le proxy pour la comparaison
+            string normalizedProxy = NormalizeProxyAddress(proxyAddress);
+
+            // Valider le format
+            if (!IsValidProxyFormat(normalizedProxy))
+            {
+                errorMessage = "Format de proxy invalide.";
+                return false;
+            }
+
+            // Vérifier la whitelist
+            if (!ProxyWhitelist.IsAuthorized(normalizedProxy))
+            {
+                errorMessage = "❌ Ce proxy n'est pas autorisé.\n\n" +
+                              "Veuillez utiliser uniquement les proxies fournis par votre fournisseur.\n\n" +
+                              "Contactez le support si vous pensez qu'il s'agit d'une erreur.";
+                Logger.LogWarning($"Tentative d'utilisation d'un proxy non autorisé: {normalizedProxy}");
+                return false;
+            }
+
+            Logger.LogInfo($"✓ Proxy autorisé validé: {normalizedProxy}");
+            return true;
+        }
         public ProxyInfo GetProxyInfo(string proxyAddress)
         {
             if (string.IsNullOrEmpty(proxyAddress))
@@ -494,6 +526,28 @@ namespace SocialNetworkArmy.Services
                 Host = host,
                 Port = port
             };
+        }
+        public static class ProxyWhitelist
+        {
+            // Votre liste de proxies autorisés
+            private static readonly HashSet<string> AuthorizedProxies = new()
+        {
+            "http://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10001",
+            "http://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10002",
+            "http://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10003",
+            // Ajoutez tous vos proxies ici
+        };
+
+            public static bool IsAuthorized(string proxy)
+            {
+                // Comparaison exacte (sensible à la casse)
+                return AuthorizedProxies.Contains(proxy?.Trim());
+            }
+
+            public static IReadOnlyList<string> GetAllProxies()
+            {
+                return AuthorizedProxies.ToList().AsReadOnly();
+            }
         }
 
         public struct ProxyInfo

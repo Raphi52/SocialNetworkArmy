@@ -38,3 +38,6 @@ C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.pdb
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.genruntimeconfig.cache
 C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\ref\SocialNetworkArmy.dll
+C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.Forms.InstagramBotForm.resources
+C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.Forms.TiktokBotForm.resources
+C:\Users\User\Desktop\SocialNetworkArmy\SocialNetworkArmy\SocialNetworkArmy\obj\Debug\net9.0-windows\SocialNetworkArmy.csproj.GenerateResource.cache

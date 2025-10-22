@@ -7,6 +7,7 @@ using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -23,43 +24,155 @@ namespace SocialNetworkArmy.Forms
         private Button postStoryButton;
         private bool isWebViewReady = false;
 
-        // Samsung Galaxy S23 dimensions (logical pixels)
+        // Dimensions Samsung Galaxy S23 (mode portrait)
         private const int DEVICE_WIDTH = 360;
         private const int DEVICE_HEIGHT = 780;
         private const double DEVICE_PIXEL_RATIO = 3.0;
 
-        // Script JS d'émulation Android — avec tokens à remplacer
-        private const string ANDROID_EMU_SCRIPT = @"
+        // ✅ SCRIPT STEALTH FINAL - TOUTES LES CORRECTIONS
+        // REMPLACER LA CONSTANTE STEALTH_SCRIPT dans StoryPosterForm.cs
+
+        private const string STEALTH_SCRIPT = @"
 (function() {
     'use strict';
-    const DEVICE_WIDTH = __WIDTH__;
-    const DEVICE_HEIGHT = __HEIGHT__;
-    const DPR = __DPR__;
+    
+    // ========== 1. WEBDRIVER (RENFORCÉ) ==========
+    Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+        configurable: true
+    });
+    delete navigator.__proto__.webdriver;
+    
+    const originalNavigator = navigator;
+    delete Object.getPrototypeOf(navigator).webdriver;
 
-    console.log('📱 Samsung Galaxy S23 Emulation Active');
+    // ========== 2. AUTOMATION FLAGS CLEANUP (ÉTENDU) ==========
+    const automationProps = [
+        '__webdriver_evaluate', '__selenium_evaluate', '__webdriver_script_function',
+        '__driver_evaluate', '__webdriver_unwrapped', '__fxdriver_unwrapped',
+        '__webdriver_script_fn', '__selenium_unwrapped', '__driver_unwrapped',
+        'cdc_adoQpoasnfa76pfcZLmcfl_Array', 'cdc_adoQpoasnfa76pfcZLmcfl_Promise',
+        'cdc_adoQpoasnfa76pfcZLmcfl_Symbol', '$cdc_asdjflasutopfhvcZLmcfl_',
+        '$chrome_asyncScriptInfo', '__$webdriverAsyncExecutor', '_Selenium_IDE_Recorder',
+        'callSelenium', '_selenium', '__nightmare', 'domAutomation', 
+        'domAutomationController', '__fxdriver_unwrapped', '__webdriver_script_func'
+    ];
 
-    // ===== SUPPRIMER TRACES AUTOMATION =====
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined, configurable: true, enumerable: false });
-    try { delete window.cdc_adoQpoasnfa76pfcZLmcfl_; } catch(e) {}
-    try { if (window.chrome && window.chrome.runtime) delete window.chrome.runtime; } catch(e) {}
+    automationProps.forEach(prop => {
+        try { delete window[prop]; delete document[prop]; delete navigator[prop]; } catch(e) {}
+    });
 
-    // ===== ANDROID PLATFORM =====
-    Object.defineProperty(navigator, 'platform', { get: () => 'Linux armv8l', configurable: true, enumerable: true });
-    Object.defineProperty(navigator, 'vendor', { get: () => 'Google Inc.', configurable: true, enumerable: true });
+    // ========== 3. CHROME RUNTIME (MASQUÉ) ==========
+    if (window.chrome && window.chrome.runtime) {
+        delete window.chrome.runtime;
+        Object.defineProperty(window.chrome, 'runtime', {
+            get: () => undefined,
+            configurable: true
+        });
+    }
 
-    // ===== DEVICE SPECS (Galaxy S23) =====
-    Object.defineProperty(navigator, 'maxTouchPoints', { get: () => 5, configurable: true, enumerable: true });
-    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true, enumerable: true });
-    Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true, enumerable: true });
-    Object.defineProperty(window, 'devicePixelRatio', { get: () => DPR, configurable: true, enumerable: true });
+    // ========== 4. PERMISSIONS API ==========
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) => {
+        const fakePermissions = {
+            'notifications': 'prompt',
+            'geolocation': 'prompt',
+            'camera': 'prompt',
+            'microphone': 'prompt',
+            'persistent-storage': 'prompt'
+        };
+        return Promise.resolve({
+            state: fakePermissions[parameters.name] || 'prompt',
+            onchange: null
+        });
+    };
 
-    // ===== SCREEN DIMENSIONS =====
-    Object.defineProperty(window.screen, 'width', { get: () => DEVICE_WIDTH, configurable: true });
-    Object.defineProperty(window.screen, 'height', { get: () => DEVICE_HEIGHT, configurable: true });
-    Object.defineProperty(window.screen, 'availWidth', { get: () => DEVICE_WIDTH, configurable: true });
-    Object.defineProperty(window.screen, 'availHeight', { get: () => DEVICE_HEIGHT - 48, configurable: true });
+    Object.defineProperty(Notification, 'permission', {
+        get: () => 'default',
+        configurable: true
+    });
 
-    // ===== SCREEN ORIENTATION (Android) =====
+    // ========== 5. LANGUAGES ==========
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en', 'fr-FR', 'fr'],
+        configurable: true
+    });
+
+    Object.defineProperty(navigator, 'language', {
+        get: () => 'en-US',
+        configurable: true
+    });
+
+    // ========== 6. PLUGINS (MOBILE RÉALISTE) ==========
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => {
+            const plugins = [
+                { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
+                { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }
+            ];
+            plugins.item = (index) => plugins[index] || null;
+            plugins.namedItem = (name) => plugins.find(p => p.name === name) || null;
+            plugins.refresh = () => {};
+            plugins[Symbol.iterator] = function*() { for (let p of plugins) yield p; };
+            return Object.setPrototypeOf(plugins, PluginArray.prototype);
+        },
+        configurable: true
+    });
+
+    // ========== 7. SCREEN DIMENSIONS MOBILE ==========
+    const w = __WIDTH__;
+    const h = __HEIGHT__;
+    const dpr = __DPR__;
+
+    Object.defineProperty(window, 'devicePixelRatio', {
+        get: () => dpr,
+        configurable: true
+    });
+
+    Object.defineProperty(window.screen, 'width', {
+        get: () => w,
+        configurable: true
+    });
+
+    Object.defineProperty(window.screen, 'height', {
+        get: () => h,
+        configurable: true
+    });
+
+    Object.defineProperty(window.screen, 'availWidth', {
+        get: () => w,
+        configurable: true
+    });
+
+    Object.defineProperty(window.screen, 'availHeight', {
+        get: () => h - 24,
+        configurable: true
+    });
+    
+    Object.defineProperty(screen, 'colorDepth', {
+        get: () => 24,
+        configurable: true
+    });
+    
+    Object.defineProperty(screen, 'pixelDepth', {
+        get: () => 24,
+        configurable: true
+    });
+
+    // ========== 8. TOUCH SUPPORT ==========
+    Object.defineProperty(navigator, 'maxTouchPoints', {
+        get: () => 5,
+        configurable: true
+    });
+    
+    // Ajouter touch events
+    if (!('ontouchstart' in window)) {
+        window.ontouchstart = null;
+        document.ontouchstart = null;
+    }
+
+    // ========== 9. SCREEN ORIENTATION (MOBILE) ==========
     Object.defineProperty(window.screen, 'orientation', {
         get: () => ({
             type: 'portrait-primary',
@@ -71,17 +184,10 @@ namespace SocialNetworkArmy.Forms
             dispatchEvent: () => true,
             onchange: null
         }),
-        configurable: true,
-        enumerable: true
+        configurable: true
     });
 
-    // ===== WINDOW DIMENSIONS =====
-    Object.defineProperty(window, 'innerWidth', { get: () => DEVICE_WIDTH, configurable: true });
-    Object.defineProperty(window, 'innerHeight', { get: () => DEVICE_HEIGHT, configurable: true });
-    Object.defineProperty(window, 'outerWidth', { get: () => DEVICE_WIDTH, configurable: true });
-    Object.defineProperty(window, 'outerHeight', { get: () => DEVICE_HEIGHT, configurable: true });
-
-    // ===== VIEWPORT META =====
+    // ========== 10. VIEWPORT META ==========
     const setupViewport = () => {
         if (document.head) {
             let meta = document.querySelector('meta[name=viewport]');
@@ -90,98 +196,291 @@ namespace SocialNetworkArmy.Forms
                 meta.name = 'viewport';
                 document.head.appendChild(meta);
             }
-            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover';
+            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
             return true;
         }
         return false;
     };
 
-    if (!setupViewport()) {
-        const observer = new MutationObserver(() => {
-            if (setupViewport()) observer.disconnect();
-        });
-        if (document.documentElement) {
-            observer.observe(document.documentElement, { childList: true, subtree: true });
-        }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupViewport);
+    } else {
+        setupViewport();
     }
 
-    // ===== TOUCH SUPPORT =====
-    if (!window.TouchEvent) {
-        window.TouchEvent = class TouchEvent extends UIEvent {
-            constructor(type, eventInitDict) {
-                super(type, eventInitDict);
-                this.touches = (eventInitDict && eventInitDict.touches) || [];
-                this.targetTouches = (eventInitDict && eventInitDict.targetTouches) || [];
-                this.changedTouches = (eventInitDict && eventInitDict.changedTouches) || [];
-            }
-        };
-    }
-
-    if (!window.Touch) {
-        window.Touch = class Touch {
-            constructor(touchInit) { Object.assign(this, touchInit || {}); }
-        };
-    }
-
-    // ===== NETWORK INFO (Android) =====
+    // ========== 11. CONNECTION API (4G MOBILE) ==========
     Object.defineProperty(navigator, 'connection', {
         get: () => ({
             effectiveType: '4g',
             downlink: 10,
             rtt: 50,
             saveData: false,
-            type: 'wifi',
+            type: 'cellular',
+            downlinkMax: Infinity,
             addEventListener: () => {},
             removeEventListener: () => {},
             dispatchEvent: () => true,
             onchange: null
         }),
-        configurable: true,
-        enumerable: true
+        configurable: true
     });
 
-    // ===== PERMISSIONS API =====
-    if (navigator.permissions && navigator.permissions.query) {
-        const originalQuery = navigator.permissions.query.bind(navigator.permissions);
-        navigator.permissions.query = async (desc) => {
-            try {
-                if (desc && (desc.name === 'camera' || desc.name === 'microphone' || desc.name === 'geolocation' || desc.name === 'storage')) {
-                    return { state: 'granted', onchange: null };
-                }
-            } catch(e) {}
-            return originalQuery(desc);
+    // ========== 12. USER AGENT DATA (FIXÉ POUR MOBILE) ==========
+    if (navigator.userAgentData) {
+        Object.defineProperty(navigator.userAgentData, 'brands', {
+            get: () => [
+                { brand: 'Not A(Brand', version: '8' },
+                { brand: 'Chromium', version: '130' },
+                { brand: 'Google Chrome', version: '130' }
+            ],
+            configurable: true
+        });
+        
+        Object.defineProperty(navigator.userAgentData, 'mobile', {
+            get: () => true,
+            configurable: true
+        });
+        
+        Object.defineProperty(navigator.userAgentData, 'platform', {
+            get: () => 'Android',
+            configurable: true
+        });
+    }
+    
+    // ========== 13. PLATFORM ==========
+    Object.defineProperty(navigator, 'platform', {
+        get: () => 'Linux armv81',
+        configurable: true
+    });
+    
+    Object.defineProperty(navigator, 'vendor', {
+        get: () => 'Google Inc.',
+        configurable: true
+    });
+    
+    Object.defineProperty(navigator, 'productSub', {
+        get: () => '20030107',
+        configurable: true
+    });
+    
+    Object.defineProperty(navigator, 'vendorSub', {
+        get: () => '',
+        configurable: true
+    });
+
+    // ========== 14. CANVAS FINGERPRINT NOISE (AMÉLIORÉ) ==========
+    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+    
+    const noisify = function(imageData) {
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const noise = Math.random() > 0.5 ? 1 : -1;
+            data[i] = data[i] + noise * Math.floor(Math.random() * 3);
+            data[i + 1] = data[i + 1] + noise * Math.floor(Math.random() * 3);
+            data[i + 2] = data[i + 2] + noise * Math.floor(Math.random() * 3);
+        }
+        return imageData;
+    };
+    
+    CanvasRenderingContext2D.prototype.getImageData = function() {
+        const imageData = originalGetImageData.apply(this, arguments);
+        return noisify(imageData);
+    };
+    
+    HTMLCanvasElement.prototype.toDataURL = function(type) {
+        if (this.width === 0 || this.height === 0) return originalToDataURL.apply(this, arguments);
+        
+        const context = this.getContext('2d');
+        if (context) {
+            const imageData = context.getImageData(0, 0, this.width, this.height);
+            noisify(imageData);
+            context.putImageData(imageData, 0, 0);
+        }
+        return originalToDataURL.apply(this, arguments);
+    };
+
+    // ========== 15. WEBGL FINGERPRINT (MOBILE GPU) ==========
+    const getParameterProxyHandler = {
+        apply: function(target, thisArg, args) {
+            const param = args[0];
+            const result = Reflect.apply(target, thisArg, args);
+            
+            if (param === 37445) { // UNMASKED_VENDOR_WEBGL
+                return 'Qualcomm';
+            }
+            if (param === 37446) { // UNMASKED_RENDERER_WEBGL
+                return 'Adreno (TM) 740';
+            }
+            
+            return result;
+        }
+    };
+    
+    const contextProxyHandler = {
+        get: function(target, prop) {
+            if (prop === 'getParameter') {
+                return new Proxy(target[prop], getParameterProxyHandler);
+            }
+            return target[prop];
+        }
+    };
+    
+    const originalGetContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function() {
+        const context = originalGetContext.apply(this, arguments);
+        if (arguments[0] === 'webgl' || arguments[0] === 'webgl2' || arguments[0] === 'experimental-webgl') {
+            return new Proxy(context, contextProxyHandler);
+        }
+        return context;
+    };
+
+    // ========== 16. BATTERY STATUS (MOBILE) ==========
+    if (navigator.getBattery) {
+        const originalGetBattery = navigator.getBattery;
+        navigator.getBattery = function() {
+            return originalGetBattery().then(battery => {
+                Object.defineProperties(battery, {
+                    charging: { get: () => false },
+                    chargingTime: { get: () => Infinity },
+                    dischargingTime: { get: () => 7200 + Math.random() * 3600 },
+                    level: { get: () => 0.65 + Math.random() * 0.3 }
+                });
+                return battery;
+            });
         };
     }
-
-    // ===== MEDIA DEVICES =====
+    
+    // ========== 17. MEDIA DEVICES (MOBILE) ==========
     if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        const originalEnumerate = navigator.mediaDevices.enumerateDevices.bind(navigator.mediaDevices);
-        navigator.mediaDevices.enumerateDevices = async () => {
-            try {
-                const list = await originalEnumerate();
-                if (Array.isArray(list) && list.length > 0) return list;
-            } catch(e) {}
-            return [
-                { deviceId: 'default', kind: 'audioinput', label: 'Microphone', groupId: 'group1' },
-                { deviceId: 'camera-back', kind: 'videoinput', label: 'Back Camera', groupId: 'group2' },
-                { deviceId: 'camera-front', kind: 'videoinput', label: 'Front Camera', groupId: 'group2' },
-                { deviceId: 'speaker', kind: 'audiooutput', label: 'Speaker', groupId: 'group3' }
-            ];
+        const originalEnumerateDevices = navigator.mediaDevices.enumerateDevices;
+        navigator.mediaDevices.enumerateDevices = function() {
+            return Promise.resolve([
+                {
+                    deviceId: 'default',
+                    kind: 'audioinput',
+                    label: 'Microphone',
+                    groupId: 'default'
+                },
+                {
+                    deviceId: 'default',
+                    kind: 'audiooutput',
+                    label: 'Speaker',
+                    groupId: 'default'
+                },
+                {
+                    deviceId: 'front_camera',
+                    kind: 'videoinput',
+                    label: 'Front Camera',
+                    groupId: 'camera_group'
+                },
+                {
+                    deviceId: 'back_camera',
+                    kind: 'videoinput',
+                    label: 'Back Camera',
+                    groupId: 'camera_group'
+                }
+            ]);
         };
     }
+    
+    // ========== 18. HEADLESS DETECTION ==========
+    Object.defineProperty(navigator, 'headless', {
+        get: () => false
+    });
+    
+    // ========== 19. OBJECT.GETOWNPROPERTYDESCRIPTOR OVERRIDE ==========
+    const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
+    Object.getOwnPropertyDescriptor = function(obj, prop) {
+        if (prop === 'webdriver') {
+            return undefined;
+        }
+        return originalGetOwnPropertyDescriptor(obj, prop);
+    };
+    
+    // ========== 20. FUNCTION TOSTRING PROTECTION ==========
+    const originalFunctionToString = Function.prototype.toString;
+    Function.prototype.toString = function() {
+        if (this === originalGetImageData || 
+            this === originalToDataURL || 
+            this === originalGetContext ||
+            this === originalQuery) {
+            return originalFunctionToString.call(Function.prototype.toString);
+        }
+        return originalFunctionToString.call(this);
+    };
+    
+    // ========== 21. IFRAME DETECTION BYPASS ==========
+    Object.defineProperty(window, 'top', {
+        get: function() {
+            return window;
+        }
+    });
+    
+    Object.defineProperty(window, 'frameElement', {
+        get: function() {
+            return null;
+        }
+    });
+    
+    // ========== 22. PERFORMANCE TIMING ==========
+    if (window.performance && window.performance.timing) {
+        const originalTiming = window.performance.timing;
+        Object.defineProperty(window.performance, 'timing', {
+            get: function() {
+                const timing = {};
+                for (let key in originalTiming) {
+                    if (typeof originalTiming[key] === 'number') {
+                        timing[key] = originalTiming[key] + Math.floor(Math.random() * 10);
+                    } else {
+                        timing[key] = originalTiming[key];
+                    }
+                }
+                return timing;
+            }
+        });
+    }
+    
+    // ========== 23. USER ACTIVATION ==========
+    if (navigator.userActivation) {
+        Object.defineProperty(navigator.userActivation, 'hasBeenActive', {
+            get: () => true
+        });
+        Object.defineProperty(navigator.userActivation, 'isActive', {
+            get: () => true
+        });
+    }
+    
+    // ========== 24. HARDWARE CONCURRENCY (MOBILE) ==========
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 8,
+        configurable: true
+    });
+    
+    Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => 8,
+        configurable: true
+    });
+    
+    // ========== 25. DO NOT TRACK ==========
+    Object.defineProperty(navigator, 'doNotTrack', {
+        get: () => null,
+        configurable: true
+    });
+    
+    // ========== 26. CONSOLE LOG PROTECTION ==========
+    const originalConsoleLog = console.log;
+    console.log = function(...args) {
+        const message = args.join(' ');
+        if (message.includes('webdriver') || 
+            message.includes('automation') || 
+            message.includes('headless')) {
+            return;
+        }
+        return originalConsoleLog.apply(console, args);
+    };
 
-    // ===== CLEANUP =====
-    const toDelete = [
-        '__webdriver_script_fn','__webdriver_script_func','__webdriver_script_arguments',
-        '__selenium_unwrapped','__webdriver_unwrapped','__driver_evaluate','__webdriver_evaluate',
-        '__fxdriver_evaluate','__driver_unwrapped','__fxdriver_unwrapped','__webdriver_evaluate'
-    ];
-    try {
-        toDelete.forEach(k => { try { delete window[k]; } catch(e) {} });
-        toDelete.forEach(k => { try { delete document[k]; } catch(e) {} });
-    } catch(e) {}
-
-    console.log('✅ Android emulation ready');
+    console.log('🛡️ Instagram Story ultra-stealth mode (26 layers - MOBILE)');
 })();
 ";
 
@@ -196,7 +495,6 @@ namespace SocialNetworkArmy.Forms
             InitializeComponent();
             this.Icon = new Icon("Data\\Icons\\Insta.ico");
 
-            // Charge le navigateur (mais NE poste pas tout seul)
             _ = LoadBrowserAsync();
         }
 
@@ -233,7 +531,7 @@ namespace SocialNetworkArmy.Forms
 
             postStoryButton = new Button
             {
-                Text = "Post Today's Story",
+                Text = "Post Story",
                 Location = new Point(DEVICE_WIDTH - 110, DEVICE_HEIGHT + 20),
                 Size = new Size(120, 100),
                 FlatStyle = FlatStyle.Flat,
@@ -257,7 +555,7 @@ namespace SocialNetworkArmy.Forms
         {
             try
             {
-                logTextBox.AppendText("[INFO] Initializing Samsung Galaxy S23 emulation...\r\n");
+                logTextBox.AppendText("[INFO] Initializing browser...\r\n");
                 Directory.CreateDirectory(userDataFolder);
 
                 var options = new CoreWebView2EnvironmentOptions
@@ -266,21 +564,19 @@ namespace SocialNetworkArmy.Forms
                         "--disable-blink-features=AutomationControlled " +
                         "--disable-features=IsolateOrigins,site-per-process " +
                         "--disable-site-isolation-trials " +
-                        "--disable-web-security " +
                         "--disable-dev-shm-usage " +
-                        "--no-sandbox " +
+                        "--no-first-run " +
+                        "--no-default-browser-check " +
+                        "--autoplay-policy=no-user-gesture-required " +
                         $"--window-size={DEVICE_WIDTH},{DEVICE_HEIGHT} " +
+                        // ✅ User-Agent Chrome Mobile STANDARD (pas Edge)
                         "--user-agent=\"Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36\""
                 };
 
                 if (!string.IsNullOrWhiteSpace(profile.Proxy))
                 {
-                    logTextBox.AppendText($"[Proxy] Applying proxy: {profile.Proxy}\r\n");
+                    logTextBox.AppendText($"[Proxy] {profile.Proxy}\r\n");
                     proxyService.ApplyProxy(options, profile.Proxy);
-                }
-                else
-                {
-                    logTextBox.AppendText("[Proxy] No proxy - Direct connection\r\n");
                 }
 
                 var env = await CoreWebView2Environment.CreateAsync(
@@ -290,25 +586,49 @@ namespace SocialNetworkArmy.Forms
                 );
 
                 await webView.EnsureCoreWebView2Async(env);
-                logTextBox.AppendText("[INFO] WebView2 environment initialized\r\n");
+                logTextBox.AppendText("[OK] WebView2 ready\r\n");
 
-                // Injecte le script d’emulation sans casser C#
-                var script = ANDROID_EMU_SCRIPT
+                // ✅ BLOQUER LE FILE DIALOG AU NIVEAU DU BROWSER (AVANT TOUTE PAGE)
+                var blockDialogScript = @"
+(function() {
+    'use strict';
+    
+    // Override au niveau du prototype AVANT que la page charge
+    const originalClick = HTMLInputElement.prototype.click;
+    HTMLInputElement.prototype.click = function() {
+        if (this.type === 'file') {
+            console.log('⚠️ File dialog blocked by prototype override');
+            return;
+        }
+        return originalClick.call(this);
+    };
+    
+    // Bloquer showOpenFilePicker
+    if (window.showOpenFilePicker) {
+        window.showOpenFilePicker = () => Promise.reject(new Error('Blocked'));
+    }
+    
+    console.log('✅ File dialog blocker active');
+})();";
+
+                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(blockDialogScript);
+                logTextBox.AppendText("[OK] File dialog blocker injected\r\n");
+
+                var script = STEALTH_SCRIPT
                     .Replace("__WIDTH__", DEVICE_WIDTH.ToString(CultureInfo.InvariantCulture))
                     .Replace("__HEIGHT__", DEVICE_HEIGHT.ToString(CultureInfo.InvariantCulture))
                     .Replace("__DPR__", DEVICE_PIXEL_RATIO.ToString(CultureInfo.InvariantCulture));
 
                 await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
-                logTextBox.AppendText("[INFO] Android emulation script injected\r\n");
+                logTextBox.AppendText("[OK] Stealth script injected\r\n");
 
-                webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
-                
+                webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
 
                 if (!string.IsNullOrEmpty(profile.Proxy))
                 {
                     proxyService.SetupProxyAuthentication(webView.CoreWebView2, profile.Proxy);
-                    logTextBox.AppendText("[INFO] Proxy authentication set up\r\n");
                 }
                 else
                 {
@@ -317,8 +637,23 @@ namespace SocialNetworkArmy.Forms
 
                 webView.CoreWebView2.NavigationCompleted += async (sender, args) =>
                 {
-                    logTextBox.AppendText("[INFO] Navigation completed\r\n");
+                    logTextBox.AppendText("[OK] Page loaded\r\n");
                     await LogEnvironmentAsync();
+
+                    // ✅ CRITIQUE : Warm-up avant d'activer le bouton
+                    logTextBox.AppendText("[Warmup] Simulating human activity...\r\n");
+                    await Task.Delay(random.Next(5000, 10000)); // 5-10 secondes de "lecture"
+
+                    // Simuler un scroll léger
+                    await webView.CoreWebView2.ExecuteScriptAsync(@"
+                        window.scrollBy({
+                            top: Math.random() * 300,
+                            behavior: 'smooth'
+                        });
+                    ");
+
+                    await Task.Delay(random.Next(2000, 4000));
+                    logTextBox.AppendText("[Warmup] Ready\r\n");
 
                     isWebViewReady = true;
                     if (postStoryButton.InvokeRequired)
@@ -328,12 +663,12 @@ namespace SocialNetworkArmy.Forms
                 };
 
                 webView.CoreWebView2.Navigate("https://www.instagram.com/");
-                logTextBox.AppendText("[INFO] Navigating to Instagram...\r\n");
+                logTextBox.AppendText("[INFO] Loading Instagram...\r\n");
             }
             catch (Exception ex)
             {
                 logTextBox.AppendText($"[ERROR] {ex.Message}\r\n");
-                MessageBox.Show($"Browser error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -341,28 +676,19 @@ namespace SocialNetworkArmy.Forms
         {
             try
             {
-                logTextBox.AppendText("[INFO] Logging effective environment...\r\n");
                 string envLog = await webView.CoreWebView2.ExecuteScriptAsync(@"
                     (function() {
                         try {
                             return JSON.stringify({
-                                userAgent: navigator.userAgent,
+                                ua: navigator.userAgent,
                                 platform: navigator.platform,
                                 vendor: navigator.vendor,
-                                maxTouchPoints: navigator.maxTouchPoints,
-                                hardwareConcurrency: navigator.hardwareConcurrency,
-                                deviceMemory: navigator.deviceMemory,
-                                devicePixelRatio: window.devicePixelRatio,
-                                screen: {
-                                    width: window.screen.width,
-                                    height: window.screen.height,
-                                    availWidth: window.screen.availWidth,
-                                    availHeight: window.screen.availHeight
-                                },
-                                innerWidth: window.innerWidth,
-                                innerHeight: window.innerHeight,
-                                orientation: (window.screen.orientation && window.screen.orientation.type) || 'unknown',
-                                connection: (navigator.connection && navigator.connection.effectiveType) || 'unknown'
+                                webdriver: navigator.webdriver,
+                                chromeRuntime: typeof window.chrome?.runtime,
+                                maxTouch: navigator.maxTouchPoints,
+                                dpr: window.devicePixelRatio,
+                                screen: window.screen.width + 'x' + window.screen.height,
+                                inner: window.innerWidth + 'x' + window.innerHeight
                             });
                         } catch(e) {
                             return JSON.stringify({ error: e.message });
@@ -387,24 +713,48 @@ namespace SocialNetworkArmy.Forms
         {
             if (!isWebViewReady)
             {
-                logTextBox.AppendText("[Story] ✗ WebView not ready yet. Please wait...\r\n");
+                logTextBox.AppendText("[Story] ✗ Not ready\r\n");
                 return false;
             }
 
-            logTextBox.AppendText("[Story] Looking for today's story in schedule.csv...\r\n");
+            // ✅ CRITIQUE : Vérifier qu'on n'a pas posté récemment
+            string lastPostFile = Path.Combine(userDataFolder, "last_story_post.txt");
+            if (File.Exists(lastPostFile))
+            {
+                string lastPostStr = File.ReadAllText(lastPostFile);
+                if (DateTime.TryParse(lastPostStr, out DateTime lastPost))
+                {
+                    TimeSpan elapsed = DateTime.Now - lastPost;
+                    if (elapsed.TotalMinutes < 15) // Minimum 15 minutes entre les posts
+                    {
+                        logTextBox.AppendText($"[Story] ✗ Too soon (last post: {elapsed.TotalMinutes:F1}min ago)\r\n");
+                        return false;
+                    }
+                }
+            }
+
+            logTextBox.AppendText("[Story] Checking schedule...\r\n");
             string mediaPath = GetTodayStoryMediaPath();
 
             if (string.IsNullOrEmpty(mediaPath))
             {
-                logTextBox.AppendText("[Story] ✗ No story found for today or invalid media path\r\n");
+                logTextBox.AppendText("[Story] ✗ No story for today\r\n");
                 return false;
             }
 
-            logTextBox.AppendText($"[Story] Found media: {mediaPath}\r\n");
+            logTextBox.AppendText($"[Story] Media: {Path.GetFileName(mediaPath)}\r\n");
             bool success = await UploadStoryAsync(mediaPath);
 
-            if (success) logTextBox.AppendText("[Story] ✓ Story posted successfully!\r\n");
-            else logTextBox.AppendText("[Story] ✗ Failed to post story\r\n");
+            if (success)
+            {
+                logTextBox.AppendText("[Story] ✓ Success!\r\n");
+                // Enregistrer l'heure du post
+                File.WriteAllText(lastPostFile, DateTime.Now.ToString("o"));
+            }
+            else
+            {
+                logTextBox.AppendText("[Story] ✗ Failed\r\n");
+            }
 
             return success;
         }
@@ -414,44 +764,51 @@ namespace SocialNetworkArmy.Forms
             string csvPath = Path.Combine("Data", "schedule.csv");
             if (!File.Exists(csvPath))
             {
-                logTextBox.AppendText($"[Story] ✗ schedule.csv not found at {csvPath}\r\n");
+                logTextBox.AppendText($"[Schedule] ✗ CSV not found\r\n");
                 return null;
             }
 
             try
             {
-                string today = DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                DateTime now = DateTime.Now;
+                string today = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
                 string[] lines = File.ReadAllLines(csvPath);
+
                 for (int i = 1; i < lines.Length; i++)
                 {
                     var line = lines[i];
                     if (string.IsNullOrWhiteSpace(line)) continue;
-                    var columns = line.Split(',');
+
+                    var columns = line.Split(',').Select(c => c.Trim()).ToArray();
                     if (columns.Length < 5) continue;
 
-                    string dateTime = columns[0].Trim();
-                    string platform = columns[1].Trim();
-                    string account = columns[2].Trim();
-                    string activity = columns[3].Trim();
-                    string media = columns[4].Trim();
+                    string dateTime = columns[0];
+                    string platform = columns[1];
+                    string account = columns[2];
+                    string activity = columns[3];
+                    string media = columns[4];
 
-                    if (dateTime.StartsWith(today, StringComparison.Ordinal) &&
+                    string dateOnly = dateTime.Split(' ')[0];
+
+                    if (dateOnly.Equals(today, StringComparison.OrdinalIgnoreCase) &&
                         platform.Equals(profile.Platform, StringComparison.OrdinalIgnoreCase) &&
                         account.Equals(profile.Name, StringComparison.OrdinalIgnoreCase) &&
                         activity.Equals("story", StringComparison.OrdinalIgnoreCase) &&
                         !string.IsNullOrEmpty(media) &&
                         File.Exists(media))
                     {
+                        logTextBox.AppendText($"[Schedule] ✓ Match: {Path.GetFileName(media)}\r\n");
                         return media;
                     }
                 }
 
-                logTextBox.AppendText($"[Story] No valid story entry found for {today}, profile {profile.Name}, platform {profile.Platform}\r\n");
+                logTextBox.AppendText("[Schedule] ✗ No match\r\n");
                 return null;
             }
             catch (Exception ex)
             {
-                logTextBox.AppendText($"[Story] ✗ Error reading schedule.csv: {ex.Message}\r\n");
+                logTextBox.AppendText($"[Schedule] ✗ Error: {ex.Message}\r\n");
                 return null;
             }
         }
@@ -460,7 +817,7 @@ namespace SocialNetworkArmy.Forms
         {
             if (!File.Exists(filePath))
             {
-                logTextBox.AppendText($"[Upload] ✗ File not found: {filePath}\r\n");
+                logTextBox.AppendText($"[Upload] ✗ File not found\r\n");
                 return false;
             }
 
@@ -482,316 +839,310 @@ namespace SocialNetworkArmy.Forms
                                 : (extension == ".png") ? "image/png"
                                 : "image/jpeg";
 
-                logTextBox.AppendText($"[Upload] Type: {((extension == ".mp4" || extension == ".mov") ? "Video" : "Image")}\r\n");
-                logTextBox.AppendText($"[Upload] Size: {fileBytes.Length / 1024} KB\r\n");
+                logTextBox.AppendText($"[Upload] Type: {mimeType}, Size: {fileBytes.Length / 1024}KB\r\n");
 
-                await Task.Delay(random.Next(2500, 4500));
-                logTextBox.AppendText("[Upload] Clicking 'Create' button...\r\n");
+                // ✅ Délai humain VARIABLE (pas toujours pareil)
+                int initialDelay = random.Next(2000, 6000); // 2-6 secondes
+                logTextBox.AppendText($"[Upload] Waiting {initialDelay}ms...\r\n");
+                await Task.Delay(initialDelay);
+
+                // ✅ Simuler une activité aléatoire (50% de chance)
+                if (random.Next(0, 2) == 0)
+                {
+                    logTextBox.AppendText("[Upload] Simulating scroll...\r\n");
+                    await webView.CoreWebView2.ExecuteScriptAsync(@"
+                        window.scrollBy({
+                            top: Math.random() * 100 - 50,
+                            behavior: 'smooth'
+                        });
+                    ");
+                    await Task.Delay(random.Next(500, 1500));
+                }
+
+                logTextBox.AppendText("[Upload] Clicking Create...\r\n");
 
                 var createResult = await webView.CoreWebView2.ExecuteScriptAsync(@"
-                    (function() {
-                        try {
-                            // Recherche multi-méthodes du bouton Create
-                            
-                            // Méthode 1: Via l'aria-label du SVG (le plus fiable)
-                            const createSvg = document.querySelector('svg[aria-label=""Accueil""]')?.closest('[role]')?.parentElement;
-                            if (createSvg) {
-                                createSvg.click();
-                                return 'CREATE_BUTTON_CLICKED_VIA_SVG';
-                            }
-                            
-                            // Méthode 2: Chercher le SVG avec le path spécifique (icône +)
-                            const allSvgs = Array.from(document.querySelectorAll('svg'));
-                            const plusSvg = allSvgs.find(svg => {
-                                const path = svg.querySelector('path[d*=""M2 12v3.45""]');
-                                const line1 = svg.querySelector('line[x1=""6.545""]');
-                                const line2 = svg.querySelector('line[x1=""12.003""]');
-                                return path && line1 && line2;
-                            });
-                            
-                            if (plusSvg) {
-                                let parent = plusSvg.closest('a, div[role=""button""], [tabindex]');
-                                if (parent) {
-                                    parent.click();
-                                    return 'CREATE_BUTTON_CLICKED_VIA_PLUS_ICON';
-                                }
-                            }
-                            
-                            // Méthode 3: Chercher via aria-label ""Accueil"" (dans le document fourni)
-                            const accueilBtn = document.querySelector('[aria-label=""Accueil""]')?.closest('a, div[role], [tabindex]');
-                            if (accueilBtn) {
-                                accueilBtn.click();
-                                return 'CREATE_BUTTON_CLICKED_VIA_ACCUEIL';
-                            }
-                            
-                            // Méthode 4: Fallback classique
-                            const btn = document.querySelector('a[href*=""/create""]')
-                                   || document.querySelector('svg[aria-label*=""New post""]')?.closest('a')
-                                   || document.querySelector('[aria-label*=""Create""]')?.closest('a')
-                                   || document.querySelector('[aria-label*=""Créer""]')?.closest('a');
-                            if (btn) { 
-                                btn.click(); 
-                                return 'CREATE_BUTTON_CLICKED_FALLBACK'; 
-                            }
-                            
-                            return 'CREATE_BUTTON_NOT_FOUND';
-                        } catch(e) { return 'ERROR:' + e.message; }
-                    })();
-                ");
+(function() {
+    try {
+        const allSvgs = Array.from(document.querySelectorAll('svg'));
+        const plusSvg = allSvgs.find(svg => {
+            const path = svg.querySelector('path[d*=""M2 12v3.45""]');
+            const line1 = svg.querySelector('line[x1=""6.545""]');
+            const line2 = svg.querySelector('line[x1=""12.003""]');
+            return path && line1 && line2;
+        });
+        
+        if (plusSvg) {
+            const link = plusSvg.closest('a');
+            if (link) {
+                link.click();
+                return 'CLICKED_VIA_PLUS_SVG';
+            }
+        }
 
-                logTextBox.AppendText($"[Upload] Create result: {createResult?.Trim('\"') ?? "No response"}\r\n");
-                if (createResult == null || !createResult.Contains("CREATE_BUTTON_CLICKED"))
+        const btn = document.querySelector('a[href*=""/create""]') ||
+                   document.querySelector('svg[aria-label*=""Create""]')?.closest('a') ||
+                   document.querySelector('svg[aria-label*=""Créer""]')?.closest('a');
+        
+        if (btn) {
+            btn.click();
+            return 'CLICKED_FALLBACK';
+        }
+        
+        return 'NOT_FOUND';
+    } catch(e) {
+        return 'ERROR:' + e.message;
+    }
+})();");
+
+                logTextBox.AppendText($"[Upload] Create: {createResult?.Trim('\"')}\r\n");
+
+                if (!createResult?.Contains("CLICKED") == true)
                 {
-                    logTextBox.AppendText("[Upload] ⚠ Create button not found\r\n");
+                    logTextBox.AppendText("[Upload] ✗ Create button not found\r\n");
                     return false;
                 }
 
-                await Task.Delay(random.Next(1500, 3000));
+                await Task.Delay(random.Next(2000, 3500));
 
-                logTextBox.AppendText("[Upload] Selecting 'Story' tab...\r\n");
-                await webView.CoreWebView2.ExecuteScriptAsync(@"
-                    (function() {
-                        try {
-                            const tabs = Array.from(document.querySelectorAll('div[role=""tab""], button'));
-                            const storyTab = tabs.find(el =>
-                                (el.textContent && /story/i.test(el.textContent)) ||
-                                (el.getAttribute('aria-label') && /story/i.test(el.getAttribute('aria-label')))
-                            );
-                            if (storyTab) storyTab.click();
-                            return 'OK';
-                        } catch(e) { return 'ERROR:' + e.message; }
-                    })();
-                ");
+                logTextBox.AppendText("[Upload] Selecting Story tab...\r\n");
 
-                await Task.Delay(random.Next(1500, 3000));
+                var storyTabResult = await webView.CoreWebView2.ExecuteScriptAsync(@"
+(function() {
+    try {
+        const storySvg = document.querySelector('svg[aria-label=""Story""]');
+        if (storySvg) {
+            const button = storySvg.closest('div[role=""button""]');
+            if (button) {
+                button.click();
+                return 'STORY_CLICKED_VIA_SVG';
+            }
+        }
+
+        const tabs = Array.from(document.querySelectorAll('div[role=""tab""], button'));
+        const storyTab = tabs.find(el =>
+            /story/i.test(el.textContent) || /story/i.test(el.getAttribute('aria-label') || '')
+        );
+        if (storyTab) {
+            storyTab.click();
+            return 'STORY_CLICKED_FALLBACK';
+        }
+
+        return 'STORY_NOT_FOUND';
+    } catch(e) {
+        return 'ERROR:' + e.message;
+    }
+})();");
+
+                logTextBox.AppendText($"[Upload] Story tab: {storyTabResult?.Trim('\"')}\r\n");
+
+                await Task.Delay(random.Next(2000, 3500));
 
                 logTextBox.AppendText("[Upload] Uploading file...\r\n");
-                string injectScript = $@"
+
+                string uploadScript = $@"
 (function() {{
     try {{
         const base64 = '{base64}';
         const mimeType = '{mimeType}';
         const fileName = '{fileName.Replace("'", "_")}';
 
-        const byteCharacters = atob(base64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], {{ type: mimeType }});
+        // Décoder le base64
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        
+        const blob = new Blob([bytes], {{ type: mimeType }});
         const file = new File([blob], fileName, {{ type: mimeType, lastModified: Date.now() }});
 
-        let input = document.querySelector('input[type=""file""]');
-        if (input) {{
-            const dt = new DataTransfer();
-            dt.items.add(file);
+        // Trouver l'input
+        const input = document.querySelector('input[type=""file""]');
+        if (!input) return 'NO_INPUT';
+
+        // ✅ Assigner directement les fichiers SANS déclencher click()
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        
+        // Forcer la valeur
+        try {{
+            Object.defineProperty(input, 'files', {{
+                value: dt.files,
+                writable: false,
+                configurable: true
+            }});
+        }} catch(e) {{
             input.files = dt.files;
-            input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            return 'SUCCESS';
         }}
-        return 'INPUT_NOT_FOUND';
-    }} catch(error) {{
-        return 'ERROR: ' + error.message;
+        
+        // Déclencher les événements
+        const changeEvent = new Event('change', {{ bubbles: true, cancelable: false }});
+        const inputEvent = new Event('input', {{ bubbles: true, cancelable: false }});
+        
+        input.dispatchEvent(changeEvent);
+        input.dispatchEvent(inputEvent);
+        
+        // Vérifier que les fichiers sont bien assignés
+        if (input.files.length === 0) return 'FILES_NOT_ASSIGNED';
+        
+        return 'SUCCESS';
+    }} catch(e) {{
+        return 'ERROR:' + e.message;
     }}
 }})();";
 
-                string result = await webView.CoreWebView2.ExecuteScriptAsync(injectScript);
-                logTextBox.AppendText($"[Upload] Result: {result?.Trim('\"') ?? "No response"}\r\n");
+                string uploadResult = await webView.CoreWebView2.ExecuteScriptAsync(uploadScript);
+                logTextBox.AppendText($"[Upload] Upload: {uploadResult?.Trim('\"')}\r\n");
 
-                if (result == null || !result.Contains("SUCCESS"))
+                if (!uploadResult?.Contains("SUCCESS") == true)
                 {
-                    logTextBox.AppendText($"[Upload] ✗ Upload failed: {result}\r\n");
+                    logTextBox.AppendText("[Upload] ✗ Upload failed\r\n");
                     return false;
                 }
 
-                await Task.Delay(random.Next(2500, 4000));
+                await Task.Delay(random.Next(4000, 6000));
 
-                // Optionnel: charger stickers
-                await ForceLoadStickersAsync();
-                await Task.Delay(random.Next(1500, 2500));
+                logTextBox.AppendText("[Upload] Publishing story...\r\n");
 
                 string publishScript = @"
 (async function() {
-    try {
-        // Attente pour que le DOM soit prêt
-        await new Promise(r => setTimeout(r, 500));
+    'use strict';
 
-        // Méthode 1 : Recherche directe du span (la plus fiable)
-        const span = Array.from(document.querySelectorAll('span')).find(el => 
-            el.textContent.trim() === 'Ajouter à votre story' || 
+    const delay = (min, max) => new Promise(r => 
+        setTimeout(r, Math.floor(Math.random() * (max - min + 1)) + min)
+    );
+
+    const simulateMouseMove = async (element) => {
+        const rect = element.getBoundingClientRect();
+        const steps = 2 + Math.floor(Math.random() * 2);
+        
+        for (let i = 0; i < steps; i++) {
+            await delay(50, 150);
+            const progress = (i + 1) / steps;
+            const x = rect.left + rect.width * (0.3 + Math.random() * 0.4) * progress;
+            const y = rect.top + rect.height * (0.3 + Math.random() * 0.4) * progress;
+            
+            element.dispatchEvent(new MouseEvent('mousemove', {
+                view: window,
+                bubbles: true,
+                cancelable: true,
+                clientX: x,
+                clientY: y
+            }));
+        }
+    };
+
+    const humanClick = async (element) => {
+        if (!element) return false;
+
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await delay(400, 800);
+
+        await simulateMouseMove(element);
+        await delay(150, 300);
+
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + rect.width * (0.45 + Math.random() * 0.1);
+        const y = rect.top + rect.height * (0.45 + Math.random() * 0.1);
+
+        const opts = {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            button: 0,
+            buttons: 1
+        };
+
+        element.dispatchEvent(new MouseEvent('mouseover', opts));
+        element.dispatchEvent(new MouseEvent('mouseenter', opts));
+        await delay(80, 200);
+
+        element.dispatchEvent(new MouseEvent('mousedown', opts));
+        await delay(80, 160);
+        
+        if (element.focus) element.focus();
+        
+        element.dispatchEvent(new MouseEvent('mouseup', opts));
+        await delay(30, 80);
+        element.dispatchEvent(new MouseEvent('click', opts));
+        
+        return true;
+    };
+
+    try {
+        await delay(500, 1200);
+
+        const addSpan = Array.from(document.querySelectorAll('span')).find(el => 
+            el.textContent.trim() === 'Ajouter à votre story' ||
             el.textContent.trim() === 'Add to your story' ||
             el.textContent.trim() === 'Share to story'
         );
 
-        if (span) {
-            // Scroll vers l'élément
-            span.scrollIntoView({behavior: 'smooth', block: 'center'});
-            await new Promise(r => setTimeout(r, 300));
-
-            // Vérifie visibilité
-            const rect = span.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) {
-                return 'STORY_SPAN_INVISIBLE';
-            }
-
-            // Triple clic : span + 3 niveaux de parents
-            span.click();
-            await new Promise(r => setTimeout(r, 50));
-            
-            if (span.parentElement) {
-                span.parentElement.click();
-                await new Promise(r => setTimeout(r, 50));
-            }
-            
-            if (span.parentElement?.parentElement) {
-                span.parentElement.parentElement.click();
-                await new Promise(r => setTimeout(r, 50));
-            }
-            
-            if (span.parentElement?.parentElement?.parentElement) {
-                span.parentElement.parentElement.parentElement.click();
-            }
-
-            return 'STORY_SPAN_CLICKED_SUCCESS';
-        }
-
-        // Méthode 2 : Fallback via SVG Story
-        const svg = document.querySelector('svg[aria-label=""Story""], svg[aria-label=""story"" i]');
-        if (svg) {
-            let parent = svg;
-            for (let i = 0; i < 5; i++) {
-                parent = parent.parentElement;
-                if (!parent || parent === document.body) break;
-                
-                const style = window.getComputedStyle(parent);
-                if (parent.onclick || style.cursor === 'pointer' || parent.getAttribute('role') === 'button') {
-                    parent.click();
-                    return 'STORY_SVG_PARENT_CLICKED';
+        if (addSpan) {
+            const button = addSpan.closest('button, div[role=""button""], a[role=""button""]');
+            if (button) {
+                const rect = button.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    await humanClick(button);
+                    await delay(200, 500);
+                    return 'PUBLISHED_VIA_SPAN';
                 }
             }
-            
-            // Clic sur le 3e parent par défaut
-            if (svg.parentElement?.parentElement?.parentElement) {
-                svg.parentElement.parentElement.parentElement.click();
-                return 'STORY_SVG_FALLBACK_CLICKED';
+        }
+
+        const shareBtn = Array.from(document.querySelectorAll('button, div[role=""button""]'))
+            .find(el => {
+                const text = (el.textContent || '').toLowerCase();
+                return text.includes('ajouter à votre story') || 
+                       text.includes('add to your story') ||
+                       text.includes('share to story');
+            });
+
+        if (shareBtn) {
+            const rect = shareBtn.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                await humanClick(shareBtn);
+                await delay(200, 500);
+                return 'PUBLISHED_VIA_TEXT';
             }
         }
 
-        // Méthode 3 : Recherche agressive par texte
-        const allElements = Array.from(document.querySelectorAll('div, button, span'));
-        const textMatch = allElements.find(el => {
-            const text = (el.textContent || '').toLowerCase();
-            return (text.includes('ajouter à votre story') || 
-                    text.includes('add to your story') ||
-                    text.includes('share to story')) && 
-                   text.length < 100;
-        });
+        const fallbackBtn = Array.from(document.querySelectorAll('button, div[role=""button""]'))
+            .find(el => {
+                const text = (el.textContent || '').toLowerCase();
+                const label = (el.getAttribute('aria-label') || '').toLowerCase();
+                return text.includes('share') || text.includes('partager') || 
+                       text.includes('add to') || text.includes('ajouter') ||
+                       label.includes('share') || label.includes('add');
+            });
 
-        if (textMatch) {
-            textMatch.click();
-            return 'STORY_TEXT_ELEMENT_CLICKED';
+        if (fallbackBtn) {
+            const rect = fallbackBtn.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0) {
+                await humanClick(fallbackBtn);
+                await delay(200, 500);
+                return 'PUBLISHED_FALLBACK';
+            }
         }
 
-        return 'STORY_BUTTON_NOT_FOUND';
-    } catch (e) {
+        return 'BUTTON_NOT_FOUND';
+    } catch(e) {
         return 'ERROR:' + e.message;
     }
-})();
-";
+})();";
+
                 string publishResult = await webView.CoreWebView2.ExecuteScriptAsync(publishScript);
-                logTextBox.AppendText($"[Upload] Publish result: {publishResult?.Trim('\"') ?? "No response"}\r\n");
-                await Task.Delay(10000);
-                return true;
+                logTextBox.AppendText($"[Upload] Publish: {publishResult?.Trim('\"')}\r\n");
 
+                await Task.Delay(random.Next(5000, 8000));
 
+                return publishResult?.Contains("PUBLISHED") == true;
             }
             catch (Exception ex)
             {
                 logTextBox.AppendText($"[Upload] ✗ Exception: {ex.Message}\r\n");
                 return false;
-            }
-
-        }
-        
-        private async Task ForceLoadStickersAsync()
-        {
-            try
-            {
-                logTextBox.AppendText("[Stickers] Loading stickers (Android mode)...\r\n");
-
-                string stickerScript = @"
-(function() {
-    try {
-        const selectors = [
-            '[aria-label*=""sticker"" i]',
-            '[aria-label*=""Sticker"" i]',
-            '[aria-label*=""GIF"" i]',
-            '[aria-label*=""Draw"" i]',
-            '[aria-label*=""Text"" i]',
-            '[aria-label*=""Aa""]',
-            'svg[aria-label]',
-            'button[type=""button""]'
-        ];
-
-        let foundButtons = [];
-
-        for (const selector of selectors) {
-            const elements = document.querySelectorAll(selector);
-            elements.forEach(el => {
-                const label = (el.getAttribute('aria-label') || el.textContent || '').toLowerCase();
-                if (label.includes('sticker') || label.includes('gif') || label.includes('text') || label.includes('draw')) {
-                    foundButtons.push({
-                        element: el,
-                        label: label,
-                        type: label.includes('sticker') ? 'sticker' :
-                              label.includes('gif') ? 'gif' :
-                              label.includes('text') ? 'text' : 'other'
-                    });
-                }
-            });
-        }
-
-        const stickerBtn = foundButtons.find(b => b.type === 'sticker');
-        if (stickerBtn) {
-            stickerBtn.element.click();
-            return 'STICKERS_LOADED:' + foundButtons.length + '_buttons';
-        }
-
-        return foundButtons.length > 0 ?
-            'BUTTONS_FOUND:' + foundButtons.map(b => b.type).join(',') :
-            'NO_STICKER_BUTTONS';
-    } catch(e) {
-        return 'ERROR: ' + e.message;
-    }
-})();";
-
-                string result = await webView.CoreWebView2.ExecuteScriptAsync(stickerScript);
-                logTextBox.AppendText($"[Stickers] Result: {result?.Trim('\"') ?? "Unknown"}\r\n");
-
-                if (result != null && (result.Contains("STICKERS_LOADED") || result.Contains("BUTTONS_FOUND")))
-                {
-                    logTextBox.AppendText("[Stickers] ✓ Sticker UI likely available\r\n");
-                    await Task.Delay(random.Next(1000, 2000));
-
-                    await webView.CoreWebView2.ExecuteScriptAsync(@"
-                        setTimeout(() => {
-                            const panels = document.querySelectorAll('[role=""dialog""], div[style*=""overflow""]');
-                            panels.forEach(panel => {
-                                if (panel.scrollHeight > panel.clientHeight) {
-                                    panel.scrollBy(0, 100);
-                                    setTimeout(() => panel.scrollBy(0, -100), 400);
-                                }
-                            });
-                        }, 800);
-                    ");
-                }
-                else
-                {
-                    logTextBox.AppendText("[Stickers] ⚠ Not immediately available\r\n");
-                }
-            }
-            catch (Exception ex)
-            {
-                logTextBox.AppendText($"[Stickers] Error: {ex.Message}\r\n");
             }
         }
 
