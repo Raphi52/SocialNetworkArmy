@@ -12,13 +12,18 @@ namespace SocialNetworkArmy.Services
         {
             var rand = new Random();
 
-            // Générer résolution aléatoire
+            // ✅ EXPANDED: Plus de résolutions réalistes
             var resolutions = new[] {
-                new { w = 1920, h = 1080 },
-                new { w = 1366, h = 768 },
-                new { w = 1536, h = 864 },
-                new { w = 1440, h = 900 },
-                new { w = 2560, h = 1440 }
+                new { w = 1920, h = 1080 },  // Full HD (most common)
+                new { w = 1366, h = 768 },   // Laptop standard
+                new { w = 1536, h = 864 },   // Laptop HD
+                new { w = 1440, h = 900 },   // 16:10
+                new { w = 2560, h = 1440 },  // 2K
+                new { w = 1600, h = 900 },   // HD+
+                new { w = 1280, h = 720 },   // HD
+                new { w = 1280, h = 1024 },  // 5:4
+                new { w = 2048, h = 1152 },  // QWXGA
+                new { w = 3840, h = 2160 }   // 4K (rare but realistic)
             };
             var res = resolutions[rand.Next(resolutions.Length)];
 
@@ -27,6 +32,80 @@ namespace SocialNetworkArmy.Services
             var ram = new[] { 4, 8, 16, 32 };
             var hardwareConcurrency = cores[rand.Next(cores.Length)];
             var deviceMemory = ram[rand.Next(ram.Length)];
+
+            // ✅ COHERENT WebGL: GPU doit matcher le CPU
+            string webglVendor, webglRenderer;
+            var gpuType = rand.Next(3); // 0=Intel, 1=NVIDIA, 2=AMD
+
+            if (gpuType == 0) // Intel (most common for laptops)
+            {
+                webglVendor = "Intel Inc.";
+                var intelGPUs = new[] {
+                    "Intel(R) UHD Graphics 620",
+                    "Intel(R) UHD Graphics 630",
+                    "Intel(R) Iris(R) Xe Graphics",
+                    "ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)"
+                };
+                webglRenderer = intelGPUs[rand.Next(intelGPUs.Length)];
+            }
+            else if (gpuType == 1) // NVIDIA (gaming/workstation)
+            {
+                webglVendor = "NVIDIA Corporation";
+                var nvidiaGPUs = new[] {
+                    "NVIDIA GeForce GTX 1650",
+                    "NVIDIA GeForce GTX 1660 Ti",
+                    "NVIDIA GeForce RTX 3060",
+                    "NVIDIA GeForce RTX 3070",
+                    "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)"
+                };
+                webglRenderer = nvidiaGPUs[rand.Next(nvidiaGPUs.Length)];
+            }
+            else // AMD
+            {
+                webglVendor = "ATI Technologies Inc.";
+                var amdGPUs = new[] {
+                    "AMD Radeon RX 580 Series",
+                    "AMD Radeon RX 6600",
+                    "AMD Radeon(TM) Graphics",
+                    "ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0)"
+                };
+                webglRenderer = amdGPUs[rand.Next(amdGPUs.Length)];
+            }
+
+            // ✅ VARIED Plugins: 3-5 plugins avec variation
+            var hasFlashPlugin = rand.NextDouble() < 0.1; // 10% ont encore Flash
+            var hasSilverlightPlugin = rand.NextDouble() < 0.05; // 5% ont Silverlight
+            var pluginsList = new System.Collections.Generic.List<string>
+            {
+                @"{ 0: {type: 'application/x-google-chrome-pdf', suffixes: 'pdf', description: 'Portable Document Format'}, description: 'Portable Document Format', filename: 'internal-pdf-viewer', length: 1, name: 'Chrome PDF Plugin' }",
+                @"{ 0: {type: 'application/pdf', suffixes: 'pdf', description: ''}, description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', length: 1, name: 'Chrome PDF Viewer' }",
+                @"{ 0: {type: 'application/x-nacl', suffixes: '', description: 'Native Client Executable'}, 1: {type: 'application/x-pnacl', suffixes: '', description: 'Portable Native Client Executable'}, description: '', filename: 'internal-nacl-plugin', length: 2, name: 'Native Client' }"
+            };
+
+            if (hasFlashPlugin)
+                pluginsList.Add(@"{ 0: {type: 'application/x-shockwave-flash', suffixes: 'swf', description: 'Shockwave Flash'}, description: 'Shockwave Flash', filename: 'pepflashplayer.dll', length: 1, name: 'Shockwave Flash' }");
+
+            if (hasSilverlightPlugin)
+                pluginsList.Add(@"{ 0: {type: 'application/x-silverlight', suffixes: 'xap', description: 'Silverlight'}, description: 'Silverlight Plug-In', filename: 'npctrl.dll', length: 1, name: 'Silverlight Plug-In' }");
+
+            var pluginsJs = string.Join(",\n            ", pluginsList);
+
+            // ✅ LOCALIZED Languages: Adapter selon géolocalisation (basic implementation)
+            var languageProfiles = new[] {
+                new { langs = new[] { "en-US", "en" }, primary = "en-US" },                    // USA
+                new { langs = new[] { "en-GB", "en" }, primary = "en-GB" },                    // UK
+                new { langs = new[] { "fr-FR", "fr", "en-US" }, primary = "fr-FR" },          // France
+                new { langs = new[] { "de-DE", "de", "en" }, primary = "de-DE" },             // Germany
+                new { langs = new[] { "es-ES", "es", "en" }, primary = "es-ES" },             // Spain
+                new { langs = new[] { "pt-BR", "pt", "en" }, primary = "pt-BR" },             // Brazil
+                new { langs = new[] { "ja-JP", "ja", "en" }, primary = "ja-JP" },             // Japan
+                new { langs = new[] { "zh-CN", "zh", "en" }, primary = "zh-CN" },             // China
+                new { langs = new[] { "en-CA", "en", "fr-CA" }, primary = "en-CA" },          // Canada
+                new { langs = new[] { "it-IT", "it", "en" }, primary = "it-IT" }              // Italy
+            };
+            var langProfile = languageProfiles[rand.Next(languageProfiles.Length)];
+            var languagesJs = string.Join(", ", langProfile.langs.Select(l => $"'{l}'"));
+            var primaryLanguage = langProfile.primary;
 
             // ✅ Randomiser la connection (avec variation réaliste)
             var rtt = rand.Next(20, 100);           // 20-100ms latency
@@ -129,43 +208,22 @@ namespace SocialNetworkArmy.Services
         configurable: true
     }});
 
-    // ========== 3. PLUGINS (DÉTAILLÉS) ==========
+    // ========== 3. PLUGINS (VARIÉS) ==========
     Object.defineProperty(navigator, 'plugins', {{
         get: () => [
-            {{
-                0: {{type: 'application/x-google-chrome-pdf', suffixes: 'pdf', description: 'Portable Document Format'}},
-                description: 'Portable Document Format',
-                filename: 'internal-pdf-viewer',
-                length: 1,
-                name: 'Chrome PDF Plugin'
-            }},
-            {{
-                0: {{type: 'application/pdf', suffixes: 'pdf', description: ''}},
-                description: '',
-                filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
-                length: 1,
-                name: 'Chrome PDF Viewer'
-            }},
-            {{
-                0: {{type: 'application/x-nacl', suffixes: '', description: 'Native Client Executable'}},
-                1: {{type: 'application/x-pnacl', suffixes: '', description: 'Portable Native Client Executable'}},
-                description: '',
-                filename: 'internal-nacl-plugin',
-                length: 2,
-                name: 'Native Client'
-            }}
+            {pluginsJs}
         ],
         configurable: true
     }});
 
-    // ========== 4. LANGUAGES ==========
+    // ========== 4. LANGUAGES (LOCALISÉES) ==========
     Object.defineProperty(navigator, 'languages', {{
-        get: () => ['en-US', 'en', 'fr'],
+        get: () => [{languagesJs}],
         configurable: true
     }});
 
     Object.defineProperty(navigator, 'language', {{
-        get: () => 'en-US',
+        get: () => '{primaryLanguage}',
         configurable: true
     }});
 
@@ -259,26 +317,17 @@ namespace SocialNetworkArmy.Services
         return originalToDataURL.apply(this, arguments);
     }};
 
-    // ========== 10. WEBGL FINGERPRINT (ULTRA-RANDOMISÉ) ==========
+    // ========== 10. WEBGL FINGERPRINT (COHÉRENT AVEC CPU/GPU) ==========
     const getParameterProxyHandler = {{
         apply: function(target, thisArg, args) {{
             const param = args[0];
             const result = Reflect.apply(target, thisArg, args);
 
             if (param === 37445) {{ // UNMASKED_VENDOR_WEBGL
-                const vendors = ['Intel Inc.', 'NVIDIA Corporation', 'ATI Technologies Inc.', 'Qualcomm'];
-                return vendors[Math.floor(Math.random() * vendors.length)];
+                return '{webglVendor}';
             }}
             if (param === 37446) {{ // UNMASKED_RENDERER_WEBGL
-                const renderers = [
-                    'Intel(R) UHD Graphics 630',
-                    'NVIDIA GeForce GTX 1660 Ti',
-                    'AMD Radeon RX 580 Series',
-                    'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)',
-                    'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)',
-                    'ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0)'
-                ];
-                return renderers[Math.floor(Math.random() * renderers.length)];
+                return '{webglRenderer}';
             }}
 
             return result;
