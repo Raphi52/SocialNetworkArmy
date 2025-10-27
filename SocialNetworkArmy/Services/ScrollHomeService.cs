@@ -1120,9 +1120,7 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             {
                                 logTextBox.AppendText($"[FILTER] ✗ Content filtered (not female) - SKIPPING\r\n");
 
-                                // ⚡ Skip immediately (algo signal: not interested)
-                                await Task.Delay(rand.Next(100, 300), token);
-                                await RandomHumanNoiseAsync(token);
+                                // ⚡ Skip IMMEDIATELY (algo signal: not interested at all)
                                 await ScrollToNextPostAsync(rand, token);
                                 postsScrolled++;
 

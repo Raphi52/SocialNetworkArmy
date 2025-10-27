@@ -466,8 +466,7 @@ namespace SocialNetworkArmy.Services
                             {
                                 logTextBox.AppendText($"[FILTER] ✗ Content filtered (not female) - SKIPPING\r\n");
 
-                                // ⚡ Skip immediately (algo signal: not interested)
-                                await Task.Delay(rand.Next(100, 300), token);
+                                // ⚡ Skip IMMEDIATELY (algo signal: not interested at all)
                                 bool scrollSuccess = await ScrollToNextReelAsync(rand, token);
 
                                 if (scrollSuccess)
