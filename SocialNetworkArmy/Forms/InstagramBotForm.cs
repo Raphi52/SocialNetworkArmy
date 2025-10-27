@@ -48,6 +48,7 @@ namespace SocialNetworkArmy.Forms
         private Panel bottomPanel;
         private System.Windows.Forms.Timer closeTimer;
         private CancellationTokenSource _cts;
+        private CancellationTokenSource _initCts; // ✅ For initialization cancellation
         private Panel toolbarPanel;
         private Button backButton;
         private Button forwardButton;
@@ -62,10 +63,11 @@ namespace SocialNetworkArmy.Forms
         public InstagramBotForm(Profile profile)
         {
             this.profile = profile;
-            
+
             cleanupService = new CleanupService();
             monitoringService = new MonitoringService();
             proxyService = new ProxyService();
+            _initCts = new CancellationTokenSource(); // ✅ Initialize cancellation for async init
             InitializeComponent();
             if (Environment.OSVersion.Version.Major >= 10)
             {
@@ -81,6 +83,13 @@ namespace SocialNetworkArmy.Forms
         }
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
+            // ✅ Cancel initialization if still running
+            try
+            {
+                _initCts?.Cancel();
+            }
+            catch { }
+
             // ✅ Autoriser fermeture système
             if (e.CloseReason == CloseReason.WindowsShutDown ||
                 e.CloseReason == CloseReason.TaskManagerClosing)
@@ -468,8 +477,13 @@ namespace SocialNetworkArmy.Forms
 
         private async void LoadBrowserAsync()
         {
+            var token = _initCts.Token;
             try
             {
+                // ✅ Check if already cancelled
+                if (token.IsCancellationRequested || IsDisposed || isDisposing)
+                    return;
+
                 // ✅ 1. CHECK WEBVIEW2 RUNTIME
                 string webView2Version = null;
                 try
@@ -490,6 +504,7 @@ namespace SocialNetworkArmy.Forms
                     return;
                 }
 
+                if (token.IsCancellationRequested) return;
                 logTextBox.AppendText($"[INFO] WebView2 Runtime version: {webView2Version}\r\n");
 
                 // ✅ 2. SETUP DIRECTORIES
@@ -796,16 +811,33 @@ namespace SocialNetworkArmy.Forms
 
                 // ✅ 17. INITIALIZE SERVICES
                 logTextBox.AppendText("[INFO] Browser ready - initializing services...\r\n");
-                await Task.Delay(200); // Minimal delay for Instagram DOM to be ready
+                await Task.Delay(200, token); // Minimal delay for Instagram DOM to be ready
 
+                if (token.IsCancellationRequested) return;
                 InitializeServices();
 
                 webView.Focus();
                 logTextBox.AppendText("[INFO] ✓ Setup complete - Bot ready\r\n");
             }
+            catch (OperationCanceledException)
+            {
+                // ✅ Form closed during initialization - this is normal, exit silently
+                logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
+                return;
+            }
+            catch (TaskCanceledException)
+            {
+                // ✅ Form closed during initialization - this is normal, exit silently
+                logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
+                return;
+            }
+            catch (Exception ex) when (IsDisposed || isDisposing)
+            {
+                // ✅ Form disposed during init - ignore errors
+                return;
+            }
             catch (Exception ex)
             {
-                
                 logTextBox.AppendText($"[STACK] {ex.StackTrace}\r\n");
 
                 MessageBox.Show(
@@ -1510,6 +1542,10 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                     dmService = null;
                     downloadService = null;
                     testService = null;
+
+                    // ✅ Dispose cancellation tokens
+                    _initCts?.Dispose();
+                    _cts?.Dispose();
 
                     Sergoe?.Dispose();
                     closeTimer?.Dispose();
