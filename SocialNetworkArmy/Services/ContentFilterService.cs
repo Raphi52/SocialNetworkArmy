@@ -18,13 +18,44 @@ namespace SocialNetworkArmy.Services
 
         // ✅ Configuration HuggingFace (GRATUIT)
         private const string HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/rizvandwiki/gender-classification";
-        private const string HUGGINGFACE_TOKEN = "YOUR_FREE_TOKEN"; // Obtenir sur huggingface.co/settings/tokens
+        private static string HUGGINGFACE_TOKEN = null;
 
         public ContentFilterService(WebView2 webView, TextBox logTextBox)
         {
             this.webView = webView;
             this.logTextBox = logTextBox;
             this.httpClient = new HttpClient();
+
+            // Load HuggingFace token from config file (not tracked by git)
+            if (HUGGINGFACE_TOKEN == null)
+            {
+                LoadHuggingFaceToken();
+            }
+        }
+
+        private void LoadHuggingFaceToken()
+        {
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "huggingface_token.txt");
+
+                if (File.Exists(configPath))
+                {
+                    HUGGINGFACE_TOKEN = File.ReadAllText(configPath).Trim();
+                    Log("[CONFIG] HuggingFace token loaded successfully");
+                }
+                else
+                {
+                    Log("[CONFIG] ⚠️ HuggingFace token not found. Create Data/huggingface_token.txt with your token.");
+                    Log("[CONFIG] Get free token at: https://huggingface.co/settings/tokens");
+                    HUGGINGFACE_TOKEN = ""; // Empty string to avoid null exceptions
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[CONFIG ERROR] Failed to load token: {ex.Message}");
+                HUGGINGFACE_TOKEN = "";
+            }
         }
 
         /// <summary>
