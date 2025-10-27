@@ -25,12 +25,7 @@ namespace SocialNetworkArmy.Services
             this.webView = webView;
             this.logTextBox = logTextBox;
             this.httpClient = new HttpClient();
-
-            // Load HuggingFace token from config file (not tracked by git)
-            if (HUGGINGFACE_TOKEN == null)
-            {
-                LoadHuggingFaceToken();
-            }
+            // Token will be loaded lazily on first use (faster startup)
         }
 
         private void LoadHuggingFaceToken()
@@ -100,6 +95,12 @@ namespace SocialNetworkArmy.Services
         {
             try
             {
+                // Lazy load token on first use
+                if (HUGGINGFACE_TOKEN == null)
+                {
+                    LoadHuggingFaceToken();
+                }
+
                 // Vérifier que le token est chargé
                 if (string.IsNullOrEmpty(HUGGINGFACE_TOKEN))
                 {

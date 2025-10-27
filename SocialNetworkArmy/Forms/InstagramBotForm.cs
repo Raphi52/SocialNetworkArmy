@@ -796,7 +796,7 @@ namespace SocialNetworkArmy.Forms
 
                 // ✅ 17. INITIALIZE SERVICES
                 logTextBox.AppendText("[INFO] Browser ready - initializing services...\r\n");
-                await Task.Delay(1000); // Give Instagram time to load
+                await Task.Delay(200); // Minimal delay for Instagram DOM to be ready
 
                 InitializeServices();
 
