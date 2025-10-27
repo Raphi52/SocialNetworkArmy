@@ -19,6 +19,7 @@ namespace SocialNetworkArmy.Services
             public string Activity { get; set; }
             public bool IsGroup { get; set; }
             public string AccountOrGroup { get; set; }
+            public DateTime ScheduledTime { get; set; } // ✅ NEW: Store the scheduled time
         }
 
         public static ScheduleMatch GetTodayMediaForAccount(
@@ -103,6 +104,9 @@ namespace SocialNetworkArmy.Services
                     return null;
                 }
 
+                // ✅ NEW: Collect ALL matching tasks instead of returning the first one
+                var candidateMatches = new List<ScheduleMatch>();
+
                 for (int i = 1; i < lines.Length; i++)
                 {
                     var line = lines[i];
@@ -115,25 +119,34 @@ namespace SocialNetworkArmy.Services
                     Console.WriteLine($"\n[Schedule] ========== LINE {i} ==========");
                     Console.WriteLine($"[Schedule] Raw: {line}");
 
-                    // ✅ EXTRAIRE LA DATE (ignorer complètement l'heure)
+                    // ✅ PARSE FULL DATE + TIME
                     string dateTimeStr = cols[iDate].Trim();
-                    string dateOnly = dateTimeStr.Contains(" ") ? dateTimeStr.Split(' ')[0] : dateTimeStr;
-                    Console.WriteLine($"[Schedule] Date string: '{dateTimeStr}' → extracted: '{dateOnly}'");
+                    Console.WriteLine($"[Schedule] DateTime string: '{dateTimeStr}'");
 
-                    if (!DateTime.TryParseExact(dateOnly, "yyyy-MM-dd",
-                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate))
+                    DateTime parsedDateTime;
+
+                    // Try to parse full datetime (yyyy-MM-dd HH:mm)
+                    if (!DateTime.TryParseExact(dateTimeStr, "yyyy-MM-dd HH:mm",
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDateTime))
                     {
-                        Console.WriteLine($"[Schedule] ✗ Date parse FAILED");
-                        continue;
+                        // Fallback: Try just date (yyyy-MM-dd) and use midnight
+                        string dateOnly = dateTimeStr.Contains(" ") ? dateTimeStr.Split(' ')[0] : dateTimeStr;
+
+                        if (!DateTime.TryParseExact(dateOnly, "yyyy-MM-dd",
+                            CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDateTime))
+                        {
+                            Console.WriteLine($"[Schedule] ✗ DateTime parse FAILED");
+                            continue;
+                        }
                     }
 
-                    Console.WriteLine($"[Schedule] CSV date: {parsedDate:yyyy-MM-dd}");
+                    Console.WriteLine($"[Schedule] CSV datetime: {parsedDateTime:yyyy-MM-dd HH:mm}");
                     Console.WriteLine($"[Schedule] Search date: {searchDate:yyyy-MM-dd}");
 
-                    // ✅ FIX: Comparer UNIQUEMENT les dates (l'heure est complètement ignorée)
-                    if (parsedDate.Date != searchDate)
+                    // ✅ Compare ONLY dates for filtering (but keep time for later sorting)
+                    if (parsedDateTime.Date != searchDate)
                     {
-                        Console.WriteLine($"[Schedule] ✗ DATE MISMATCH - SKIP (CSV: {parsedDate:yyyy-MM-dd} vs Search: {searchDate:yyyy-MM-dd})");
+                        Console.WriteLine($"[Schedule] ✗ DATE MISMATCH - SKIP (CSV: {parsedDateTime:yyyy-MM-dd} vs Search: {searchDate:yyyy-MM-dd})");
                         continue;
                     }
 
@@ -192,16 +205,21 @@ namespace SocialNetworkArmy.Services
                             continue;
                         }
 
-                        Console.WriteLine($"[Schedule] ✓✓✓ MATCH FOUND! → {Path.GetFileName(mediaPath)}");
+                        Console.WriteLine($"[Schedule] ✓✓✓ MATCH FOUND! → {Path.GetFileName(mediaPath)} at {parsedDateTime:HH:mm}");
 
-                        return new ScheduleMatch
+                        // ✅ ADD to candidates instead of returning immediately
+                        candidateMatches.Add(new ScheduleMatch
                         {
                             MediaPath = mediaPath,
                             Description = iDesc < cols.Length ? cols[iDesc].Trim() : "",
                             Activity = csvActivity,
                             IsGroup = false,
-                            AccountOrGroup = accountOrGroup
-                        };
+                            AccountOrGroup = accountOrGroup,
+                            ScheduledTime = parsedDateTime
+                        });
+
+                        // ✅ Continue searching for more matches on the same day
+                        continue;
                     }
 
                     // 2) ✅ GROUP MATCH: Vérifier si c'est un groupe contenant le compte actuel
@@ -255,16 +273,21 @@ namespace SocialNetworkArmy.Services
                                 continue;
                             }
 
-                            Console.WriteLine($"[Schedule] ✓✓✓ GROUP MATCH FOUND! → {Path.GetFileName(accountMediaPath)}");
+                            Console.WriteLine($"[Schedule] ✓✓✓ GROUP MATCH FOUND! → {Path.GetFileName(accountMediaPath)} at {parsedDateTime:HH:mm}");
 
-                            return new ScheduleMatch
+                            // ✅ ADD to candidates instead of returning immediately
+                            candidateMatches.Add(new ScheduleMatch
                             {
                                 MediaPath = accountMediaPath,
                                 Description = iDesc < cols.Length ? cols[iDesc].Trim() : "",
                                 Activity = csvActivity,
                                 IsGroup = true,
-                                AccountOrGroup = accountOrGroup
-                            };
+                                AccountOrGroup = accountOrGroup,
+                                ScheduledTime = parsedDateTime
+                            });
+
+                            // ✅ Continue searching for more matches on the same day
+                            continue;
                         }
                         else
                         {
@@ -277,8 +300,49 @@ namespace SocialNetworkArmy.Services
                     }
                 }
 
-                Console.WriteLine($"[Schedule] ✗ No match found");
-                return null;
+                // ✅ NEW: Process all candidate matches and find the closest one by time
+                if (candidateMatches.Count == 0)
+                {
+                    Console.WriteLine($"[Schedule] ✗ No match found");
+                    return null;
+                }
+
+                Console.WriteLine($"\n[Schedule] ========================================");
+                Console.WriteLine($"[Schedule] Found {candidateMatches.Count} candidate(s) for today:");
+
+                var now = DateTime.Now;
+                foreach (var candidate in candidateMatches.OrderBy(c => c.ScheduledTime))
+                {
+                    Console.WriteLine($"[Schedule]   - {candidate.ScheduledTime:HH:mm} → {Path.GetFileName(candidate.MediaPath)}");
+                }
+
+                // ✅ Find the closest task by time:
+                // Priority 1: The most recent task that has passed (scheduled time <= now)
+                // Priority 2: If no past tasks, take the next upcoming one
+                var pastTasks = candidateMatches
+                    .Where(c => c.ScheduledTime <= now)
+                    .OrderByDescending(c => c.ScheduledTime)
+                    .ToList();
+
+                ScheduleMatch bestMatch;
+
+                if (pastTasks.Any())
+                {
+                    // Take the most recent task that should have been executed
+                    bestMatch = pastTasks.First();
+                    Console.WriteLine($"[Schedule] ✓ Selected MOST RECENT past task: {bestMatch.ScheduledTime:HH:mm}");
+                }
+                else
+                {
+                    // All tasks are in the future, take the earliest one
+                    bestMatch = candidateMatches.OrderBy(c => c.ScheduledTime).First();
+                    Console.WriteLine($"[Schedule] ✓ Selected NEXT upcoming task: {bestMatch.ScheduledTime:HH:mm}");
+                }
+
+                Console.WriteLine($"[Schedule] ✓✓✓ FINAL SELECTION: {Path.GetFileName(bestMatch.MediaPath)} (scheduled {bestMatch.ScheduledTime:HH:mm})");
+                Console.WriteLine($"[Schedule] ========================================\n");
+
+                return bestMatch;
             }
             catch (Exception ex)
             {
