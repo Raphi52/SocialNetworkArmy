@@ -10,6 +10,8 @@ namespace SocialNetworkArmy.Services
     {
         public static string GenerateScript()
         {
+            var rand = new Random();
+
             // Générer résolution aléatoire
             var resolutions = new[] {
                 new { w = 1920, h = 1080 },
@@ -18,7 +20,27 @@ namespace SocialNetworkArmy.Services
                 new { w = 1440, h = 900 },
                 new { w = 2560, h = 1440 }
             };
-            var res = resolutions[new Random().Next(resolutions.Length)];
+            var res = resolutions[rand.Next(resolutions.Length)];
+
+            // ✅ Randomiser le hardware de manière réaliste
+            var cores = new[] { 4, 6, 8, 12, 16 };
+            var ram = new[] { 4, 8, 16, 32 };
+            var hardwareConcurrency = cores[rand.Next(cores.Length)];
+            var deviceMemory = ram[rand.Next(ram.Length)];
+
+            // ✅ Randomiser la connection (avec variation réaliste)
+            var rtt = rand.Next(20, 100);           // 20-100ms latency
+            var downlink = rand.Next(5, 50);        // 5-50 Mbps
+
+            // ✅ Batterie réaliste
+            var batteryCharging = rand.NextDouble() > 0.3;  // 70% branché, 30% sur batterie
+            var batteryLevel = batteryCharging
+                ? 0.8 + rand.NextDouble() * 0.2    // Si branché: 80-100%
+                : 0.2 + rand.NextDouble() * 0.7;   // Si sur batterie: 20-90%
+
+            // ✅ DeviceId stable (basé sur un hash, pas un GUID aléatoire)
+            var deviceIdSeed = Environment.MachineName + Environment.UserName;
+            var stableDeviceId = Math.Abs(deviceIdSeed.GetHashCode()).ToString("x");
 
             return $@"
 (function() {{
@@ -171,12 +193,12 @@ namespace SocialNetworkArmy.Services
         configurable: true
     }});
 
-    // ========== 6. CONNECTION (4G RAPIDE) ==========
+    // ========== 6. CONNECTION (RANDOMISÉ) ==========
     Object.defineProperty(navigator, 'connection', {{
         get: () => ({{
             effectiveType: '4g',
-            rtt: 50,
-            downlink: 10,
+            rtt: {rtt},
+            downlink: {downlink},
             saveData: false,
             onchange: null,
             downlinkMax: Infinity,
@@ -185,14 +207,14 @@ namespace SocialNetworkArmy.Services
         configurable: true
     }});
 
-    // ========== 7. HARDWARE ==========
+    // ========== 7. HARDWARE (RANDOMISÉ) ==========
     Object.defineProperty(navigator, 'hardwareConcurrency', {{
-        get: () => 8,
+        get: () => {hardwareConcurrency},
         configurable: true
     }});
 
     Object.defineProperty(navigator, 'deviceMemory', {{
-        get: () => 8,
+        get: () => {deviceMemory},
         configurable: true
     }});
 
@@ -281,16 +303,16 @@ namespace SocialNetworkArmy.Services
         return context;
     }};
 
-    // ========== 11. BATTERY STATUS ==========
+    // ========== 11. BATTERY STATUS (RANDOMISÉ) ==========
     if (navigator.getBattery) {{
         const originalGetBattery = navigator.getBattery;
         navigator.getBattery = function() {{
             return originalGetBattery().then(battery => {{
                 Object.defineProperties(battery, {{
-                    charging: {{ get: () => true }},
-                    chargingTime: {{ get: () => 0 }},
-                    dischargingTime: {{ get: () => Infinity }},
-                    level: {{ get: () => 1 }}
+                    charging: {{ get: () => {batteryCharging.ToString().ToLower()} }},
+                    chargingTime: {{ get: () => {(batteryCharging ? "0" : "Infinity")} }},
+                    dischargingTime: {{ get: () => {(batteryCharging ? "Infinity" : "7200")} }},
+                    level: {{ get: () => {batteryLevel:F2} }}
                 }});
                 return battery;
             }});
@@ -347,10 +369,10 @@ namespace SocialNetworkArmy.Services
                         groupId: 'communications'
                     }},
                     {{
-                        deviceId: '{Guid.NewGuid()}',
+                        deviceId: '{stableDeviceId}',
                         kind: 'videoinput',
                         label: 'Integrated Camera (04f2:b6dd)',
-                        groupId: '{Guid.NewGuid()}'
+                        groupId: '{stableDeviceId}'
                     }}
                 ];
             }});
@@ -506,13 +528,15 @@ namespace SocialNetworkArmy.Services
         const message = args.join(' ');
         if (message.includes('webdriver') ||
             message.includes('automation') ||
-            message.includes('headless')) {{
+            message.includes('headless') ||
+            message.includes('stealth')) {{
             return;
         }}
         return originalConsoleLog.apply(console, args);
     }};
 
-    console.log('🛡️ Instagram ultra-stealth mode active (28 layers)');
+    // ✅ REMOVED: Ne JAMAIS logger que le stealth est actif!
+    // console.log('🛡️ Instagram ultra-stealth mode active (28 layers)');
 }})();
 ";
         }
