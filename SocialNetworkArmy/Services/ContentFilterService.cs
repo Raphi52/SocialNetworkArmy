@@ -206,24 +206,49 @@ namespace SocialNetworkArmy.Services
                 // 1) Récupérer l'URL de l'image actuellement affichée via JavaScript
                 string imageUrl = await webView.ExecuteScriptAsync(@"
                     (function() {
-                        // Pour les posts
-                        let img = document.querySelector('article img[srcset]');
-                        if (img) return img.src;
-                        
-                        // Pour les reels
-                        let video = document.querySelector('video');
-                        if (video) return video.poster || 'VIDEO';
-                        
+                        // Stratégie 1: Chercher dans l'article visible les images
+                        const articles = document.querySelectorAll('article');
+                        let mostVisibleArticle = null;
+                        let maxVisible = 0;
+
+                        articles.forEach(article => {
+                            const rect = article.getBoundingClientRect();
+                            const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+                            if (visible > maxVisible) {
+                                maxVisible = visible;
+                                mostVisibleArticle = article;
+                            }
+                        });
+
+                        if (mostVisibleArticle) {
+                            // Chercher toutes les images dans l'article
+                            const images = mostVisibleArticle.querySelectorAll('img');
+                            for (let img of images) {
+                                // Ignorer les petites images (avatars, icônes)
+                                if (img.naturalWidth > 100 && img.naturalHeight > 100) {
+                                    return img.src || img.currentSrc;
+                                }
+                            }
+
+                            // Si pas d'image, chercher le poster de la vidéo
+                            const video = mostVisibleArticle.querySelector('video');
+                            if (video && video.poster) {
+                                return video.poster;
+                            }
+                        }
+
                         return null;
                     })()
                 ");
 
                 imageUrl = imageUrl?.Trim('"');
 
-                if (string.IsNullOrWhiteSpace(imageUrl) || imageUrl == "VIDEO")
+                Log($"[Filter] Extracted image URL: {imageUrl ?? "(null)"}");
+
+                if (string.IsNullOrWhiteSpace(imageUrl))
                 {
-                    Log($"[Filter] No image found (video or story?)");
-                    return true; // Ne pas bloquer les vidéos pour l'instant
+                    Log($"[Filter] ⚠️ No image/poster found - SKIPPING for safety");
+                    return false; // ✅ Changed: Skip if no image (safer)
                 }
 
                 // 2) Analyser l'image
@@ -232,7 +257,7 @@ namespace SocialNetworkArmy.Services
             catch (Exception ex)
             {
                 Log($"[Filter] Screenshot analysis error: {ex.Message}");
-                return true;
+                return false; // ✅ Changed: Skip on error (safer)
             }
         }
 
