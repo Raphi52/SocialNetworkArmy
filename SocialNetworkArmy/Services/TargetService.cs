@@ -1669,6 +1669,28 @@ namespace SocialNetworkArmy.Services
                 logTextBox.AppendText($"[EXCEPTION] {ex.Message}\r\n");
                 Logger.LogError($"TargetService.RunAsync: {ex}");
             }
+
+        }
+        public async Task RandomHumanPauseAsync(
+            CancellationToken token,
+            int minShort = 500,
+            int maxShort = 2000,
+            double longPauseChance = 0.04,
+            int minLong = 10000,
+            int maxLong = 60000)
+        {
+            if (rand.NextDouble() < longPauseChance)
+            {
+                // Pause longue (rare)
+                int longDelay = rand.Next(minLong, maxLong);
+                await Task.Delay(longDelay, token);
+            }
+            else
+            {
+                // Pause courte (fréquent)
+                int shortDelay = rand.Next(minShort, maxShort);
+                await Task.Delay(shortDelay, token);
+            }
         }
     }
 }

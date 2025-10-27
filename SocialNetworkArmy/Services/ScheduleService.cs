@@ -687,6 +687,9 @@ namespace SocialNetworkArmy.Services
 
         private async Task ExecuteHomeTaskAsync(ScheduledTask task, string baseKey, CancellationToken token)
         {
+            
+            await TryStopActivityBeforeStartAsync(baseKey);
+
             var botForm = await GetOrCreateBotFormAsync(task.Platform, task.Account);
             if (botForm == null)
             {
@@ -732,6 +735,7 @@ namespace SocialNetworkArmy.Services
             await tcs.Task;
             LogToUI($"[Schedule] ✓ Home task started: {baseKey}");
         }
+
 
         private async Task ExecuteStandardBotTaskAsync(ScheduledTask task, string baseKey, CancellationToken token)
         {
@@ -783,6 +787,7 @@ namespace SocialNetworkArmy.Services
 
         private async Task ExecuteReelsTaskAsync(ScheduledTask task, string baseKey, CancellationToken token)
         {
+            await TryStopActivityBeforeStartAsync(baseKey);
             var botForm = await GetOrCreateBotFormAsync(task.Platform, task.Account);
             if (botForm == null)
             {
@@ -809,43 +814,167 @@ namespace SocialNetworkArmy.Services
 
                 LogToUI($"[Schedule] ✓ Services ready");
 
-                // ✅ RÉCUPÉRER LE PROFILE
-                var profiles = profileService.LoadProfiles();
-                var profile = profiles.FirstOrDefault(p => p.Name.Equals(task.Account, StringComparison.OrdinalIgnoreCase));
+                // ✅ DISTINCTION: "reels" = scroll, "publish_reel" = publier un reel programmé
+                string activity = task.Activity.ToLowerInvariant();
 
-                if (profile == null)
+                if (activity == "reels" || activity == "scrollreels")
                 {
-                    LogToUI($"[Schedule] ❌ Profile not found: {task.Account}");
-                    return;
+                    // ✅ JUSTE SCROLLER LES REELS (comme le bouton)
+                    LogToUI($"[Schedule] Activity: Scroll Reels");
+
+                    var tcs = new TaskCompletionSource<bool>();
+                    RunOnUiThread(() =>
+                    {
+                        try
+                        {
+                            ExecuteActivityOnForm(botForm, "reels");
+                            LogToUI($"[Schedule] ✓ Reels scroll started for {baseKey}");
+                            tcs.TrySetResult(true);
+                        }
+                        catch (Exception ex)
+                        {
+                            LogToUI($"[Schedule] ❌ Reels scroll error: {ex.Message}");
+                            tcs.TrySetResult(false);
+                        }
+                    });
+
+                    await tcs.Task;
                 }
-
-                // ✅ RÉCUPÉRER WEBVIEW ET LOG
-                var webViewField = ig.GetType().GetField("webView",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var logField = ig.GetType().GetField("logTextBox",
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-                if (webViewField?.GetValue(ig) is WebView2 webView && logField?.GetValue(ig) is TextBox logBox)
+                else if (activity == "publish_reel" || activity == "publishreel")
                 {
-                    // ✅ CRÉER LE SERVICE REELS
-                    var reelsService = new ReelsService(webView, logBox, ig, profile);
+                    // ✅ PUBLIER UN REEL PROGRAMMÉ
+                    LogToUI($"[Schedule] Activity: Publish Reel");
 
-                    // ✅ PUBLIER LE REEL
-                    bool success = await reelsService.PublishScheduledReelAsync(token);
+                    var profiles = profileService.LoadProfiles();
+                    var profile = profiles.FirstOrDefault(p => p.Name.Equals(task.Account, StringComparison.OrdinalIgnoreCase));
 
-                    LogToUI(success
-                        ? $"[Schedule] ✓ Reel published for {baseKey}"
-                        : $"[Schedule] ✗ Reel failed for {baseKey}");
+                    if (profile == null)
+                    {
+                        LogToUI($"[Schedule] ❌ Profile not found: {task.Account}");
+                        return;
+                    }
+
+                    var tcs = new TaskCompletionSource<bool>();
+
+                    RunOnUiThread(async () =>
+                    {
+                        try
+                        {
+                            LogToUI($"[Schedule] Accessing form controls for {baseKey}...");
+
+                            var webViewField = ig.GetType().GetField("webView",
+                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                            var logField = ig.GetType().GetField("logTextBox",
+                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                            if (webViewField?.GetValue(ig) is WebView2 webView && logField?.GetValue(ig) is TextBox logBox)
+                            {
+                                LogToUI($"[Schedule] ✓ Controls accessed");
+                                LogToUI($"[Schedule] Creating ReelsService for profile: {profile.Name}");
+
+                                var reelsService = new ReelsService(webView, logBox, ig, profile);
+
+                                LogToUI($"[Schedule] Calling PublishScheduledReelAsync...");
+                                bool success = await reelsService.PublishScheduledReelAsync(token);
+
+                                LogToUI(success
+                                    ? $"[Schedule] ✓ Reel published for {baseKey}"
+                                    : $"[Schedule] ✗ Reel publish failed for {baseKey}");
+
+                                tcs.TrySetResult(success);
+                            }
+                            else
+                            {
+                                LogToUI($"[Schedule] ❌ Cannot access WebView2/Log for {baseKey}");
+                                tcs.TrySetResult(false);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogToUI($"[Schedule] ❌ Reel publish error: {ex.Message}");
+                            tcs.TrySetResult(false);
+                        }
+                    });
+
+                    await tcs.Task;
                 }
                 else
                 {
-                    LogToUI($"[Schedule] ❌ Cannot access WebView2/Log for {baseKey}");
+                    LogToUI($"[Schedule] ❌ Unknown reels activity: {activity}");
+                    LogToUI($"[Schedule] Valid activities: 'reels' (scroll) or 'publish_reel' (publish scheduled)");
                 }
+            }
+        }
+        private async Task TryStopActivityBeforeStartAsync(string baseKey)
+        {
+            try
+            {
+                Form form = null;
+                lock (_lockObj)
+                {
+                    _activeForms.TryGetValue(baseKey, out form);
+                }
+
+                if (form != null && !form.IsDisposed && form is InstagramBotForm ig)
+                {
+                    // Vérifier si un script est en cours
+                    bool isScriptRunning = false;
+
+                    var field = ig.GetType().GetField("isScriptRunning",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                    if (field != null)
+                    {
+                        isScriptRunning = (bool)field.GetValue(ig);
+                    }
+
+                    if (isScriptRunning)
+                    {
+                        LogToUI($"[Schedule] 🛑 Activity detected on {baseKey}, stopping...");
+
+                        var tcs = new TaskCompletionSource<bool>();
+                        RunOnUiThread(() =>
+                        {
+                            try
+                            {
+                                bool success = TriggerButton(ig, "stopButton", logErrors: false);
+                                if (success)
+                                {
+                                    LogToUI($"[Schedule] ✓ Stop triggered, waiting 2s...");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                LogToUI($"[Schedule] Stop warning: {ex.Message}");
+                            }
+                            finally
+                            {
+                                tcs.TrySetResult(true);
+                            }
+                        });
+
+                        await tcs.Task;
+                        await Task.Delay(2000); // Attendre que le stop se termine
+                        LogToUI($"[Schedule] ✓ Ready to start new activity");
+                    }
+                    else
+                    {
+                        LogToUI($"[Schedule] ℹ️ No activity running on {baseKey}, proceeding...");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToUI($"[Schedule] Auto-stop warning: {ex.Message}");
+                // Continue même en cas d'erreur
             }
         }
 
         private async Task ExecuteTargetTaskAsync(ScheduledTask task, string baseKey, CancellationToken token)
         {
+            // ✅ AJOUT: Essayer de stopper l'activité en cours
+            await TryStopActivityBeforeStartAsync(baseKey);
+
             var botForm = await GetOrCreateBotFormAsync(task.Platform, task.Account);
             if (botForm == null)
             {
