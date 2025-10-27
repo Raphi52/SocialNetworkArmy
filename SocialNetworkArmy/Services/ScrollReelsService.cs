@@ -17,6 +17,7 @@ namespace SocialNetworkArmy.Services
         private readonly WebView2 webView;
         private readonly TextBox logTextBox;
         private readonly Profile profile;
+        private readonly ContentFilterService contentFilter;
 
         public ScrollReelsService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -24,6 +25,7 @@ namespace SocialNetworkArmy.Services
             this.logTextBox = logTextBox ?? throw new ArgumentNullException(nameof(logTextBox));
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.form = form ?? throw new ArgumentNullException(nameof(form));
+            this.contentFilter = new ContentFilterService(webView, logTextBox);
         }
 
         private static bool JsBoolIsTrue(string jsResult)
@@ -446,6 +448,27 @@ namespace SocialNetworkArmy.Services
                             var creatorName = await webView.ExecuteScriptAsync(creatorScript);
                             creatorName = creatorName?.Trim('"').Trim();
                             logTextBox.AppendText($"[CREATOR] {creatorName}\r\n");
+
+                            // ✅ CONTENT FILTER: Check if content is female
+                            bool isFemale = await contentFilter.IsCurrentContentFemaleAsync();
+                            if (!isFemale)
+                            {
+                                logTextBox.AppendText($"[FILTER] ✗ Content filtered (not female) - SKIPPING\r\n");
+
+                                // Skip to next reel immediately
+                                await Task.Delay(rand.Next(500, 1000), token);
+                                bool scrollSuccess = await ScrollToNextReelAsync(rand, token);
+
+                                if (scrollSuccess)
+                                {
+                                    string newCreator = await WaitForNewReelAsync(previousCreator, creatorScript, rand, token);
+                                    previousCreator = newCreator;
+                                }
+
+                                continue; // Skip this reel, go to next iteration
+                            }
+
+                            logTextBox.AppendText($"[FILTER] ✓ Content passed filter (female detected)\r\n");
 
                             // Extract comment count
                             var commentScript = $@"

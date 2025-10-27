@@ -21,6 +21,7 @@ namespace SocialNetworkArmy.Services
         private readonly Random rand = new Random();
         private System.Collections.Generic.HashSet<string> donePostIds;
         private string donePostsPath;
+        private readonly ContentFilterService contentFilter;
 
         public ScrollHomeService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -28,6 +29,7 @@ namespace SocialNetworkArmy.Services
             this.logTextBox = logTextBox ?? throw new ArgumentNullException(nameof(logTextBox));
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.form = form ?? throw new ArgumentNullException(nameof(form));
+            this.contentFilter = new ContentFilterService(webView, logTextBox);
         }
 
         private static bool JsBoolIsTrue(string jsResult)
@@ -1097,6 +1099,23 @@ document.querySelector('article, main') ? 'true' : 'false';");
                                 postsScrolled++;
                                 continue;
                             }
+
+                            // ✅ CONTENT FILTER: Check if content is female
+                            bool isFemale = await contentFilter.IsCurrentContentFemaleAsync();
+                            if (!isFemale)
+                            {
+                                logTextBox.AppendText($"[FILTER] ✗ Content filtered (not female) - SKIPPING\r\n");
+
+                                // Skip to next post immediately
+                                await Task.Delay(rand.Next(500, 1000), token);
+                                await RandomHumanNoiseAsync(token);
+                                await ScrollToNextPostAsync(rand, token);
+                                postsScrolled++;
+
+                                continue; // Skip this post, go to next iteration
+                            }
+
+                            logTextBox.AppendText($"[FILTER] ✓ Content passed filter (female detected)\r\n");
 
                             var (found, datetime, text, ageHours, isReel) = await ExtractPostInfoAsync(token);
 
