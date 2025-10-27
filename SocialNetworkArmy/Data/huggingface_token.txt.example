@@ -1,0 +1,11 @@
+YOUR_HUGGINGFACE_TOKEN_HERE
+
+Instructions:
+1. Get your free token at: https://huggingface.co/settings/tokens
+2. Token permissions needed: Read + "Make calls to Inference Providers"
+3. Copy this file to: huggingface_token.txt (remove .example)
+4. Replace YOUR_HUGGINGFACE_TOKEN_HERE with your actual token
+5. The .txt file is gitignored for security
+
+Model used: rizvandwiki/gender-classification
+Purpose: Filter Instagram content by gender detection
