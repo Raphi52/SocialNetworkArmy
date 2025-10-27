@@ -3,60 +3,83 @@
   "WorkspaceRootPath": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\tiktokbotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\tiktokbotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\schedulehelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\schedulehelper.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\mainform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\mainform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\storyposterform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\storyposterform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\targetservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\targetservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\proxyservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\proxyservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\scheduletask.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\scheduletask.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\statistics.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\statistics.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\profile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\profile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\fingerprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\fingerprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\publishservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\publishservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\scheduleservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\scheduleservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\publishservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\publishservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\testservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\testservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\scrollreelsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\scrollreelsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\storyposterform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\storyposterform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\targetservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\targetservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\reelsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\reelsservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\scrollhomeservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\scrollhomeservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\mainform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\mainform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\profile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\profile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\scheduletask.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\scheduletask.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\proxyservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\proxyservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\forms\\tiktokbotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\tiktokbotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\statistics.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\statistics.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\forms\\instagrambotform.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\models\\fingerprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\models\\fingerprint.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\tiktokcookiemanagerwebview.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -81,14 +104,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\socialnetworkarmy\\services\\scheduleservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form",
       "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\scheduleservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}|Form"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\testservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\testservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\scrollservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\scrollservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\modalmanager.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -125,9 +140,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\services\\fingerprintservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|solutionrelative:socialnetworkarmy\\services\\fingerprintservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
     },
     {
       "AbsoluteMoniker": "D:0:0:{20236526-4A90-47B6-812E-1A0358BEA9F1}|SocialNetworkArmy\\SocialNetworkArmy.csproj|c:\\users\\user\\desktop\\socialnetworkarmy\\socialnetworkarmy\\socialnetworkarmy\\utils\\logger.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
@@ -168,138 +180,209 @@
       "VerticalTabListWidth": 256,
       "DocumentGroups": [
         {
-          "DockedWidth": 200,
-          "SelectedChildIndex": 5,
+          "DockedWidth": 252,
+          "SelectedChildIndex": 9,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 20,
+              "DocumentIndex": 3,
               "Title": "TestService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\TestService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\TestService.cs",
               "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\TestService.cs",
               "RelativeToolTip": "SocialNetworkArmy\\Services\\TestService.cs",
-              "ViewState": "AgIAAOEBAAAAAAAAAAAcwBACAAA2AAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABACAAA2AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-10-08T18:43:14.307Z",
-              "IsPinned": true
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "TargetService.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\TargetService.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\TargetService.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\TargetService.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Services\\TargetService.cs",
-              "ViewState": "AgIAAO8FAAAAAAAAAAAuwAUGAABcAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T21:51:52.786Z",
+              "IsPinned": true,
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 1,
+              "Title": "PublishService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\PublishService.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\PublishService.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\PublishService.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\PublishService.cs",
+              "ViewState": "AgIAAEYEAAAAAAAAAAAgwFQEAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-05T15:08:31.174Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": "ScrollReelsService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScrollReelsService.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ScrollReelsService.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScrollReelsService.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\ScrollReelsService.cs",
+              "ViewState": "AgIAAFsCAAAAAAAAAAAgwIwCAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-05T09:10:08.052Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
               "Title": "StoryPosterForm.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\StoryPosterForm.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\StoryPosterForm.cs",
               "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\StoryPosterForm.cs",
               "RelativeToolTip": "SocialNetworkArmy\\Forms\\StoryPosterForm.cs",
-              "ViewState": "AgIAALMBAAAAAAAAAAAgwNUBAAAEAAAAAAAAAA==",
+              "ViewState": "AgIAAJUEAAAAAAAAAAAQwMUEAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-10-15T10:58:22.974Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "Statistics.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Statistics.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Models\\Statistics.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Statistics.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Models\\Statistics.cs",
-              "ViewState": "AgIAAAMAAAAAAAAAAAAcwBsAAABEAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T09:11:17.717Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "ScheduleTask.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\ScheduleTask.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Models\\ScheduleTask.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\ScheduleTask.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Models\\ScheduleTask.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T08:55:20.558Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "TiktokBotForm.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
-              "ViewState": "AgIAABgAAAAAAAAAAAAAADEAAAAJAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T09:10:30.728Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
               "DocumentIndex": 7,
-              "Title": "Program.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Program.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Program.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Program.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Program.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABoAAAANAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T09:25:37.9Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "InstagramBotForm.cs [Conception]",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\InstagramBotForm.cs [Conception]",
-              "RelativeToolTip": "SocialNetworkArmy\\Forms\\InstagramBotForm.cs [Conception]",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T12:00:15.124Z",
-              "EditorCaption": " [Conception]"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
               "Title": "InstagramBotForm.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
               "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
               "RelativeToolTip": "SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
-              "ViewState": "AgIAABcAAAAAAAAAAAAQwC8AAAAwAAAAAAAAAA==",
+              "ViewState": "AgIAANEHAAAAAAAAAAAwwPQHAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2025-10-03T08:58:48.126Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "MainForm.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\MainForm.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\MainForm.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\MainForm.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Forms\\MainForm.cs",
-              "ViewState": "AgIAAB0CAAAAAAAAAAAAADgCAAANAAAAAAAAAA==",
+              "DocumentIndex": 12,
+              "Title": "Profile.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Profile.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Models\\Profile.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Profile.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Models\\Profile.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAIAAAAWAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T09:10:00.892Z",
+              "WhenOpened": "2025-10-03T08:55:10.086Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 15,
+              "Title": "ProxyService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ProxyService.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ProxyService.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ProxyService.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\ProxyService.cs",
+              "ViewState": "AgIAAC4CAAAAAAAAAADwvz4CAABDAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-03T08:56:29.552Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "Program.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Program.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Program.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Program.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Program.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAIAwwBUAAAAMAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-03T09:25:37.9Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "ScheduleHelper.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScheduleHelper.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ScheduleHelper.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScheduleHelper.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\ScheduleHelper.cs",
+              "ViewState": "AgIAAG0BAAAAAAAAAAAwwJABAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-27T13:14:40.264Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "ScheduleService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScheduleService.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ScheduleService.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScheduleService.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\ScheduleService.cs",
+              "ViewState": "AgIAAAIFAAAAAAAAAAAYwCwFAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-13T08:04:14.537Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 11,
+              "Title": "MainForm.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\MainForm.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\MainForm.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\MainForm.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Forms\\MainForm.cs",
+              "ViewState": "AgIAAG8BAAAAAAAAAIAwwIEBAAAaAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-03T09:10:00.892Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 10,
+              "Title": "ScrollHomeService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScrollHomeService.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ScrollHomeService.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScrollHomeService.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\ScrollHomeService.cs",
+              "ViewState": "AgIAAG4BAAAAAAAAAAAwwHgBAAARAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-26T16:26:03.491Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 8,
+              "Title": "TargetService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\TargetService.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\TargetService.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\TargetService.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\TargetService.cs",
+              "ViewState": "AgIAAM8GAAAAAAAAAAAwwPIGAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-03T21:51:52.786Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 9,
+              "Title": "ReelsService.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ReelsService.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ReelsService.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ReelsService.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Services\\ReelsService.cs",
+              "ViewState": "AgIAAAwBAAAAAAAAAAAgwD0BAAABAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-27T13:17:32.132Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 13,
+              "Title": "Microsoft.Common.CurrentVersion.targets",
+              "DocumentMoniker": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "RelativeDocumentMoniker": "..\\..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "ToolTip": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "RelativeToolTip": "..\\..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
+              "ViewState": "AgIAAFEbAAAAAAAAAAAswF8bAAB+AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003801|",
+              "WhenOpened": "2025-10-05T21:40:20.298Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 19,
               "Title": "Fingerprint.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Fingerprint.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Models\\Fingerprint.cs",
@@ -311,56 +394,44 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "ProxyService.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ProxyService.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ProxyService.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ProxyService.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Services\\ProxyService.cs",
-              "ViewState": "AgIAAPcBAAAAAAAAAAAYwBgCAABGAAAAAAAAAA==",
+              "DocumentIndex": 14,
+              "Title": "ScheduleTask.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\ScheduleTask.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Models\\ScheduleTask.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\ScheduleTask.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Models\\ScheduleTask.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAsAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T08:56:29.552Z"
+              "WhenOpened": "2025-10-03T08:55:20.558Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "Profile.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Profile.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Models\\Profile.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Profile.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Models\\Profile.cs",
-              "ViewState": "AgIAABAAAAAAAAAAAAAmwCYAAAABAAAAAAAAAA==",
+              "DocumentIndex": 17,
+              "Title": "Statistics.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Statistics.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Models\\Statistics.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Models\\Statistics.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Models\\Statistics.cs",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAcwBsAAABEAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-03T08:55:10.086Z"
+              "WhenOpened": "2025-10-03T09:11:17.717Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 12,
-              "Title": "ScheduleService.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScheduleService.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ScheduleService.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScheduleService.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Services\\ScheduleService.cs",
-              "ViewState": "AgIAAA8DAAAAAAAAAAAYwCwDAAAFAAAAAAAAAA==",
+              "DocumentIndex": 16,
+              "Title": "TiktokBotForm.cs",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
+              "RelativeToolTip": "SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
+              "ViewState": "AgIAACwFAAAAAAAAAAAQwEwFAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-13T08:04:14.537Z",
+              "WhenOpened": "2025-10-03T09:10:30.728Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 21,
-              "Title": "ScrollService.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScrollService.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ScrollService.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScrollService.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Services\\ScrollService.cs",
-              "ViewState": "AgIAAFABAAAAAAAAAAAiwIIBAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-05T09:10:08.052Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 15,
               "Title": "DownloadInstagramService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\DownloadInstagramService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\DownloadInstagramService.cs",
@@ -372,19 +443,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 13,
-              "Title": "PublishService.cs",
-              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\PublishService.cs",
-              "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\PublishService.cs",
-              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\PublishService.cs",
-              "RelativeToolTip": "SocialNetworkArmy\\Services\\PublishService.cs",
-              "ViewState": "AgIAAOsCAAAAAAAAAAAjwBIDAAAdAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2025-10-05T15:08:31.174Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 14,
+              "DocumentIndex": 20,
               "Title": "TikTokCookieManagerWebView.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\TikTokCookieManagerWebView.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\TikTokCookieManagerWebView.cs",
@@ -396,7 +455,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 16,
+              "DocumentIndex": 22,
               "Title": "MessageService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\MessageService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\MessageService.cs",
@@ -408,7 +467,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 17,
+              "DocumentIndex": 23,
               "Title": "DirectMessageService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\DirectMessageService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\DirectMessageService.cs",
@@ -420,7 +479,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 18,
+              "DocumentIndex": 24,
               "Title": "NavigationService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\NavigationService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\NavigationService.cs",
@@ -432,7 +491,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 24,
+              "DocumentIndex": 28,
               "Title": "JsExecutor.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\JsExecutor.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\JsExecutor.cs",
@@ -444,7 +503,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 25,
+              "DocumentIndex": 29,
               "Title": "InputFinder.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\InputFinder.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\InputFinder.cs",
@@ -456,7 +515,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 22,
+              "DocumentIndex": 26,
               "Title": "ModalManager.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ModalManager.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ModalManager.cs",
@@ -468,7 +527,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 23,
+              "DocumentIndex": 27,
               "Title": "SocialNetworkArmy",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy.csproj",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\SocialNetworkArmy.csproj",
@@ -479,7 +538,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 39,
+              "DocumentIndex": 42,
               "Title": "MixService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\MixService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\MixService.cs",
@@ -490,7 +549,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 28,
+              "DocumentIndex": 32,
               "Title": "LoadTargets.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Helpers\\LoadTargets.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Helpers\\LoadTargets.cs",
@@ -502,7 +561,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 29,
+              "DocumentIndex": 33,
               "Title": "ProxyAuthHelper.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Helpers\\ProxyAuthHelper.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Helpers\\ProxyAuthHelper.cs",
@@ -514,19 +573,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 31,
-              "Title": "Microsoft.Common.CurrentVersion.targets",
-              "DocumentMoniker": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
-              "RelativeDocumentMoniker": "..\\..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
-              "ToolTip": "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
-              "RelativeToolTip": "..\\..\\..\\..\\..\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\Microsoft.Common.CurrentVersion.targets",
-              "ViewState": "AgIAAPkUAAAAAAAAAAASwBEVAAAEAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003801|",
-              "WhenOpened": "2025-10-05T21:40:20.298Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 26,
+              "DocumentIndex": 30,
               "Title": "MonitoringService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\MonitoringService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\MonitoringService.cs",
@@ -538,7 +585,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 34,
+              "DocumentIndex": 37,
               "Title": "CleanupService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\CleanupService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\CleanupService.cs",
@@ -550,7 +597,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 32,
+              "DocumentIndex": 35,
               "Title": "Logger.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Utils\\Logger.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Utils\\Logger.cs",
@@ -562,7 +609,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 30,
+              "DocumentIndex": 34,
               "Title": "FingerprintService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\FingerprintService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\FingerprintService.cs",
@@ -574,7 +621,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 27,
+              "DocumentIndex": 31,
               "Title": "ProfileService.cs",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ProfileService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ProfileService.cs",
@@ -586,7 +633,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 36,
+              "DocumentIndex": 39,
               "Title": "targets.txt",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Data\\targets.txt",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Data\\targets.txt",
@@ -597,7 +644,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 37,
+              "DocumentIndex": 40,
               "Title": "schedule.csv",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Data\\schedule.csv",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Data\\schedule.csv",
@@ -608,7 +655,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 38,
+              "DocumentIndex": 41,
               "Title": "profiles.json",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Data\\profiles.json",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Data\\profiles.json",
@@ -619,7 +666,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 33,
+              "DocumentIndex": 36,
               "Title": "SocialNetworkArmy.csproj",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy.csproj",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\SocialNetworkArmy.csproj",
@@ -630,12 +677,19 @@
               "WhenOpened": "2025-10-03T08:28:13.991Z"
             },
             {
-              "$type": "Bookmark",
-              "Name": "ST:0:0:{cce594b6-0c39-4442-ba28-10c64ac7e89f}"
+              "$type": "Document",
+              "DocumentIndex": 18,
+              "Title": "InstagramBotForm.cs [Conception]",
+              "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
+              "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\InstagramBotForm.cs",
+              "ToolTip": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\InstagramBotForm.cs [Conception]",
+              "RelativeToolTip": "SocialNetworkArmy\\Forms\\InstagramBotForm.cs [Conception]",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2025-10-03T12:00:15.124Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 19,
+              "DocumentIndex": 25,
               "Title": "ScheduleService.cs [Conception]",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Services\\ScheduleService.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Services\\ScheduleService.cs",
@@ -646,7 +700,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 35,
+              "DocumentIndex": 38,
               "Title": "TiktokBotForm.cs [Conception]",
               "DocumentMoniker": "C:\\Users\\User\\Desktop\\SocialNetworkArmy\\SocialNetworkArmy\\SocialNetworkArmy\\Forms\\TiktokBotForm.cs",
               "RelativeDocumentMoniker": "SocialNetworkArmy\\Forms\\TiktokBotForm.cs",

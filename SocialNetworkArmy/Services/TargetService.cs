@@ -29,6 +29,60 @@ namespace SocialNetworkArmy.Services
             this.form = form ?? throw new ArgumentNullException(nameof(form));
             this.navigationService = new NavigationService(webView, logTextBox);
         }
+        private string GetNextButtonScript()
+        {
+            return @"
+(function(){
+  try {
+    console.log('[TEST] Script started');
+    
+    var dialog = document.querySelector('div[role=""dialog""]');
+    if (!dialog) {
+      console.log('[TEST] No dialog');
+      return 'NO_DIALOG';
+    }
+    
+    console.log('[TEST] Dialog found');
+    
+    // Stratégie simple : dernier bouton visible
+    var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {
+      var rect = b.getBoundingClientRect();
+      return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0;
+    });
+    
+    console.log('[TEST] Found ' + allBtns.length + ' buttons');
+    
+    if (allBtns.length < 2) {
+      console.log('[TEST] Not enough buttons');
+      return 'NO_NEXT_BUTTON';
+    }
+    
+    // Trier par position horizontale, prendre le dernier (à droite)
+    allBtns.sort(function(a, b) {
+      return a.getBoundingClientRect().left - b.getBoundingClientRect().left;
+    });
+    
+    var nextBtn = allBtns[allBtns.length - 1];
+    console.log('[TEST] Selected rightmost button');
+    
+    var rect = nextBtn.getBoundingClientRect();
+    var clientX = Math.floor(rect.left + rect.width / 2);
+    var clientY = Math.floor(rect.top + rect.height / 2);
+    
+    console.log('[TEST] Click at ' + clientX + ',' + clientY);
+    
+    nextBtn.click();
+    
+    var result = 'NEXT_CLICKED:' + clientX + ',' + clientY;
+    console.log('[TEST] Returning: ' + result);
+    return result;
+    
+  } catch(e) {
+    console.error('[TEST] Error: ' + e.message);
+    return 'EXCEPTION: ' + e.message;
+  }
+})()";
+        }
 
         private static bool JsBoolIsTrue(string jsResult)
         {
@@ -39,7 +93,7 @@ namespace SocialNetworkArmy.Services
             return s.Equals("true", StringComparison.OrdinalIgnoreCase);
         }
 
-        private async Task RandomHumanPauseAsync(CancellationToken token, int minShort = 500, int maxShort = 2000, double longPauseChance = 0.08, int minLong = 10000, int maxLong = 60000)
+        private async Task RandomHumanPauseAsync(CancellationToken token, int minShort = 500, int maxShort = 2000, double longPauseChance = 0.04, int minLong = 10000, int maxLong = 60000)
         {
             if (rand.NextDouble() < longPauseChance)
             {
@@ -74,16 +128,18 @@ namespace SocialNetworkArmy.Services
                 {
                     File.AppendAllText(doneTargetsPath, target + Environment.NewLine);
                     string emoji = reason.Contains("succès") || reason.Contains("success") ? "✓" : "⚠️";
-                    logTextBox.AppendText($"[DONE_TARGETS] {emoji} Ajouté à done_targets.txt : {target} {reason}\r\n");
+                    string fileName = Path.GetFileName(doneTargetsPath); // ✅ Récupérer le vrai nom
+                    logTextBox.AppendText($"[DONE_TARGETS] {emoji} Added to {fileName}: {target} {reason}\r\n");
                 }
                 else
                 {
-                    logTextBox.AppendText($"[DONE_TARGETS] ℹ️ Déjà présent dans done_targets.txt : {target}\r\n");
+                    string fileName = Path.GetFileName(doneTargetsPath); // ✅ Récupérer le vrai nom
+                    logTextBox.AppendText($"[DONE_TARGETS] ℹ️ Already present in {fileName}: {target}\r\n");
                 }
             }
             catch (Exception ex)
             {
-                logTextBox.AppendText($"[DONE_TARGETS ERROR] Impossible d'ajouter {target} : {ex.Message}\r\n");
+                logTextBox.AppendText($"[DONE_TARGETS ERROR] Unable to add {target}: {ex.Message}\r\n");
             }
         }
         private async Task RandomHumanNoiseAsync(CancellationToken token)
@@ -267,9 +323,233 @@ namespace SocialNetworkArmy.Services
             logTextBox.AppendText("[NAV] ✓ Modal closed\r\n");
             return true;
         }
+        private async Task<bool> CheckInstagramLoginAsync()
+        {
+            try
+            {
+                string script = @"
+            (function() {
+                try {
+                    const hasCreate = document.querySelector('a[href*=""/create""]') !== null;
+                    const hasDirect = document.querySelector('a[href*=""/direct/""]') !== null;
+                    return hasCreate || hasDirect;
+                } catch(e) {
+                    return false;
+                }
+            })();
+        ";
+
+                string result = await webView.CoreWebView2.ExecuteScriptAsync(script);
+                return result.Trim().ToLower() == "true";
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        // Dans TargetService.cs, remplacer la méthode GetScheduledPathForToday() par ceci :
+
+        private string GetScheduledPathForToday()
+        {
+            try
+            {
+                var schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "schedule.csv");
+                if (!File.Exists(schedulePath))
+                {
+                    logTextBox.AppendText("[SCHEDULE] schedule.csv not found\r\n");
+                    return null;
+                }
+
+                var today = DateTime.Today.ToString("yyyy-MM-dd");
+                var lines = File.ReadAllLines(schedulePath).Skip(1); // Skip header
+
+                // ✅ Charger tous les profils une seule fois
+                var profilesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "profiles.json");
+                List<Profile> allProfiles = new List<Profile>();
+
+                if (File.Exists(profilesPath))
+                {
+                    try
+                    {
+                        var json = File.ReadAllText(profilesPath);
+                        allProfiles = System.Text.Json.JsonSerializer.Deserialize<List<Profile>>(json);
+                    }
+                    catch (Exception ex)
+                    {
+                        logTextBox.AppendText($"[SCHEDULE ERROR] Failed to load profiles: {ex.Message}\r\n");
+                        return null;
+                    }
+                }
+
+                foreach (var line in lines)
+                {
+                    var parts = line.Split(',');
+                    if (parts.Length < 5) continue;
+
+                    var dateStr = parts[0].Trim();
+                    var platform = parts[1].Trim();
+                    var accountOrGroup = parts[2].Trim();  // ✅ Renommé pour clarté
+                    var activity = parts[3].Trim();
+                    var path = parts[4].Trim();
+
+                    // Extraire juste la date (ignorer l'heure)
+                    string dateOnly = dateStr.Contains(" ") ? dateStr.Split(' ')[0] : dateStr;
+
+                    // Vérifier que c'est bien aujourd'hui, Instagram et target
+                    if (dateOnly != today ||
+                        !platform.Equals("Instagram", StringComparison.OrdinalIgnoreCase) ||
+                        !activity.Equals("target", StringComparison.OrdinalIgnoreCase) ||
+                        string.IsNullOrWhiteSpace(path))
+                    {
+                        continue;
+                    }
+
+                    // ✅ DÉTECTION AUTOMATIQUE : Compte ou Groupe
+
+                    // 1) Chercher si c'est un compte exact
+                    var singleProfile = allProfiles.FirstOrDefault(p =>
+                        p.Name.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase));
+
+                    if (singleProfile != null)
+                    {
+                        // C'est un compte individuel - vérifier si c'est LE BON profil
+                        if (singleProfile.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            logTextBox.AppendText($"[SCHEDULE] Found scheduled path for account '{profile.Name}': {path}\r\n");
+                            return path;
+                        }
+                    }
+                    else
+                    {
+                        // 2) Chercher si c'est un groupe
+                        var groupProfiles = allProfiles
+                            .Where(p => !string.IsNullOrWhiteSpace(p.GroupName) &&
+                                       p.GroupName.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+
+                        if (groupProfiles.Any())
+                        {
+                            // C'est un groupe - vérifier si le profil actuel en fait partie
+                            var isInGroup = groupProfiles.Any(p =>
+                                p.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+
+                            if (isInGroup)
+                            {
+                                logTextBox.AppendText($"[SCHEDULE] Found scheduled path for group '{accountOrGroup}' (contains '{profile.Name}'): {path}\r\n");
+                                return path;
+                            }
+                        }
+                    }
+                }
+
+                logTextBox.AppendText("[SCHEDULE] No scheduled path found for this account/group today\r\n");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[SCHEDULE ERROR] {ex.Message}\r\n");
+                Logger.LogError($"GetScheduledPathForToday: {ex}");
+                return null;
+            }
+        }
+        private string NormalizeFilePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return path;
+
+            // Nettoyer le chemin s'il commence par \ ou /
+            if (path.StartsWith("\\") || path.StartsWith("/"))
+            {
+                path = path.TrimStart('\\', '/');
+            }
+
+            // Si ce n'est pas un chemin absolu, le combiner avec BaseDirectory
+            if (!Path.IsPathRooted(path) || path.StartsWith("\\Data", StringComparison.OrdinalIgnoreCase))
+            {
+                path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, path);
+            }
+
+            return path;
+        }
+        // ✅ NOUVELLE MÉTHODE : Scroll-back avec flèche gauche pour humaniser
+        private async Task RandomReelScrollBackAsync(Random rand, CancellationToken token, string currentReelId)  // ✅ Ajouter le paramètre
+        {
+            // 10% de chance de revenir au reel précédent
+            if (rand.NextDouble() < 0.10)
+            {
+                logTextBox.AppendText("[SCROLL_BACK] Going back to previous reel (humanizing)...\r\n");
+
+                var scrollBackScript = @"/* ... votre script Previous ... */";
+                var result = await webView.ExecuteScriptAsync(scrollBackScript);
+                logTextBox.AppendText($"[SCROLL_BACK] Previous: {result}\r\n");
+
+                // Attendre que le reel précédent charge
+                int loadDelay = rand.Next(2000, 4000);
+                logTextBox.AppendText($"[SCROLL_BACK] Waiting {loadDelay}ms for previous reel to load...\r\n");
+                await Task.Delay(loadDelay, token);
+
+                // Re-regarder brièvement ce reel
+                int reWatchTime = rand.Next(3000, 7000);
+                logTextBox.AppendText($"[SCROLL_BACK] Re-watching for {reWatchTime / 1000}s...\r\n");
+                await Task.Delay(reWatchTime, token);
+
+                // Revenir en avant
+                logTextBox.AppendText("[SCROLL_BACK] Returning forward...\r\n");
+
+                var scrollForwardScript = @"/* ... votre script Next ... */";
+                var forwardResult = await webView.ExecuteScriptAsync(scrollForwardScript);
+                logTextBox.AppendText($"[SCROLL_BACK] Forward: {forwardResult}\r\n");
+
+                // Attendre le chargement
+                await Task.Delay(rand.Next(2000, 3500), token);
+
+                // ✅ VÉRIFIER QU'ON EST BIEN REVENU AU BON REEL
+                var checkReelIdScript = @"
+(function(){
+  const match = window.location.href.match(/\/reel\/([^\/]+)/);
+  return match ? match[1] : 'NO_ID';
+})()";
+
+                var verifyReelId = await webView.ExecuteScriptAsync(checkReelIdScript);
+                verifyReelId = verifyReelId?.Trim('"').Trim();
+
+                if (verifyReelId == currentReelId)
+                {
+                    logTextBox.AppendText($"[SCROLL_BACK] ✓ Back to current reel ({currentReelId})\r\n");
+                }
+                else
+                {
+                    logTextBox.AppendText($"[SCROLL_BACK] ⚠️ Reel mismatch! Expected {currentReelId}, got {verifyReelId}\r\n");
+                    logTextBox.AppendText($"[SCROLL_BACK] Clicking Next again to sync...\r\n");
+
+                    // ✅ Cliquer Next une fois de plus pour resynchroniser
+                    var resyncScript = GetNextButtonScript();
+                    await webView.ExecuteScriptAsync(resyncScript);
+                    await Task.Delay(rand.Next(2000, 3000), token);
+
+                    // Vérifier à nouveau
+                    verifyReelId = await webView.ExecuteScriptAsync(checkReelIdScript);
+                    verifyReelId = verifyReelId?.Trim('"').Trim();
+                    logTextBox.AppendText($"[SCROLL_BACK] After resync: {verifyReelId}\r\n");
+                }
+            }
+        }
 
         public async Task RunAsync(CancellationToken token = default, string customTargetsPath = null)
         {
+            if (webView == null || webView.IsDisposed || webView.CoreWebView2 == null)
+            {
+                logTextBox.AppendText("[Target] ✗ WebView not ready\r\n");
+                return;
+            }
+
+            // Vérifier connexion Instagram
+            bool isLoggedIn = await CheckInstagramLoginAsync();
+            if (!isLoggedIn)
+            {
+                logTextBox.AppendText("[Target] ✗ Not logged in to Instagram\r\n");
+                return;
+            }
             await webView.EnsureCoreWebView2Async(null);
 
             try
@@ -281,59 +561,108 @@ namespace SocialNetworkArmy.Services
                 try
                 {
                     // 1) Charger la liste des cibles
+                    // 1) Charger la liste des cibles
                     var dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
                     Directory.CreateDirectory(dataDir);
 
-                    // MODIFICATION ICI : Utiliser le chemin personnalisé OU le défaut
                     string targetsPath;
-                    if (!string.IsNullOrWhiteSpace(customTargetsPath))
+
+                    if (string.IsNullOrWhiteSpace(customTargetsPath))
                     {
-                        // Chemin personnalisé depuis le schedule
-                        targetsPath = customTargetsPath;
+                        // Pas de path custom fourni, chercher dans le schedule
+                        var scheduledPath = GetScheduledPathForToday();
 
-                        // Si c'est un chemin relatif, le combiner avec le répertoire de base
-                        if (!Path.IsPathRooted(targetsPath))
+                        if (!string.IsNullOrWhiteSpace(scheduledPath))
                         {
-                            targetsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, targetsPath);
+                            // Path trouvé dans schedule.csv
+                            targetsPath = NormalizeFilePath(scheduledPath);  // ✅ AVEC =
+                            logTextBox.AppendText($"[TARGET] Using scheduled path from schedule.csv: {targetsPath}\r\n");
                         }
+                        else
+{
+    // ✅ ESSAYER Targets.txt PAR DÉFAUT
+    var defaultTargetsPath = Path.Combine(dataDir, "Targets.txt");
+    
+    if (File.Exists(defaultTargetsPath))
+    {
+        targetsPath = defaultTargetsPath;
+        logTextBox.AppendText($"[TARGET] No schedule found, using default Targets.txt: {targetsPath}\r\n");
+    }
+    else  // ← CE ELSE CONTIENT TOUT LE CODE DE LA SÉLECTION MANUELLE
+    {
+        // ✅ PAS DE TARGETS.TXT, DEMANDER À L'UTILISATEUR
+        logTextBox.AppendText("[TARGET] No scheduled path found. Please select a targets file.\r\n");
 
+        string selectedPath = null;
+
+        // Utiliser Invoke pour l'UI thread
+        form.Invoke(new Action(() =>
+        {
+            using (var openFileDialog = new OpenFileDialog())
+            {
+                openFileDialog.InitialDirectory = dataDir;
+                openFileDialog.Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*";
+                openFileDialog.Title = "Select Targets File";
+                openFileDialog.RestoreDirectory = true;
+                
+                if (openFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    selectedPath = openFileDialog.FileName;
+                }
+            }
+        }));
+        
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            logTextBox.AppendText("[TARGET] ❌ No file selected. Stopping.\r\n");
+            form.StopScript();
+            return;
+        }
+
+        targetsPath = NormalizeFilePath(selectedPath);
+        logTextBox.AppendText($"[TARGET] Using user-selected file: {targetsPath}\r\n");
+    }
+}
+                    }
+                    else
+                    {
+                        // Path custom fourni (depuis le schedule ou autre)
+                        targetsPath = NormalizeFilePath(customTargetsPath);
+
+                        // Vérifier si c'est un chemin relatif OU si c'est juste "\Data\..."
                         logTextBox.AppendText($"[TARGET] Using custom targets file: {targetsPath}\r\n");
                     }
-                    else
-                    {
-                        // Comportement par défaut
-                        targetsPath = Path.Combine(dataDir, "targets.txt");
-                        logTextBox.AppendText($"[TARGET] Using default targets file: {targetsPath}\r\n");
-                    }
 
-                    string targetsFileName = Path.GetFileNameWithoutExtension(targetsPath); // Ex: "Targets_1" ou "targets"
-                    string doneTargetsFileName = targetsFileName.StartsWith("Targets_", StringComparison.OrdinalIgnoreCase)
-                        ? "done_" + targetsFileName + ".txt"  // Ex: "done_Targets_1.txt"
-                        : "done_targets.txt";  // Fallback pour "targets.txt" → "done_targets.txt"
-
-                    var doneTargetsPath = Path.Combine(dataDir, doneTargetsFileName);
-                    logTextBox.AppendText($"[TARGET] Using done file: {doneTargetsFileName}\r\n");
-
-                    var targets = new System.Collections.Generic.List<string>();
-                    var doneTargets = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                    // Charger le fichier targets
-                    if (File.Exists(targetsPath))
-                    {
-                        targets = File.ReadAllLines(targetsPath)
-                                      .Where(line => !string.IsNullOrWhiteSpace(line))
-                                      .Select(line => line.Trim())
-                                      .ToList();
-                        logTextBox.AppendText($"[TARGET] Loaded {targets.Count} targets from {Path.GetFileName(targetsPath)}\r\n");
-                    }
-                    else
+                    // Vérifier que le fichier existe
+                    if (!File.Exists(targetsPath))
                     {
                         logTextBox.AppendText($"[TARGET] ❌ Targets file not found: {targetsPath}\r\n");
                         form.StopScript();
                         return;
                     }
 
-                    // Charger done_targets.txt
+                    string groupName = !string.IsNullOrWhiteSpace(profile.GroupName)
+     ? profile.GroupName
+     : profile.Name;
+
+                    string doneTargetsFileName = $"Done_Targets_{groupName}.txt";
+                    var doneTargetsPath = Path.Combine(dataDir, doneTargetsFileName);
+                    logTextBox.AppendText($"[GROUP] Using group: '{groupName}'\r\n");
+                    logTextBox.AppendText($"[TARGET] Using done file: {doneTargetsFileName}\r\n");
+                    
+                    
+
+                    var targets = new System.Collections.Generic.List<string>();
+                    var doneTargets = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    // Charger le fichier targets
+                    targets = File.ReadAllLines(targetsPath)
+                                  .Where(line => !string.IsNullOrWhiteSpace(line))
+                                  .Select(line => line.Trim())
+                                  .ToList();
+                    logTextBox.AppendText($"[TARGET] Loaded {targets.Count} targets from {Path.GetFileName(targetsPath)}\r\n");
+
+                    // Charger done_targets.txt spécifique au profil
                     if (File.Exists(doneTargetsPath))
                     {
                         doneTargets = new System.Collections.Generic.HashSet<string>(
@@ -346,14 +675,87 @@ namespace SocialNetworkArmy.Services
                     else
                     {
                         File.Create(doneTargetsPath).Close();
-                        logTextBox.AppendText($"[TARGET] Created done_targets.txt at {doneTargetsPath}\r\n");
+                        logTextBox.AppendText($"[TARGET] Created {doneTargetsFileName}\r\n");
                     }
 
                     // Filtrer les targets déjà traités
                     var pendingTargets = targets.Where(t => !doneTargets.Contains(t)).ToList();
                     logTextBox.AppendText($"[TARGET] Total targets: {targets.Count}\r\n");
-                    logTextBox.AppendText($"[TARGET] Already done: {doneTargets.Count}\r\n");
+                    logTextBox.AppendText($"[TARGET] Already done by group '{groupName}': {doneTargets.Count}\r\n");
                     logTextBox.AppendText($"[TARGET] Pending targets: {pendingTargets.Count}\r\n");
+                    // ✅ DISTRIBUTION ENTRELACÉE DES TARGETS PAR GROUPE
+                    // Pour récupérer les autres profils du groupe, on lit directement le JSON
+                    var profilesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "profiles.json");
+                    List<Profile> groupProfiles = new List<Profile>();
+
+                    if (File.Exists(profilesPath))
+                    {
+                        try
+                        {
+                            var json = File.ReadAllText(profilesPath);
+                            var allProfiles = System.Text.Json.JsonSerializer.Deserialize<List<Profile>>(json);
+
+                            if (allProfiles != null)
+                            {
+                                groupProfiles = allProfiles
+                                    .Where(p => !string.IsNullOrWhiteSpace(p.GroupName) && p.GroupName.Equals(groupName, StringComparison.OrdinalIgnoreCase))
+                                    .OrderBy(p => p.Name)  // Important: ordre alphabétique pour cohérence
+                                    .ToList();
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logTextBox.AppendText($"[GROUP ERROR] Failed to load profiles: {ex.Message}\r\n");
+                        }
+                    }
+
+                    if (groupProfiles.Count > 1)
+                    {
+                        // ✅ ACQUÉRIR LE LOCK DU GROUPE AVANT DE TRAITER
+                        var groupLock = ScheduleService.GetGroupLock(groupName);
+
+                        logTextBox.AppendText($"[GROUP] {groupProfiles.Count} accounts detected in group '{groupName}'\r\n");
+                        logTextBox.AppendText($"[GROUP] Waiting for group lock...\r\n");
+
+                        await groupLock.WaitAsync(token);
+
+                        try
+                        {
+                            logTextBox.AppendText($"[GROUP] Lock acquired ✓\r\n");
+
+                            // Trouver l'index de ce profil dans le groupe (ordre alphabétique)
+                            int profileIndex = groupProfiles.FindIndex(p => p.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+
+                            if (profileIndex == -1)
+                            {
+                                logTextBox.AppendText($"[GROUP ERROR] Current profile not found in group list!\r\n");
+                            }
+                            else
+                            {
+                                // ✅ DISTRIBUTION ENTRELACÉE
+                                var myTargets = pendingTargets
+                                    .Where((t, index) => index % groupProfiles.Count == profileIndex)
+                                    .ToList();
+
+                                logTextBox.AppendText($"[GROUP SPLIT] Position {profileIndex + 1}/{groupProfiles.Count} in '{groupName}'\r\n");
+                                logTextBox.AppendText($"[GROUP SPLIT] Original: {pendingTargets.Count} targets\r\n");
+                                logTextBox.AppendText($"[GROUP SPLIT] Assigned: {myTargets.Count} targets (interleaved)\r\n");
+
+                                // Remplacer la liste des targets
+                                pendingTargets = myTargets;
+                            }
+                        }
+                        finally
+                        {
+                            // ✅ LIBÉRER LE LOCK APRÈS LE TRAITEMENT
+                            groupLock.Release();
+                            logTextBox.AppendText($"[GROUP] Lock released ✓\r\n");
+                        }
+                    }
+                    else
+                    {
+                        logTextBox.AppendText($"[GROUP] Single account or no group - processing all targets\r\n");
+                    }
                     if (!pendingTargets.Any())
                     {
                         logTextBox.AppendText("[TARGET] ✓ No new targets to process — all done.\r\n");
@@ -399,6 +801,9 @@ namespace SocialNetworkArmy.Services
                         var currentTarget = target.Trim();
                         logTextBox.AppendText($"[TARGET] Processing {currentTarget}\r\n");
 
+                        // ⚠️ MARQUER COMME DONE DÈS LE DÉBUT ⚠️
+                        MarkTargetAsDone(currentTarget, doneTargetsPath, "(en cours)");
+
                         int maxReels = rand.Next(4, 6);
                         logTextBox.AppendText($"[TARGET] Will process {maxReels} reels for this target.\r\n");
 
@@ -407,7 +812,7 @@ namespace SocialNetworkArmy.Services
                         if (!navigationSuccess)
                         {
                             logTextBox.AppendText($"[TARGET] Failed to navigate to profile '{currentTarget}'\r\n");
-                            MarkTargetAsDone(currentTarget, doneTargetsPath, "(échec navigation)");
+                            // ❌ NE PLUS MARQUER ICI - Déjà marqué au début
                             continue;
                         }
 
@@ -419,7 +824,7 @@ namespace SocialNetworkArmy.Services
                         if (!reelsSuccess)
                         {
                             logTextBox.AppendText($"[TARGET] Failed to navigate to reels for '{currentTarget}'\r\n");
-                            MarkTargetAsDone(currentTarget, doneTargetsPath, "(échec reels)");
+                            // ❌ NE PLUS MARQUER ICI - Déjà marqué au début
                             continue;
                         }
 
@@ -563,12 +968,11 @@ namespace SocialNetworkArmy.Services
 
                             logTextBox.AppendText($"[REEL {reelNum}/{maxReels}] Début interaction...\r\n");
 
-                            // Extract reel ID
+                            // ✅ EXTRACTION ID & DATE **AU DÉBUT DE CHAQUE ITÉRATION**
                             var reelId = await webView.ExecuteScriptAsync(reelIdScript);
                             reelId = reelId?.Trim('"').Trim();
                             logTextBox.AppendText($"[REEL_ID] {reelId}\r\n");
 
-                            // Extraction date
                             var reelDateRaw = await webView.ExecuteScriptAsync(dateScript);
                             string reelDate;
                             try
@@ -582,11 +986,11 @@ namespace SocialNetworkArmy.Services
                             }
                             logTextBox.AppendText($"[DATE] {reelDate}\r\n");
 
-                            await RandomHumanPauseAsync(token);
-
-                            // Petit filtre pour skipper les vieux reels avec 67% de chance
+                            // ✅ CALCUL DE L'ÂGE ET DÉCISION
                             bool shouldComment = false;
-                            bool isOld = false;
+                            bool shouldSkip = false;
+                            double ageHours = -1;
+
                             if (reelDate != "NO_DATE_FOUND")
                             {
                                 try
@@ -599,13 +1003,22 @@ namespace SocialNetworkArmy.Services
                                         {
                                             var now = DateTimeOffset.UtcNow;
                                             var age = now - reelTime;
-                                            if (age.TotalHours < 24)
+                                            ageHours = age.TotalHours;
+
+                                            logTextBox.AppendText($"[AGE] {ageHours:F1}h\r\n");
+
+                                            // ✅ LOGIQUE CLAIRE ET STRICTE
+                                            if (ageHours < 24)
                                             {
                                                 shouldComment = true;
+                                                shouldSkip = false;
+                                                logTextBox.AppendText("[DECISION] < 24h → COMMENTER\r\n");
                                             }
-                                            else
+                                            else  // ≥ 24h
                                             {
-                                                isOld = true;
+                                                shouldComment = false;
+                                                shouldSkip = (rand.NextDouble() < 0.80);  // 80% de skip
+                                                logTextBox.AppendText($"[DECISION] ≥ 24h → {(shouldSkip ? "SKIP (80%)" : "NO COMMENT (like 9%)")}\r\n");
                                             }
                                         }
                                     }
@@ -616,15 +1029,18 @@ namespace SocialNetworkArmy.Services
                                 }
                             }
 
-                            while (isOld && rand.NextDouble() < 0.67 && reelNum < maxReels)
+                            // ✅ SI SKIP DÉCIDÉ, PASSER AU SUIVANT IMMÉDIATEMENT
+                            if (shouldSkip && reelNum < maxReels)
                             {
-                                int skipDelay = rand.Next(500, 2501);
-                                logTextBox.AppendText($"[SKIP] Waiting {skipDelay}ms then skipping old reel...\r\n");
+                                int skipDelay = rand.Next(800, 2000);
+                                logTextBox.AppendText($"[SKIP] Waiting {skipDelay}ms then skipping to next reel...\r\n");
                                 await Task.Delay(skipDelay, token);
 
+                                // Cliquer Next
                                 nextClickCounter++;
                                 bool useArrowKey = (nextClickCounter % 15 == 0);
                                 string nextScript;
+
                                 if (useArrowKey)
                                 {
                                     logTextBox.AppendText("[SKIP] Using ArrowRight fallback (1/15)\r\n");
@@ -639,126 +1055,59 @@ namespace SocialNetworkArmy.Services
                                 }
                                 else
                                 {
-                                    nextScript = $@"
-(async function(){{
-  try {{
-    var info = [];
-    
-    var dialog = document.querySelector('div[role=""dialog""]');
-    if (!dialog) return 'NO_DIALOG';
-    
-    // Stratégie 1: Chercher par aria-label
-    var nextBtn = Array.from(dialog.querySelectorAll('button')).find(b => {{
-      var label = (b.getAttribute('aria-label') || '').toLowerCase();
-      return /next|suivant|nextpage|nextitem|flèche/.test(label);
-    }});
-    info.push('Stratégie 1 (aria-label): ' + (nextBtn ? 'FOUND' : 'NOT_FOUND'));
-    
-    // Stratégie 2: Boutons de taille 32x32
-    if (!nextBtn) {{
-      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
-        var rect = b.getBoundingClientRect();
-        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0 && Math.round(rect.width) === 32 && Math.round(rect.height) === 32;
-      }});
-      if (allBtns.length >= 1) {{
-        // Trier par position x pour prendre le plus à droite (next)
-        allBtns.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-        nextBtn = allBtns[allBtns.length - 1]; // Prendre le dernier (plus à droite)
-        info.push('Stratégie 2 (32x32 buttons): FOUND ' + allBtns.length + ', picked rightmost');
-      }} else {{
-        info.push('Stratégie 2 (32x32 buttons): NOT_FOUND');
-      }}
-    }}
-    
-    // Stratégie 3: 2e bouton visible si toujours pas trouvé
-    if (!nextBtn) {{
-      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
-        var rect = b.getBoundingClientRect();
-        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0;
-      }});
-      if (allBtns.length >= 2) {{
-        nextBtn = allBtns[1];
-        info.push('Stratégie 3 (2nd button): FOUND');
-      }} else {{
-        info.push('Stratégie 3 (2nd button): NOT_FOUND (only ' + allBtns.length + ' visible buttons)');
-      }}
-    }}
-    
-    if (!nextBtn) {{
-      info.push('RESULT: NO_NEXT_BUTTON');
-      return info.join('\\n');
-    }}
-    
-    var rect = nextBtn.getBoundingClientRect();
-    info.push('\\nButton details:');
-    info.push('  Size: ' + Math.round(rect.width) + 'x' + Math.round(rect.height));
-    info.push('  Position: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
-    info.push('  Visible: ' + (rect.width > 0 && rect.height > 0));
-    
-    // Scroll into view
-    nextBtn.scrollIntoView({{block: 'nearest', inline: 'nearest'}});
-    await new Promise(r => setTimeout(r, 100));
-    
-    // Recalculer après scroll
-    rect = nextBtn.getBoundingClientRect();
-    info.push('  After scroll: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
-    
-    // Calculer les coordonnées du click
-    var centerX = rect.left + rect.width / 2;
-    var centerY = rect.top + rect.height / 2;
-    var offsetX = (Math.random() - 0.5) * 10;
-    var offsetY = (Math.random() - 0.5) * 10;
-    var clientX = Math.floor(centerX + offsetX);
-    var clientY = Math.floor(centerY + offsetY);
-    
-    // Clamp dans les limites
-    clientX = Math.max(rect.left + 2, Math.min(clientX, rect.left + rect.width - 2));
-    clientY = Math.max(rect.top + 2, Math.min(clientY, rect.top + rect.height - 2));
-    
-    info.push('\\nClick coordinates:');
-    info.push('  Center: ' + Math.round(centerX) + ',' + Math.round(centerY));
-    info.push('  Final: ' + clientX + ',' + clientY);
-    
-    // Mouvement souris simulé
-    var startX = clientX + (Math.random() * 60 - 30);
-    var startY = clientY + (Math.random() * 60 - 30);
-    
-    for (let i = 1; i <= 4; i++) {{
-      var moveX = startX + (clientX - startX) * (i / 4);
-      var moveY = startY + (clientY - startY) * (i / 4);
-      nextBtn.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
-      await new Promise(r => setTimeout(r, Math.random() * 30 + 20));
-    }}
-    
-    await new Promise(r => setTimeout(r, Math.random() * 100 + 50));
-    
-    // Events
-    var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
-    nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
-    nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
-    nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-    await new Promise(r => setTimeout(r, Math.random() * 80 + 30));
-    nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-    nextBtn.dispatchEvent(new MouseEvent('click', opts));
-    await new Promise(r => setTimeout(r, Math.random() * 50 + 25));
-    nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
-    
-    info.push('\\nCLICK_SENT');
-    return info.join('\\n');
-  }} catch(e) {{
-    return 'EXCEPTION: ' + e.message;
-  }}
-}})()";
+                                    nextScript = GetNextButtonScript();  // ✅ Appel de la méthode
                                 }
 
+
                                 var nextTry = await webView.ExecuteScriptAsync(nextScript);
-                                logTextBox.AppendText($"[SKIP] {nextTry}\r\n");
 
-                                
-
+                                // ✅ PARSER ET AFFICHER PROPREMENT LE RÉSULTAT
+                                if (string.IsNullOrWhiteSpace(nextTry) || nextTry == "{}" || nextTry == "\"{}\"")
+                                {
+                                    logTextBox.AppendText($"[SKIP] ⚠️ Empty response from JavaScript\r\n");
+                                }
+                                else if (nextTry.Contains("NEXT_CLICKED:"))
+                                {
+                                    try
+                                    {
+                                        var parts = nextTry.Split(new[] { "NEXT_CLICKED:" }, StringSplitOptions.None);
+                                        if (parts.Length > 1)
+                                        {
+                                            var coords = parts[1].Trim('"', ' ').Split(',');
+                                            if (coords.Length >= 2)
+                                            {
+                                                string clickX = coords[0].Trim();
+                                                string clickY = coords[1].Trim();
+                                                logTextBox.AppendText($"[SKIP] 🖱️ Button clicked at X={clickX}, Y={clickY}\r\n");
+                                            }
+                                            else
+                                            {
+                                                logTextBox.AppendText($"[SKIP] ⚠️ Malformed: {nextTry}\r\n");
+                                            }
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        logTextBox.AppendText($"[SKIP] ⚠️ Parse error: {ex.Message}\r\n");
+                                    }
+                                }
+                                else if (nextTry.Contains("ARROW_KEY_USED"))
+                                {
+                                    logTextBox.AppendText($"[SKIP] ⌨️ ArrowRight key used\r\n");
+                                }
+                                else if (nextTry.Contains("NO_DIALOG") || nextTry.Contains("NO_NEXT_BUTTON"))
+                                {
+                                    logTextBox.AppendText($"[SKIP] ❌ {nextTry}\r\n");
+                                }
+                                else
+                                {
+                                    logTextBox.AppendText($"[SKIP] ℹ️ {nextTry}\r\n");
+                                }
+                                // Attendre que le reel change avec retry
                                 int retryCount = 0;
                                 const int maxRetries = 3;
                                 string newReelId = null;
+
                                 while (retryCount < maxRetries)
                                 {
                                     await Task.Delay(rand.Next(1500, 3000), token);
@@ -782,7 +1131,6 @@ namespace SocialNetworkArmy.Services
 
                                     logTextBox.AppendText($"[SKIP RETRY {retryCount + 1}] Stuck on {reelId}, retrying...\r\n");
 
-                                    logTextBox.AppendText("[SKIP RETRY] Forcing ArrowRight fallback...\r\n");
                                     nextScript = @"
 (function(){
   try{
@@ -793,9 +1141,15 @@ namespace SocialNetworkArmy.Services
 })()";
 
                                     nextTry = await webView.ExecuteScriptAsync(nextScript);
-                                    logTextBox.AppendText($"[SKIP RETRY] {nextTry}\r\n");
-
-
+                                    if (nextTry.Contains("ARROW_KEY_RETRY"))
+                                    {
+                                        logTextBox.AppendText($"[SKIP RETRY] ⌨️ ArrowRight used\r\n");
+                                    }
+                                    else
+                                    {
+                                        logTextBox.AppendText($"[SKIP RETRY] {nextTry}\r\n");
+                                    }
+                                   
                                     retryCount++;
                                 }
 
@@ -805,90 +1159,48 @@ namespace SocialNetworkArmy.Services
                                     break;
                                 }
 
-                                // Re-extract id and date
-                                reelId = newReelId;
-                                logTextBox.AppendText($"[REEL_ID] New: {reelId}\r\n");
-
-                                reelDateRaw = await webView.ExecuteScriptAsync(dateScript);
-                                try
-                                {
-                                    reelDate = JsonSerializer.Deserialize<string>(reelDateRaw);
-                                }
-                                catch (JsonException ex)
-                                {
-                                    logTextBox.AppendText($"[DATE_DESERIALIZE_ERROR] {ex.Message}\r\n");
-                                    reelDate = "NO_DATE_FOUND";
-                                }
-                                logTextBox.AppendText($"[DATE] New: {reelDate}\r\n");
-
-                                // Re-compute shouldComment and isOld
-                                shouldComment = false;
-                                isOld = false;
-                                if (reelDate != "NO_DATE_FOUND")
-                                {
-                                    try
-                                    {
-                                        using var doc = JsonDocument.Parse(reelDate);
-                                        string datetimeStr = doc.RootElement.GetProperty("datetime").GetString();
-                                        if (datetimeStr != "NO_DATETIME")
-                                        {
-                                            if (DateTimeOffset.TryParse(datetimeStr, out var reelTime))
-                                            {
-                                                var now = DateTimeOffset.UtcNow;
-                                                var age = now - reelTime;
-                                                if (age.TotalHours < 24)
-                                                {
-                                                    shouldComment = true;
-                                                }
-                                                else
-                                                {
-                                                    isOld = true;
-                                                }
-                                            }
-                                        }
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        logTextBox.AppendText($"[DATE_PARSE_ERROR] {ex.Message}\r\n");
-                                    }
-                                }
+                                // ✅ CONTINUER LA BOUCLE (ne pas traiter ce reel)
+                                continue;
                             }
+
+                            // ✅ SINON, TRAITER NORMALEMENT (WATCH, LIKE, COMMENT SI shouldComment)
+                            await RandomHumanPauseAsync(token);
 
                             // Watch delay with possible pause
                             int watchTime = rand.Next(5000, 10001);
-                            await Task.Delay(watchTime / 2, token);  // Watch half first
+                            await Task.Delay(watchTime / 2, token);
 
-                            if (rand.NextDouble() < 0.15)  // 15% chance to pause mid-watch
+                            if (rand.NextDouble() < 0.15)
                             {
                                 logTextBox.AppendText("[HUMAN] Pausing reel mid-watch...\r\n");
                                 var pauseScript = @"
-                                (function(){
-                                  var video = document.querySelector('video');
-                                  if (video && !video.paused) {
-                                    video.pause();
-                                    return 'PAUSED';
-                                  }
-                                  return 'NO_VIDEO';
-                                })()";
+(function(){
+  var video = document.querySelector('video');
+  if (video && !video.paused) {
+    video.pause();
+    return 'PAUSED';
+  }
+  return 'NO_VIDEO';
+})()";
                                 var pauseResult = await webView.ExecuteScriptAsync(pauseScript);
                                 logTextBox.AppendText($"[PAUSE] {pauseResult}\r\n");
 
-                                await Task.Delay(rand.Next(2000, 8000), token);  // Pause for 2-8s
+                                await Task.Delay(rand.Next(2000, 8000), token);
 
                                 var playScript = @"
-                                (function(){
-                                  var video = document.querySelector('video');
-                                  if (video && video.paused) {
-                                    video.play();
-                                    return 'RESUMED';
-                                  }
-                                  return 'NO_VIDEO';
-                                })()";
+(function(){
+  var video = document.querySelector('video');
+  if (video && video.paused) {
+    video.play();
+    return 'RESUMED';
+  }
+  return 'NO_VIDEO';
+})()";
                                 var playResult = await webView.ExecuteScriptAsync(playScript);
                                 logTextBox.AppendText($"[RESUME] {playResult}\r\n");
                             }
 
-                            await Task.Delay(watchTime / 2, token);  // Finish watching
+                            await Task.Delay(watchTime / 2, token);
 
                             // Like (9%)
                             bool shouldLike = rand.NextDouble() < 0.09;
@@ -955,212 +1267,205 @@ namespace SocialNetworkArmy.Services
                             {
                                 logTextBox.AppendText("[LIKE] Skipped (random 9%)\r\n");
                             }
-
-                            // Comment (si < 24h)
+                            await RandomReelScrollBackAsync(rand, token, reelId);
+                            // ✅ COMMENTAIRE SEULEMENT SI shouldComment == true
                             if (shouldComment)
                             {
                                 string randomComment = comments[rand.Next(comments.Count)];
-                                logTextBox.AppendText($"[COMMENT] Sélectionné: '{randomComment}'\r\n");
+                                logTextBox.AppendText($"[COMMENT] Sélectionné: '{randomComment}' (âge: {ageHours:F1}h)\r\n");
                                 logTextBox.AppendText($"[TYPING] Starting...\r\n");
 
-                                // Échapper TOUS les types d'apostrophes et guillemets
                                 var escapedComment = randomComment
                                     .Replace("\\", "\\\\")
                                     .Replace("\u2018", "'")
                                     .Replace("\u2019", "'")
                                     .Replace("'", "\\'");
 
-                                // SCRIPT EXACTEMENT COMME TESTSERVICE - QUI FONCTIONNE
                                 var typingScript = $@"
 (async function(){{
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   
-  // Utilitaire pour générer un délai aléatoire entre min et max ms
   function randomDelay(min, max) {{
     return Math.floor(min + Math.random() * (max - min + 1));
   }}
   
-  const dlg = document.querySelector('div[role=""dialog""]');
-  const root = dlg || document;
-  
-  // Texte à taper
-  const text = '{escapedComment}';
-  const chars = Array.from(text);
-  
-  // Focus initial
-  let ta = (root.querySelector('div[role=""dialog""] form textarea'))
-        || (root.querySelector('form textarea'))
-        || root.querySelector('textarea');
-  let ce = null;
-  
-  if (!ta) {{
-    ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-    if (!ce) return 'NO_COMPOSER_INITIAL';
-  }}
-  
-  const initialTarget = ta || ce;
-  
-  initialTarget.scrollIntoView({{behavior:'smooth', block:'center'}});
-  await sleep(randomDelay(200, 400));
-  
-  const rect = initialTarget.getBoundingClientRect();
-  var marginX = rect.width * 0.2;
-  var marginY = rect.height * 0.2;
-  var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
-  var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
-  const clientX = rect.left + offsetX;
-  const clientY = rect.top + offsetY;
-  
-  // Simulate mouse approach: 3-5 move events towards the target
-  var startX = clientX + (Math.random() * 100 - 50);  // Start offset
-  var startY = clientY + (Math.random() * 100 - 50);
-  for (let i = 1; i <= 5; i++) {{
-    var moveX = startX + (clientX - startX) * (i / 5);
-    var moveY = startY + (clientY - startY) * (i / 5);
-    initialTarget.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
-  }}
-  
-  const opts = {{bubbles:true, cancelable:true, clientX:clientX, clientY:clientY, button:0}};
-  
-  initialTarget.dispatchEvent(new MouseEvent('mousedown', opts));
-  initialTarget.dispatchEvent(new MouseEvent('mouseup', opts));
-  initialTarget.dispatchEvent(new MouseEvent('click', opts));
-  
-  await sleep(randomDelay(100, 250));
-  initialTarget.focus();
-  
-  for (let i = 0; i < chars.length; i++) {{
-    const char = chars[i];
+  try {{
+    const videos = document.querySelectorAll('video');
+    let visibleVideo = null;
+    let maxVisible = 0;
     
-    // Re-trouver l'élément à chaque itération
-    ta = (root.querySelector('div[role=""dialog""] form textarea'))
-          || (root.querySelector('form textarea'))
-          || root.querySelector('textarea');
-    ce = null;
+    videos.forEach(video => {{
+      const rect = video.getBoundingClientRect();
+      const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      if (visible > maxVisible) {{
+        maxVisible = visible;
+        visibleVideo = video;
+      }}
+    }});
+    
+    if (!visibleVideo) return 'NO_VIDEO';
+    
+    const article = visibleVideo.closest('article');
+    if (!article) return 'NO_ARTICLE';
+    
+    const text = '{escapedComment}';
+    const chars = Array.from(text);
+    
+    // ✅ CHERCHER textarea OU contenteditable
+    let ta = article.querySelector('textarea');
+    let ce = null;
     
     if (!ta) {{
-      ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-      if (!ce) return 'NO_COMPOSER_AT_' + i;
+      ce = article.querySelector('div[role=""textbox""][contenteditable=""true""]');
+      if (!ce) return 'NO_COMPOSER_INITIAL';
     }}
     
-    const currentTarget = ta || ce;
+    const initialTarget = ta || ce;
     
-    try {{
-      if (ta) {{
-        const currentValue = ta.value;
-        const proto = HTMLTextAreaElement.prototype;
-        const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-        desc.set.call(ta, currentValue + char);
-        
-        ta.dispatchEvent(new Event('input', {{bubbles: true}}));
-        ta.dispatchEvent(new Event('change', {{bubbles: true}}));
+    initialTarget.scrollIntoView({{behavior:'smooth', block:'center'}});
+    await sleep(randomDelay(200, 400));
+    
+    // ✅ CLIC HUMAIN SUR LE COMPOSER
+    const rect = initialTarget.getBoundingClientRect();
+    var marginX = rect.width * 0.2;
+    var marginY = rect.height * 0.2;
+    var offsetX = marginX + Math.random() * (rect.width - 2 * marginX);
+    var offsetY = marginY + Math.random() * (rect.height - 2 * marginY);
+    const clientX = rect.left + offsetX;
+    const clientY = rect.top + offsetY;
+    
+    var startX = clientX + (Math.random() * 100 - 50);
+    var startY = clientY + (Math.random() * 100 - 50);
+    for (let i = 1; i <= 5; i++) {{
+      var moveX = startX + (clientX - startX) * (i / 5);
+      var moveY = startY + (clientY - startY) * (i / 5);
+      initialTarget.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+    }}
+    
+    const opts = {{bubbles:true, cancelable:true, clientX:clientX, clientY:clientY, button:0}};
+    initialTarget.dispatchEvent(new MouseEvent('mousedown', opts));
+    initialTarget.dispatchEvent(new MouseEvent('mouseup', opts));
+    initialTarget.dispatchEvent(new MouseEvent('click', opts));
+    
+    await sleep(randomDelay(100, 250));
+    initialTarget.focus();
+    
+    // ✅ TYPING CARACTÈRE PAR CARACTÈRE
+    for (let i = 0; i < chars.length; i++) {{
+      const char = chars[i];
+      
+      // Re-chercher le composer à chaque caractère (au cas où il change)
+      ta = article.querySelector('textarea');
+      ce = null;
+      
+      if (!ta) {{
+        ce = article.querySelector('div[role=""textbox""][contenteditable=""true""]');
+        if (!ce) return 'NO_COMPOSER_AT_' + i;
+      }}
+      
+      const currentTarget = ta || ce;
+      
+      try {{
+        if (ta) {{
+          const currentValue = ta.value;
+          const proto = HTMLTextAreaElement.prototype;
+          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+          desc.set.call(ta, currentValue + char);
+          
+          ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+          ta.dispatchEvent(new Event('change', {{bubbles: true}}));
+        }} else {{
+          document.execCommand('insertText', false, char);
+        }}
+      }} catch(e) {{
+        return 'TYPE_ERROR_AT_' + i + ': ' + (e.message || String(e));
+      }}
+      
+      // ✅ DÉLAIS VARIABLES SELON LE CARACTÈRE
+      let delay;
+      if (char === ',' || char === ';') {{
+        delay = randomDelay(200, 400);
+      }} else if (char === '.' || char === '!' || char === '?') {{
+        delay = randomDelay(300, 500);
+      }} else if (char === ' ') {{
+        delay = randomDelay(80, 150);
       }} else {{
-        document.execCommand('insertText', false, char);
+        delay = randomDelay(50, 150);
       }}
-    }} catch(e) {{
-      return 'TYPE_ERROR_AT_' + i + ': ' + (e.message || String(e));
-    }}
-    
-    // Délai entre les caractères (vitesse de frappe variable)
-    let delay;
-    
-    // Pause plus longue après ponctuation
-    if (char === ',' || char === ';') {{
-      delay = randomDelay(200, 400);
-    }} else if (char === '.' || char === '!' || char === '?') {{
-      delay = randomDelay(300, 500);
-    }} else if (char === ' ') {{
-      delay = randomDelay(80, 150);
-    }} else {{
-      // Caractères normaux: vitesse variable
-      delay = randomDelay(50, 150);
-    }}
-    
-    // Chance de faire une erreur (5%)
-    if (Math.random() < 0.05 && i < chars.length - 1) {{
+      
+      // ✅ 5% DE CHANCE DE FAIRE UNE TYPO + CORRECTION
+      if (Math.random() < 0.05 && i < chars.length - 1) {{
+        await sleep(delay);
+        
+        const wrongChars = 'qwertyuiopasdfghjklzxcvbnm';
+        const wrongChar = wrongChars[Math.floor(Math.random() * wrongChars.length)];
+        
+        ta = article.querySelector('textarea');
+        ce = null;
+        if (!ta) {{
+          ce = article.querySelector('div[role=""textbox""][contenteditable=""true""]');
+          if (!ce) return 'NO_COMPOSER_ERROR_AT_' + i;
+        }}
+        
+        const currentTargetError = ta || ce;
+        
+        try {{
+          if (ta) {{
+            const currentValue = currentTargetError.value;
+            const proto = HTMLTextAreaElement.prototype;
+            const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+            desc.set.call(ta, currentValue + wrongChar);
+            ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+          }} else {{
+            document.execCommand('insertText', false, wrongChar);
+          }}
+        }} catch(e) {{
+          return 'ERROR_TYPE_AT_' + i + ': ' + (e.message || String(e));
+        }}
+        
+        await sleep(randomDelay(100, 250));
+        
+        ta = article.querySelector('textarea');
+        ce = null;
+        if (!ta) {{
+          ce = article.querySelector('div[role=""textbox""][contenteditable=""true""]');
+          if (!ce) return 'NO_COMPOSER_DELETE_AT_' + i;
+        }}
+        
+        const currentTargetDelete = ta || ce;
+        
+        try {{
+          if (ta) {{
+            const currentValue = currentTargetDelete.value;
+            const proto = HTMLTextAreaElement.prototype;
+            const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+            desc.set.call(ta, currentValue.slice(0, -1));
+            ta.dispatchEvent(new Event('input', {{bubbles: true}}));
+          }} else {{
+            document.execCommand('delete', false);
+          }}
+        }} catch(e) {{
+          return 'DELETE_ERROR_AT_' + i + ': ' + (e.message || String(e));
+        }}
+        
+        await sleep(randomDelay(50, 120));
+      }}
+      
+      // ✅ 2% DE CHANCE DE PAUSE LONGUE (RÉFLEXION)
+      if (Math.random() < 0.02) {{
+        await sleep(randomDelay(400, 800));
+      }}
+      
       await sleep(delay);
-      
-      // Taper un mauvais caractère
-      const wrongChars = 'qwertyuiopasdfghjklzxcvbnm';
-      const wrongChar = wrongChars[Math.floor(Math.random() * wrongChars.length)];
-      
-      // Re-trouver pour erreur
-      ta = (root.querySelector('div[role=""dialog""] form textarea'))
-            || (root.querySelector('form textarea'))
-            || root.querySelector('textarea');
-      ce = null;
-      
-      if (!ta) {{
-        ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-        if (!ce) return 'NO_COMPOSER_ERROR_AT_' + i;
-      }}
-      
-      const currentTargetError = ta || ce;
-      
-      try {{
-        if (ta) {{
-          const currentValue = currentTargetError.value;
-          const proto = HTMLTextAreaElement.prototype;
-          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-          desc.set.call(ta, currentValue + wrongChar);
-          ta.dispatchEvent(new Event('input', {{bubbles: true}}));
-        }} else {{
-          document.execCommand('insertText', false, wrongChar);
-        }}
-      }} catch(e) {{
-        return 'ERROR_TYPE_AT_' + i + ': ' + (e.message || String(e));
-      }}
-      
-      // Petit délai avant de réaliser l'erreur
-      await sleep(randomDelay(100, 250));
-      
-      // Supprimer le mauvais caractère (Backspace)
-      // Re-trouver pour delete
-      ta = (root.querySelector('div[role=""dialog""] form textarea'))
-            || (root.querySelector('form textarea'))
-            || root.querySelector('textarea');
-      ce = null;
-      
-      if (!ta) {{
-        ce = root.querySelector('div[role=""textbox""][contenteditable=""true""]');
-        if (!ce) return 'NO_COMPOSER_DELETE_AT_' + i;
-      }}
-      
-      const currentTargetDelete = ta || ce;
-      
-      try {{
-        if (ta) {{
-          const currentValue = currentTargetDelete.value;
-          const proto = HTMLTextAreaElement.prototype;
-          const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-          desc.set.call(ta, currentValue.slice(0, -1));
-          ta.dispatchEvent(new Event('input', {{bubbles: true}}));
-        }} else {{
-          document.execCommand('delete', false);
-        }}
-      }} catch(e) {{
-        return 'DELETE_ERROR_AT_' + i + ': ' + (e.message || String(e));
-      }}
-      
-      // Petit délai après correction
-      await sleep(randomDelay(50, 120));
     }}
     
-    // Hésitation aléatoire (2% de chance)
-    if (Math.random() < 0.02) {{
-      await sleep(randomDelay(400, 800));
-    }}
-    
-    await sleep(delay);
+    await sleep(randomDelay(300, 600));
+    return 'TYPED_SUCCESSFULLY';
+  }} catch(e) {{
+    return 'ERROR: ' + e.message;
   }}
-  
-  // Petit délai final
-  await sleep(randomDelay(300, 600));
-  
-  return 'TYPED_SUCCESSFULLY';
 }})()";
 
-                                // Calculer temps d'attente
                                 int charCount = randomComment.Length;
                                 int baseTime = charCount * 100;
                                 int punctuationCount = randomComment.Count(c => ".!?,;".Contains(c));
@@ -1168,7 +1473,6 @@ namespace SocialNetworkArmy.Services
                                 int errorDelay = (int)(charCount * 0.05 * 500);
                                 int totalTime = baseTime + punctuationDelay + errorDelay + 3000;
 
-                                // Lancer le script et attendre
                                 var typingTask = webView.ExecuteScriptAsync(typingScript);
 
                                 logTextBox.AppendText($"[TYPING] Attente de {totalTime}ms...\r\n");
@@ -1177,10 +1481,8 @@ namespace SocialNetworkArmy.Services
                                 var typingResult = await typingTask;
                                 logTextBox.AppendText($"[TYPING] Résultat: {typingResult}\r\n");
 
-                                // Attendre que le bouton se débloque
                                 await Task.Delay(rand.Next(1500, 2500), token);
 
-                                // PUBLISH
                                 var publishScript = $@"
 (async function(){{
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -1201,11 +1503,6 @@ namespace SocialNetworkArmy.Services
     const candidates = [...form.querySelectorAll('button,[role=""button""]')];
     const match = candidates.find(el => /{publishPattern}/i.test((el.textContent||'').trim()));
     if (match) return match;
-    const wrap = form.querySelector('.x13fj5qh');
-    if (wrap){{
-      const inside = [...wrap.querySelectorAll('button,[role=""button""]')].find(Boolean);
-      if (inside) return inside;
-    }}
     return null;
   }}
 
@@ -1218,48 +1515,75 @@ namespace SocialNetworkArmy.Services
     return false;
   }}
 
-  const dlg = document.querySelector('div[role=""dialog""]');
-  const root = dlg || document;
-  const form = root.querySelector('form');
-  
-  const ctrl = findPublishControl(form);
-  if (!ctrl) return 'NO_CTRL';
-  
-  const ok = await waitEnabled(ctrl, 10000);
-  if (!ok) return 'CTRL_DISABLED_TIMEOUT';
-  
-  const btnRect = ctrl.getBoundingClientRect();
-  var marginX = btnRect.width * 0.2;
-  var marginY = btnRect.height * 0.2;
-  var offsetX = marginX + Math.random() * (btnRect.width - 2 * marginX);
-  var offsetY = marginY + Math.random() * (btnRect.height - 2 * marginY);
-  const btnX = btnRect.left + offsetX;
-  const btnY = btnRect.top + offsetY;
-  
-  // Simulate mouse approach: 3-5 move events towards the target
-  var startX = btnX + (Math.random() * 100 - 50);  // Start offset
-  var startY = btnY + (Math.random() * 100 - 50);
-  for (let i = 1; i <= 5; i++) {{
-    var moveX = startX + (btnX - startX) * (i / 5);
-    var moveY = startY + (btnY - startY) * (i / 5);
-    ctrl.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+  try {{
+    const videos = document.querySelectorAll('video');
+    let visibleVideo = null;
+    let maxVisible = 0;
+    
+    videos.forEach(video => {{
+      const rect = video.getBoundingClientRect();
+      const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      if (visible > maxVisible) {{
+        maxVisible = visible;
+        visibleVideo = video;
+      }}
+    }});
+    
+    if (!visibleVideo) return 'NO_VIDEO';
+    
+    const article = visibleVideo.closest('article');
+    if (!article) return 'NO_ARTICLE';
+    
+    const form = article.querySelector('form');
+    if (!form) return 'NO_FORM';
+    
+    const ctrl = findPublishControl(form);
+    if (!ctrl) return 'NO_CTRL';
+    
+    const ok = await waitEnabled(ctrl, 10000);
+    if (!ok) return 'CTRL_DISABLED_TIMEOUT';
+    
+    // ✅ CLIC HUMAIN SUR LE BOUTON PUBLIER
+    const btnRect = ctrl.getBoundingClientRect();
+    var marginX = btnRect.width * 0.2;
+    var marginY = btnRect.height * 0.2;
+    var offsetX = marginX + Math.random() * (btnRect.width - 2 * marginX);
+    var offsetY = marginY + Math.random() * (btnRect.height - 2 * marginY);
+    const btnX = btnRect.left + offsetX;
+    const btnY = btnRect.top + offsetY;
+    
+    var startX = btnX + (Math.random() * 100 - 50);
+    var startY = btnY + (Math.random() * 100 - 50);
+    for (let i = 1; i <= 5; i++) {{
+      var moveX = startX + (btnX - startX) * (i / 5);
+      var moveY = startY + (btnY - startY) * (i / 5);
+      ctrl.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
+    }}
+    
+    const btnOpts = {{bubbles:true, cancelable:true, clientX:btnX, clientY:btnY, button:0}};
+    ctrl.dispatchEvent(new MouseEvent('mousedown', btnOpts));
+    ctrl.dispatchEvent(new MouseEvent('mouseup', btnOpts));
+    ctrl.dispatchEvent(new MouseEvent('click', btnOpts));
+    
+    // ✅ ATTENDRE QUE LE COMMENTAIRE SOIT ENVOYÉ (textarea vide)
+    const t0 = performance.now();
+    while (performance.now() - t0 < 12000) {{
+      const ta2 = article.querySelector('textarea');
+      const ce2 = article.querySelector('div[role=""textbox""][contenteditable=""true""]');
+      const target = ta2 || ce2;
+      
+      if (!target) break;  // Plus de composer = envoyé
+      
+      const content = ta2 ? ta2.value : (ce2 ? ce2.textContent : '');
+      if (content.trim().length === 0) break;  // Vide = envoyé
+      
+      await sleep(220);
+    }}
+    
+    return 'PUBLISHED';
+  }} catch(e) {{
+    return 'ERROR: ' + e.message;
   }}
-  
-  const btnOpts = {{bubbles:true, cancelable:true, clientX:btnX, clientY:btnY, button:0}};
-  
-  ctrl.dispatchEvent(new MouseEvent('mousedown', btnOpts));
-  ctrl.dispatchEvent(new MouseEvent('mouseup', btnOpts));
-  ctrl.dispatchEvent(new MouseEvent('click', btnOpts));
-  
-  const t0 = performance.now();
-  while (performance.now() - t0 < 12000) {{
-    const scope = document.querySelector('div[role=""dialog""]') || document;
-    const ta2 = scope.querySelector('form textarea');
-    if (!ta2 || ta2.value.trim().length === 0) break;
-    await sleep(220);
-  }}
-  
-  return 'PUBLISHED';
 }})()";
 
                                 var publishResult = await webView.ExecuteScriptAsync(publishScript);
@@ -1269,17 +1593,15 @@ namespace SocialNetworkArmy.Services
                             }
                             else
                             {
-                                logTextBox.AppendText("[COMMENT] Skipped: Reel older than 24 hours or no date.\r\n");
+                                logTextBox.AppendText($"[COMMENT] Skipped: Reel is {ageHours:F1}h old (not < 24h)\r\n");
                             }
 
                             await RandomHumanPauseAsync(token);
-
                             await RandomHumanNoiseAsync(token);
 
                             // NEXT si pas le dernier
                             if (reelNum < maxReels)
                             {
-                                // Attendre que le modal soit stable (surtout important pour le 1er reel)
                                 if (reelNum == 1)
                                 {
                                     await Task.Delay(rand.Next(800, 1500), token);
@@ -1287,38 +1609,10 @@ namespace SocialNetworkArmy.Services
 
                                 nextClickCounter++;
 
-                                // Délai pré-action aléatoire
                                 int preDelay = rand.Next(800, 2000);
                                 logTextBox.AppendText($"[NEXT] Waiting {preDelay}ms before action...\r\n");
                                 await Task.Delay(preDelay, token);
 
-                                // D'abord: debug pour voir quels boutons existent
-                                var debugScript = $@"
-(function(){{
-  try{{
-    var scope = document.querySelector('div[role=""dialog""]') || document;
-    
-    // Chercher tous les boutons possibles
-    var allButtons = Array.from(scope.querySelectorAll('button, [role=""button""]'));
-    var buttonInfo = allButtons.map(b => {{
-      return {{
-        tag: b.tagName,
-        ariaLabel: b.getAttribute('aria-label') || 'NO_LABEL',
-        text: b.innerText?.substring(0, 20) || '',
-        visible: b.offsetWidth > 0
-      }};
-    }});
-    
-    return JSON.stringify(buttonInfo);
-  }} catch(e){{
-    return 'DEBUG_ERR:' + String(e);
-  }}
-}})()";
-
-                                var debugResult = await webView.ExecuteScriptAsync(debugScript);
-                                logTextBox.AppendText($"[NEXT] Debug buttons: {debugResult}\r\n");
-
-                                // 1 fois sur 15, utiliser ArrowRight, sinon clic humain
                                 bool useArrowKey = (nextClickCounter % 15 == 0);
 
                                 string nextScript;
@@ -1336,128 +1630,52 @@ namespace SocialNetworkArmy.Services
                                 }
                                 else
                                 {
-                                    // Clic humain sur le bouton avec coordonnées aléatoires
-                                    nextScript = $@"
-(async function(){{
-  try {{
-    var info = [];
-    
-    var dialog = document.querySelector('div[role=""dialog""]');
-    if (!dialog) return 'NO_DIALOG';
-    
-    // Stratégie 1: Chercher par aria-label
-    var nextBtn = Array.from(dialog.querySelectorAll('button')).find(b => {{
-      var label = (b.getAttribute('aria-label') || '').toLowerCase();
-      return /next|suivant|nextpage|nextitem|flèche/.test(label);
-    }});
-    info.push('Stratégie 1 (aria-label): ' + (nextBtn ? 'FOUND' : 'NOT_FOUND'));
-    
-    // Stratégie 2: Boutons de taille 32x32
-    if (!nextBtn) {{
-      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
-        var rect = b.getBoundingClientRect();
-        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0 && Math.round(rect.width) === 32 && Math.round(rect.height) === 32;
-      }});
-      if (allBtns.length >= 1) {{
-        // Trier par position x pour prendre le plus à droite (next)
-        allBtns.sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-        nextBtn = allBtns[allBtns.length - 1]; // Prendre le dernier (plus à droite)
-        info.push('Stratégie 2 (32x32 buttons): FOUND ' + allBtns.length + ', picked rightmost');
-      }} else {{
-        info.push('Stratégie 2 (32x32 buttons): NOT_FOUND');
-      }}
-    }}
-    
-    // Stratégie 3: 2e bouton visible si toujours pas trouvé
-    if (!nextBtn) {{
-      var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {{
-        var rect = b.getBoundingClientRect();
-        return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0;
-      }});
-      if (allBtns.length >= 2) {{
-        nextBtn = allBtns[1];
-        info.push('Stratégie 3 (2nd button): FOUND');
-      }} else {{
-        info.push('Stratégie 3 (2nd button): NOT_FOUND (only ' + allBtns.length + ' visible buttons)');
-      }}
-    }}
-    
-    if (!nextBtn) {{
-      info.push('RESULT: NO_NEXT_BUTTON');
-      return info.join('\\n');
-    }}
-    
-    var rect = nextBtn.getBoundingClientRect();
-    info.push('\\nButton details:');
-    info.push('  Size: ' + Math.round(rect.width) + 'x' + Math.round(rect.height));
-    info.push('  Position: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
-    info.push('  Visible: ' + (rect.width > 0 && rect.height > 0));
-    
-    // Scroll into view
-    nextBtn.scrollIntoView({{block: 'nearest', inline: 'nearest'}});
-    await new Promise(r => setTimeout(r, 100));
-    
-    // Recalculer après scroll
-    rect = nextBtn.getBoundingClientRect();
-    info.push('  After scroll: ' + Math.round(rect.left) + ',' + Math.round(rect.top));
-    
-    // Calculer les coordonnées du click
-    var centerX = rect.left + rect.width / 2;
-    var centerY = rect.top + rect.height / 2;
-    var offsetX = (Math.random() - 0.5) * 10;
-    var offsetY = (Math.random() - 0.5) * 10;
-    var clientX = Math.floor(centerX + offsetX);
-    var clientY = Math.floor(centerY + offsetY);
-    
-    // Clamp dans les limites
-    clientX = Math.max(rect.left + 2, Math.min(clientX, rect.left + rect.width - 2));
-    clientY = Math.max(rect.top + 2, Math.min(clientY, rect.top + rect.height - 2));
-    
-    info.push('\\nClick coordinates:');
-    info.push('  Center: ' + Math.round(centerX) + ',' + Math.round(centerY));
-    info.push('  Final: ' + clientX + ',' + clientY);
-    
-    // Mouvement souris simulé
-    var startX = clientX + (Math.random() * 60 - 30);
-    var startY = clientY + (Math.random() * 60 - 30);
-    
-    for (let i = 1; i <= 4; i++) {{
-      var moveX = startX + (clientX - startX) * (i / 4);
-      var moveY = startY + (clientY - startY) * (i / 4);
-      nextBtn.dispatchEvent(new MouseEvent('mousemove', {{bubbles: true, clientX: moveX, clientY: moveY}}));
-      await new Promise(r => setTimeout(r, Math.random() * 30 + 20));
-    }}
-    
-    await new Promise(r => setTimeout(r, Math.random() * 100 + 50));
-    
-    // Events
-    var opts = {{bubbles: true, cancelable: true, clientX: clientX, clientY: clientY, button: 0}};
-    nextBtn.dispatchEvent(new MouseEvent('mouseenter', opts));
-    nextBtn.dispatchEvent(new MouseEvent('mouseover', opts));
-    nextBtn.dispatchEvent(new MouseEvent('mousedown', opts));
-    await new Promise(r => setTimeout(r, Math.random() * 80 + 30));
-    nextBtn.dispatchEvent(new MouseEvent('mouseup', opts));
-    nextBtn.dispatchEvent(new MouseEvent('click', opts));
-    await new Promise(r => setTimeout(r, Math.random() * 50 + 25));
-    nextBtn.dispatchEvent(new MouseEvent('mouseleave', opts));
-    
-    info.push('\\nCLICK_SENT');
-    return info.join('\\n');
-  }} catch(e) {{
-    return 'EXCEPTION: ' + e.message;
-  }}
-}})()";
+                                    nextScript = GetNextButtonScript();  // ✅ Appel de la méthode
                                 }
 
                                 var nextTry = await webView.ExecuteScriptAsync(nextScript);
-                                logTextBox.AppendText($"[NEXT] {nextTry}\r\n");
+                                if (string.IsNullOrWhiteSpace(nextTry) || nextTry == "{}" || nextTry == "\"{}\"")
+                                {
+                                    logTextBox.AppendText($"[NEXT] ⚠️ Empty response\r\n");
+                                }
+                                else if (nextTry.Contains("NEXT_CLICKED:"))
+                                {
+                                    try
+                                    {
+                                        var parts = nextTry.Split(new[] { "NEXT_CLICKED:" }, StringSplitOptions.None);
+                                        if (parts.Length > 1)
+                                        {
+                                            var coords = parts[1].Trim('"', ' ').Split(',');
+                                            if (coords.Length >= 2)
+                                            {
+                                                string clickX = coords[0].Trim();
+                                                string clickY = coords[1].Trim();
+                                                logTextBox.AppendText($"[NEXT] 🖱️ Clicked at X={clickX}, Y={clickY}\r\n");
+                                            }
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        logTextBox.AppendText($"[NEXT] ⚠️ Parse error: {nextTry}\r\n");
+                                    }
+                                }
+                                else if (nextTry.Contains("ARROW_KEY"))
+                                {
+                                    logTextBox.AppendText($"[NEXT] ⌨️ Keyboard used\r\n");
+                                }
+                                else if (nextTry.Contains("NO_DIALOG") || nextTry.Contains("NO_NEXT_BUTTON"))
+                                {
+                                    logTextBox.AppendText($"[NEXT] ❌ {nextTry}\r\n");
+                                }
+                                else
+                                {
+                                    logTextBox.AppendText($"[NEXT] ℹ️ {nextTry}\r\n");
+                                }
 
-                                // Attendre le chargement du reel suivant
                                 int loadDelay = rand.Next(2500, 4500);
                                 logTextBox.AppendText($"[NEXT] Waiting {loadDelay}ms for next reel to load...\r\n");
                                 await Task.Delay(loadDelay, token);
 
-                                // Post-next verification
                                 int retryCount = 0;
                                 const int maxRetries = 3;
                                 string newReelId = null;
@@ -1484,11 +1702,6 @@ namespace SocialNetworkArmy.Services
 
                                     logTextBox.AppendText($"[NEXT RETRY {retryCount + 1}] Stuck on {previousReelId}, retrying...\r\n");
 
-                                    // Retry debug
-                                    debugResult = await webView.ExecuteScriptAsync(debugScript);
-                                    logTextBox.AppendText($"[NEXT RETRY] Debug buttons: {debugResult}\r\n");
-
-                                    // Sur retry, forcer le fallback ArrowRight
                                     logTextBox.AppendText("[NEXT RETRY] Forcing ArrowRight fallback...\r\n");
                                     nextScript = @"
 (function(){
@@ -1502,7 +1715,6 @@ namespace SocialNetworkArmy.Services
                                     nextTry = await webView.ExecuteScriptAsync(nextScript);
                                     logTextBox.AppendText($"[NEXT RETRY] {nextTry}\r\n");
 
-                                    // Retry load delay
                                     loadDelay = rand.Next(2500, 4500);
                                     logTextBox.AppendText($"[NEXT RETRY] Waiting {loadDelay}ms for next reel to load...\r\n");
                                     await Task.Delay(loadDelay, token);
@@ -1516,7 +1728,6 @@ namespace SocialNetworkArmy.Services
                                     break;
                                 }
 
-                                // Vérifier modal toujours ouvert
                                 var stillOpened = await webView.ExecuteScriptAsync(@"
 (function(){
   const hasDialog  = !!document.querySelector('div[role=""dialog""]');
@@ -1536,7 +1747,7 @@ namespace SocialNetworkArmy.Services
                         await CloseReelModalAsync(lang, token);
 
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");
-                        MarkTargetAsDone(currentTarget, doneTargetsPath, "(succès)");
+                       
                         
 
                         await RandomHumanPauseAsync(token, 5000, 15000, 0.1, 30000, 120000);

@@ -26,7 +26,8 @@ namespace SocialNetworkArmy.Models
 
         [JsonProperty("storageState")]
         public string StorageState { get; set; }
-
+        [JsonProperty("groupName")]
+        public string GroupName { get; set; }
         public Profile()
         {
             // Auto-générer un GUID unique si pas encore défini

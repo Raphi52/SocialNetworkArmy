@@ -5,11 +5,14 @@ using SocialNetworkArmy.Models;
 using SocialNetworkArmy.Services;
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 
 namespace SocialNetworkArmy.Forms
 {
@@ -23,11 +26,18 @@ namespace SocialNetworkArmy.Forms
         private readonly string userDataFolder;
         private Button postStoryButton;
         private bool isWebViewReady = false;
-
+        private bool isDisposing = false;
         // Dimensions Samsung Galaxy S23 (mode portrait)
         private const int DEVICE_WIDTH = 360;
         private const int DEVICE_HEIGHT = 780;
         private const double DEVICE_PIXEL_RATIO = 3.0;
+        private Font yaheiBold10 = new Font("Microsoft YaHei", 9f, FontStyle.Bold);
+        private Panel bottomPanel;
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+      
 
         // ✅ SCRIPT STEALTH FINAL - TOUTES LES CORRECTIONS
         // REMPLACER LA CONSTANTE STEALTH_SCRIPT dans StoryPosterForm.cs
@@ -488,11 +498,19 @@ namespace SocialNetworkArmy.Forms
         {
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.userDataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "SocialNetworkArmy", "Profiles", profile.Name);
-
+    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+    "SocialNetworkArmy", "Profiles", profile.Name, "Main");
+            this.SetStyle(ControlStyles.AllPaintingInWmPaint |
+         ControlStyles.UserPaint |
+         ControlStyles.OptimizedDoubleBuffer, true);
+            this.UpdateStyles();
             proxyService = new ProxyService();
             InitializeComponent();
+            if (Environment.OSVersion.Version.Major >= 10)
+            {
+                int useImmersiveDarkMode = 1;
+                DwmSetWindowAttribute(this.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref useImmersiveDarkMode, sizeof(int));
+            }
             this.Icon = new Icon("Data\\Icons\\Insta.ico");
 
             _ = LoadBrowserAsync();
@@ -500,14 +518,15 @@ namespace SocialNetworkArmy.Forms
 
         private void InitializeComponent()
         {
-            this.BackColor = Color.FromArgb(30, 30, 30);
+            this.BackColor = Color.FromArgb(15, 15, 15);
             this.ForeColor = Color.White;
-            this.ClientSize = new Size(DEVICE_WIDTH + 20, DEVICE_HEIGHT + 120);
-            this.Text = $"Story - {profile.Name}";
+            this.ClientSize = new Size(DEVICE_WIDTH + 20, DEVICE_HEIGHT + 140);
+            this.Text = $"📱 Story - {profile.Name}";
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
             this.MinimumSize = new Size(DEVICE_WIDTH + 20, 700);
 
+            // WebView avec ombre
             webView = new WebView2
             {
                 Location = new Point(10, 10),
@@ -516,39 +535,65 @@ namespace SocialNetworkArmy.Forms
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
 
+            // Bottom Panel transparent
+            bottomPanel = new Panel
+            {
+                Location = new Point(0, DEVICE_HEIGHT + 20),
+                Size = new Size(this.ClientSize.Width, 120),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+                BackColor = Color.Transparent,
+                Padding = new Padding(10)
+            };
+
+            // Log Panel avec effet
+            var logPanel = new Panel
+            {
+                Location = new Point(10, 10),
+                Size = new Size(DEVICE_WIDTH - 130, 100),
+                BackColor = Color.Transparent
+            };
+
+            // Log TextBox
             logTextBox = new TextBox
             {
-                Location = new Point(10, DEVICE_HEIGHT + 20),
-                Size = new Size(DEVICE_WIDTH - 130, 100),
+                Location = new Point(1, 1),
+                Size = new Size(logPanel.Width - 2, logPanel.Height - 2),
                 Multiline = true,
                 ScrollBars = ScrollBars.Vertical,
                 ReadOnly = true,
-                BackColor = Color.FromArgb(45, 45, 45),
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle,
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                BackColor = Color.FromArgb(28, 28, 28),
+                ForeColor = Color.FromArgb(200, 200, 200),
+                BorderStyle = BorderStyle.None,
+                Font = new Font("Consolas", 8.5f, FontStyle.Regular),
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
 
+            // Post Story Button styled
             postStoryButton = new Button
             {
-                Text = "Post Story",
-                Location = new Point(DEVICE_WIDTH - 110, DEVICE_HEIGHT + 20),
+                Text = "📤 Post Story",
+                Location = new Point(DEVICE_WIDTH - 110, 10),
                 Size = new Size(120, 100),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(45, 45, 45),
+                BackColor = Color.FromArgb(156, 39, 176),
                 ForeColor = Color.White,
                 UseVisualStyleBackColor = false,
-                Font = new Font("Microsoft YaHei", 9f, FontStyle.Bold),
+                Font = yaheiBold10,
                 Enabled = false,
+                Cursor = Cursors.Hand,
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Right
             };
-            postStoryButton.FlatAppearance.BorderSize = 2;
-            postStoryButton.FlatAppearance.BorderColor = Color.FromArgb(156, 39, 176);
+            postStoryButton.FlatAppearance.BorderSize = 0;
+            postStoryButton.FlatAppearance.MouseOverBackColor = DarkenColor(Color.FromArgb(156, 39, 176), 20);
             postStoryButton.Click += PostStoryButton_Click;
 
+            logPanel.Controls.Add(logTextBox);
+            bottomPanel.Controls.Add(logPanel);
+            bottomPanel.Controls.Add(postStoryButton);
+
             this.Controls.Add(webView);
-            this.Controls.Add(logTextBox);
-            this.Controls.Add(postStoryButton);
+            this.Controls.Add(bottomPanel);
+            this.FormClosing += StoryPosterForm_FormClosing;
         }
 
         private async Task LoadBrowserAsync()
@@ -588,31 +633,6 @@ namespace SocialNetworkArmy.Forms
                 await webView.EnsureCoreWebView2Async(env);
                 logTextBox.AppendText("[OK] WebView2 ready\r\n");
 
-                // ✅ BLOQUER LE FILE DIALOG AU NIVEAU DU BROWSER (AVANT TOUTE PAGE)
-                var blockDialogScript = @"
-(function() {
-    'use strict';
-    
-    // Override au niveau du prototype AVANT que la page charge
-    const originalClick = HTMLInputElement.prototype.click;
-    HTMLInputElement.prototype.click = function() {
-        if (this.type === 'file') {
-            console.log('⚠️ File dialog blocked by prototype override');
-            return;
-        }
-        return originalClick.call(this);
-    };
-    
-    // Bloquer showOpenFilePicker
-    if (window.showOpenFilePicker) {
-        window.showOpenFilePicker = () => Promise.reject(new Error('Blocked'));
-    }
-    
-    console.log('✅ File dialog blocker active');
-})();";
-
-                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(blockDialogScript);
-                logTextBox.AppendText("[OK] File dialog blocker injected\r\n");
 
                 var script = STEALTH_SCRIPT
                     .Replace("__WIDTH__", DEVICE_WIDTH.ToString(CultureInfo.InvariantCulture))
@@ -638,23 +658,9 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.NavigationCompleted += async (sender, args) =>
                 {
                     logTextBox.AppendText("[OK] Page loaded\r\n");
-                    await LogEnvironmentAsync();
+                  
 
-                    // ✅ CRITIQUE : Warm-up avant d'activer le bouton
-                    logTextBox.AppendText("[Warmup] Simulating human activity...\r\n");
-                    await Task.Delay(random.Next(5000, 10000)); // 5-10 secondes de "lecture"
-
-                    // Simuler un scroll léger
-                    await webView.CoreWebView2.ExecuteScriptAsync(@"
-                        window.scrollBy({
-                            top: Math.random() * 300,
-                            behavior: 'smooth'
-                        });
-                    ");
-
-                    await Task.Delay(random.Next(2000, 4000));
-                    logTextBox.AppendText("[Warmup] Ready\r\n");
-
+                    
                     isWebViewReady = true;
                     if (postStoryButton.InvokeRequired)
                         postStoryButton.Invoke(new Action(() => postStoryButton.Enabled = true));
@@ -671,42 +677,152 @@ namespace SocialNetworkArmy.Forms
                 MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
-        private async Task LogEnvironmentAsync()
+        private Color DarkenColor(Color color, int amount)
         {
-            try
+            return Color.FromArgb(
+                color.A,
+                Math.Max(0, color.R - amount),
+                Math.Max(0, color.G - amount),
+                Math.Max(0, color.B - amount)
+            );
+        }
+
+        private void StoryPosterForm_Resize(object sender, EventArgs e)
+        {
+            if (this.WindowState == FormWindowState.Minimized)
+                return;
+
+            this.Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+
+            // Gradient background identique à MainForm
+            float centerX = this.ClientRectangle.Width / 2f;
+            float centerY = this.ClientRectangle.Height / 2f;
+            float angle = 80f;
+            float distance = 600f;
+
+            double radians = angle * Math.PI / 180.0;
+            PointF point1 = new PointF(
+                centerX - (float)(Math.Cos(radians) * distance),
+                centerY - (float)(Math.Sin(radians) * distance)
+            );
+            PointF point2 = new PointF(
+                centerX + (float)(Math.Cos(radians) * distance),
+                centerY + (float)(Math.Sin(radians) * distance)
+            );
+
+            using (LinearGradientBrush brush = new LinearGradientBrush(
+                point1,
+                point2,
+                Color.FromArgb(15, 15, 15),
+                Color.FromArgb(15, 15, 15)
+            ))
             {
-                string envLog = await webView.CoreWebView2.ExecuteScriptAsync(@"
-                    (function() {
-                        try {
-                            return JSON.stringify({
-                                ua: navigator.userAgent,
-                                platform: navigator.platform,
-                                vendor: navigator.vendor,
-                                webdriver: navigator.webdriver,
-                                chromeRuntime: typeof window.chrome?.runtime,
-                                maxTouch: navigator.maxTouchPoints,
-                                dpr: window.devicePixelRatio,
-                                screen: window.screen.width + 'x' + window.screen.height,
-                                inner: window.innerWidth + 'x' + window.innerHeight
-                            });
-                        } catch(e) {
-                            return JSON.stringify({ error: e.message });
-                        }
-                    })();
-                ");
-                if (!string.IsNullOrWhiteSpace(envLog))
-                    logTextBox.AppendText($"[ENV] {envLog.Trim('\"')}\r\n");
+                ColorBlend colorBlend = new ColorBlend();
+                colorBlend.Colors = new Color[]
+                {
+            Color.FromArgb(0, 0, 0),
+            Color.FromArgb(15, 15, 15),
+            Color.FromArgb(50, 50, 50),
+            Color.FromArgb(15, 15, 15),
+            Color.FromArgb(0, 0, 0)
+                };
+                colorBlend.Positions = new float[] { 0.0f, 0.30f, 0.5f, 0.70f, 1.0f };
+                brush.InterpolationColors = colorBlend;
+                e.Graphics.FillRectangle(brush, this.ClientRectangle);
             }
-            catch (Exception ex)
+
+            // Ombre sous WebView
+            if (webView != null)
+                DrawControlShadow(e.Graphics, webView);
+
+            base.OnPaint(e);
+        }
+
+        private void DrawControlShadow(Graphics g, Control control)
+        {
+            if (control == null) return;
+
+            Rectangle shadowRect = new Rectangle(
+                control.Left + 2,
+                control.Top + 2,
+                control.Width,
+                control.Height
+            );
+
+            using (GraphicsPath shadowPath = GetRoundedRect(shadowRect, 3))
             {
-                logTextBox.AppendText($"[ENV] Error: {ex.Message}\r\n");
+                using (PathGradientBrush shadowBrush = new PathGradientBrush(shadowPath))
+                {
+                    shadowBrush.CenterColor = Color.FromArgb(80, 0, 0, 0);
+                    shadowBrush.SurroundColors = new Color[] { Color.FromArgb(0, 0, 0, 0) };
+                    shadowBrush.FocusScales = new PointF(0.85f, 0.85f);
+
+                    g.SmoothingMode = SmoothingMode.AntiAlias;
+                    g.FillPath(shadowBrush, shadowPath);
+                }
             }
         }
+
+        private GraphicsPath GetRoundedRect(Rectangle bounds, int radius)
+        {
+            int diameter = radius * 2;
+            var path = new GraphicsPath();
+            var arc = new Rectangle(bounds.Location, new Size(diameter, diameter));
+
+            path.AddArc(arc, 180, 90);
+            arc.X = bounds.Right - diameter;
+            path.AddArc(arc, 270, 90);
+            arc.Y = bounds.Bottom - diameter;
+            path.AddArc(arc, 0, 90);
+            arc.X = bounds.Left;
+            path.AddArc(arc, 90, 90);
+            path.CloseFigure();
+
+            return path;
+        }
+       
 
         private async void PostStoryButton_Click(object sender, EventArgs e)
         {
             await PostTodayStoryAsync();
+        }
+
+
+
+        // Dans StoryPosterForm.cs, remplacer GetTodayStoryMediaPath() par ceci :
+
+        private string GetTodayStoryMediaPath()
+        {
+            try
+            {
+                // ✅ UTILISER LA LOGIQUE CENTRALISÉE
+                var match = ScheduleHelper.GetTodayMediaForAccount(
+                    profile.Name,
+                    profile.Platform,
+                    "story"
+                );
+
+                if (match == null)
+                {
+                    logTextBox.AppendText("[Schedule] ✗ No story scheduled for today\r\n");
+                    return null;
+                }
+
+                logTextBox.AppendText($"[Schedule] ✓ Found {(match.IsGroup ? "group" : "account")} match: {match.AccountOrGroup}\r\n");
+                logTextBox.AppendText($"[Schedule] ✓ Media: {Path.GetFileName(match.MediaPath)}\r\n");
+
+                return match.MediaPath;
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[Schedule] ✗ Error: {ex.Message}\r\n");
+                return null;
+            }
         }
 
         public async Task<bool> PostTodayStoryAsync()
@@ -717,7 +833,7 @@ namespace SocialNetworkArmy.Forms
                 return false;
             }
 
-            // ✅ CRITIQUE : Vérifier qu'on n'a pas posté récemment
+            // Vérifier qu'on n'a pas posté récemment (cooldown 15min)
             string lastPostFile = Path.Combine(userDataFolder, "last_story_post.txt");
             if (File.Exists(lastPostFile))
             {
@@ -725,100 +841,40 @@ namespace SocialNetworkArmy.Forms
                 if (DateTime.TryParse(lastPostStr, out DateTime lastPost))
                 {
                     TimeSpan elapsed = DateTime.Now - lastPost;
-                    if (elapsed.TotalMinutes < 15) // Minimum 15 minutes entre les posts
+                    if (elapsed.TotalMinutes < 15)
                     {
-                        logTextBox.AppendText($"[Story] ✗ Too soon (last post: {elapsed.TotalMinutes:F1}min ago)\r\n");
+                        logTextBox.AppendText($"[Story] ✗ Cooldown active ({elapsed.TotalMinutes:F1}min ago)\r\n");
                         return false;
                     }
                 }
             }
 
             logTextBox.AppendText("[Story] Checking schedule...\r\n");
+
+            // ✅ UTILISER LA MÉTHODE CORRIGÉE
             string mediaPath = GetTodayStoryMediaPath();
 
             if (string.IsNullOrEmpty(mediaPath))
             {
-                logTextBox.AppendText("[Story] ✗ No story for today\r\n");
+                logTextBox.AppendText("[Story] ✗ No story scheduled today\r\n");
                 return false;
             }
 
-            logTextBox.AppendText($"[Story] Media: {Path.GetFileName(mediaPath)}\r\n");
-            bool success = await UploadStoryAsync(mediaPath);
+            logTextBox.AppendText($"[Story] Uploading: {Path.GetFileName(mediaPath)}\r\n");
+            await UploadStoryAsync(mediaPath);
 
-            if (success)
-            {
-                logTextBox.AppendText("[Story] ✓ Success!\r\n");
-                // Enregistrer l'heure du post
-                File.WriteAllText(lastPostFile, DateTime.Now.ToString("o"));
-            }
-            else
-            {
-                logTextBox.AppendText("[Story] ✗ Failed\r\n");
-            }
+            // Enregistrer le timestamp
+            logTextBox.AppendText("[Story] ✓ Process completed!\r\n");
+            File.WriteAllText(lastPostFile, DateTime.Now.ToString("o"));
 
-            return success;
+            return true;
         }
-
-        private string GetTodayStoryMediaPath()
-        {
-            string csvPath = Path.Combine("Data", "schedule.csv");
-            if (!File.Exists(csvPath))
-            {
-                logTextBox.AppendText($"[Schedule] ✗ CSV not found\r\n");
-                return null;
-            }
-
-            try
-            {
-                DateTime now = DateTime.Now;
-                string today = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-
-                string[] lines = File.ReadAllLines(csvPath);
-
-                for (int i = 1; i < lines.Length; i++)
-                {
-                    var line = lines[i];
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    var columns = line.Split(',').Select(c => c.Trim()).ToArray();
-                    if (columns.Length < 5) continue;
-
-                    string dateTime = columns[0];
-                    string platform = columns[1];
-                    string account = columns[2];
-                    string activity = columns[3];
-                    string media = columns[4];
-
-                    string dateOnly = dateTime.Split(' ')[0];
-
-                    if (dateOnly.Equals(today, StringComparison.OrdinalIgnoreCase) &&
-                        platform.Equals(profile.Platform, StringComparison.OrdinalIgnoreCase) &&
-                        account.Equals(profile.Name, StringComparison.OrdinalIgnoreCase) &&
-                        activity.Equals("story", StringComparison.OrdinalIgnoreCase) &&
-                        !string.IsNullOrEmpty(media) &&
-                        File.Exists(media))
-                    {
-                        logTextBox.AppendText($"[Schedule] ✓ Match: {Path.GetFileName(media)}\r\n");
-                        return media;
-                    }
-                }
-
-                logTextBox.AppendText("[Schedule] ✗ No match\r\n");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                logTextBox.AppendText($"[Schedule] ✗ Error: {ex.Message}\r\n");
-                return null;
-            }
-        }
-
-        public async Task<bool> UploadStoryAsync(string filePath)
+        public async Task UploadStoryAsync(string filePath)
         {
             if (!File.Exists(filePath))
             {
                 logTextBox.AppendText($"[Upload] ✗ File not found\r\n");
-                return false;
+                return;
             }
 
             try
@@ -830,7 +886,7 @@ namespace SocialNetworkArmy.Forms
                 if (fileBytes.Length > 50 * 1024 * 1024)
                 {
                     logTextBox.AppendText("[Upload] ✗ File too large (max 50MB)\r\n");
-                    return false;
+                    return;
                 }
 
                 string base64 = Convert.ToBase64String(fileBytes);
@@ -841,27 +897,27 @@ namespace SocialNetworkArmy.Forms
 
                 logTextBox.AppendText($"[Upload] Type: {mimeType}, Size: {fileBytes.Length / 1024}KB\r\n");
 
-                // ✅ Délai humain VARIABLE (pas toujours pareil)
-                int initialDelay = random.Next(2000, 6000); // 2-6 secondes
+                // Délai humain VARIABLE
+                int initialDelay = random.Next(2000, 6000);
                 logTextBox.AppendText($"[Upload] Waiting {initialDelay}ms...\r\n");
                 await Task.Delay(initialDelay);
 
-                // ✅ Simuler une activité aléatoire (50% de chance)
+                // Simuler une activité aléatoire (50% de chance)
                 if (random.Next(0, 2) == 0)
                 {
                     logTextBox.AppendText("[Upload] Simulating scroll...\r\n");
                     await webView.CoreWebView2.ExecuteScriptAsync(@"
-                        window.scrollBy({
-                            top: Math.random() * 100 - 50,
-                            behavior: 'smooth'
-                        });
-                    ");
+                window.scrollBy({
+                    top: Math.random() * 100 - 50,
+                    behavior: 'smooth'
+                });
+            ");
                     await Task.Delay(random.Next(500, 1500));
                 }
 
                 logTextBox.AppendText("[Upload] Clicking Create...\r\n");
 
-                var createResult = await webView.CoreWebView2.ExecuteScriptAsync(@"
+                await webView.CoreWebView2.ExecuteScriptAsync(@"
 (function() {
     try {
         const allSvgs = Array.from(document.querySelectorAll('svg'));
@@ -876,7 +932,7 @@ namespace SocialNetworkArmy.Forms
             const link = plusSvg.closest('a');
             if (link) {
                 link.click();
-                return 'CLICKED_VIA_PLUS_SVG';
+                return;
             }
         }
 
@@ -884,30 +940,15 @@ namespace SocialNetworkArmy.Forms
                    document.querySelector('svg[aria-label*=""Create""]')?.closest('a') ||
                    document.querySelector('svg[aria-label*=""Créer""]')?.closest('a');
         
-        if (btn) {
-            btn.click();
-            return 'CLICKED_FALLBACK';
-        }
-        
-        return 'NOT_FOUND';
-    } catch(e) {
-        return 'ERROR:' + e.message;
-    }
+        if (btn) btn.click();
+    } catch(e) {}
 })();");
-
-                logTextBox.AppendText($"[Upload] Create: {createResult?.Trim('\"')}\r\n");
-
-                if (!createResult?.Contains("CLICKED") == true)
-                {
-                    logTextBox.AppendText("[Upload] ✗ Create button not found\r\n");
-                    return false;
-                }
 
                 await Task.Delay(random.Next(2000, 3500));
 
                 logTextBox.AppendText("[Upload] Selecting Story tab...\r\n");
 
-                var storyTabResult = await webView.CoreWebView2.ExecuteScriptAsync(@"
+                await webView.CoreWebView2.ExecuteScriptAsync(@"
 (function() {
     try {
         const storySvg = document.querySelector('svg[aria-label=""Story""]');
@@ -915,7 +956,7 @@ namespace SocialNetworkArmy.Forms
             const button = storySvg.closest('div[role=""button""]');
             if (button) {
                 button.click();
-                return 'STORY_CLICKED_VIA_SVG';
+                return;
             }
         }
 
@@ -923,18 +964,9 @@ namespace SocialNetworkArmy.Forms
         const storyTab = tabs.find(el =>
             /story/i.test(el.textContent) || /story/i.test(el.getAttribute('aria-label') || '')
         );
-        if (storyTab) {
-            storyTab.click();
-            return 'STORY_CLICKED_FALLBACK';
-        }
-
-        return 'STORY_NOT_FOUND';
-    } catch(e) {
-        return 'ERROR:' + e.message;
-    }
+        if (storyTab) storyTab.click();
+    } catch(e) {}
 })();");
-
-                logTextBox.AppendText($"[Upload] Story tab: {storyTabResult?.Trim('\"')}\r\n");
 
                 await Task.Delay(random.Next(2000, 3500));
 
@@ -947,7 +979,6 @@ namespace SocialNetworkArmy.Forms
         const mimeType = '{mimeType}';
         const fileName = '{fileName.Replace("'", "_")}';
 
-        // Décoder le base64
         const binary = atob(base64);
         const bytes = new Uint8Array(binary.length);
         for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -955,15 +986,12 @@ namespace SocialNetworkArmy.Forms
         const blob = new Blob([bytes], {{ type: mimeType }});
         const file = new File([blob], fileName, {{ type: mimeType, lastModified: Date.now() }});
 
-        // Trouver l'input
         const input = document.querySelector('input[type=""file""]');
-        if (!input) return 'NO_INPUT';
+        if (!input) return;
 
-        // ✅ Assigner directement les fichiers SANS déclencher click()
         const dt = new DataTransfer();
         dt.items.add(file);
         
-        // Forcer la valeur
         try {{
             Object.defineProperty(input, 'files', {{
                 value: dt.files,
@@ -974,30 +1002,15 @@ namespace SocialNetworkArmy.Forms
             input.files = dt.files;
         }}
         
-        // Déclencher les événements
         const changeEvent = new Event('change', {{ bubbles: true, cancelable: false }});
         const inputEvent = new Event('input', {{ bubbles: true, cancelable: false }});
         
         input.dispatchEvent(changeEvent);
         input.dispatchEvent(inputEvent);
-        
-        // Vérifier que les fichiers sont bien assignés
-        if (input.files.length === 0) return 'FILES_NOT_ASSIGNED';
-        
-        return 'SUCCESS';
-    }} catch(e) {{
-        return 'ERROR:' + e.message;
-    }}
+    }} catch(e) {{}}
 }})();";
 
-                string uploadResult = await webView.CoreWebView2.ExecuteScriptAsync(uploadScript);
-                logTextBox.AppendText($"[Upload] Upload: {uploadResult?.Trim('\"')}\r\n");
-
-                if (!uploadResult?.Contains("SUCCESS") == true)
-                {
-                    logTextBox.AppendText("[Upload] ✗ Upload failed\r\n");
-                    return false;
-                }
+                await webView.CoreWebView2.ExecuteScriptAsync(uploadScript);
 
                 await Task.Delay(random.Next(4000, 6000));
 
@@ -1032,7 +1045,7 @@ namespace SocialNetworkArmy.Forms
     };
 
     const humanClick = async (element) => {
-        if (!element) return false;
+        if (!element) return;
 
         element.scrollIntoView({ behavior: 'smooth', block: 'center' });
         await delay(400, 800);
@@ -1066,8 +1079,6 @@ namespace SocialNetworkArmy.Forms
         element.dispatchEvent(new MouseEvent('mouseup', opts));
         await delay(30, 80);
         element.dispatchEvent(new MouseEvent('click', opts));
-        
-        return true;
     };
 
     try {
@@ -1086,7 +1097,7 @@ namespace SocialNetworkArmy.Forms
                 if (rect.width > 0 && rect.height > 0) {
                     await humanClick(button);
                     await delay(200, 500);
-                    return 'PUBLISHED_VIA_SPAN';
+                    return;
                 }
             }
         }
@@ -1104,7 +1115,7 @@ namespace SocialNetworkArmy.Forms
             if (rect.width > 0 && rect.height > 0) {
                 await humanClick(shareBtn);
                 await delay(200, 500);
-                return 'PUBLISHED_VIA_TEXT';
+                return;
             }
         }
 
@@ -1122,36 +1133,89 @@ namespace SocialNetworkArmy.Forms
             if (rect.width > 0 && rect.height > 0) {
                 await humanClick(fallbackBtn);
                 await delay(200, 500);
-                return 'PUBLISHED_FALLBACK';
             }
         }
-
-        return 'BUTTON_NOT_FOUND';
-    } catch(e) {
-        return 'ERROR:' + e.message;
-    }
+    } catch(e) {}
 })();";
 
-                string publishResult = await webView.CoreWebView2.ExecuteScriptAsync(publishScript);
-                logTextBox.AppendText($"[Upload] Publish: {publishResult?.Trim('\"')}\r\n");
+                await webView.CoreWebView2.ExecuteScriptAsync(publishScript);
+                logTextBox.AppendText("[Upload] Publication initiated\r\n");
 
-                await Task.Delay(random.Next(5000, 8000));
-
-                return publishResult?.Contains("PUBLISHED") == true;
+                await Task.Delay(random.Next(3000, 5000));
             }
             catch (Exception ex)
             {
                 logTextBox.AppendText($"[Upload] ✗ Exception: {ex.Message}\r\n");
-                return false;
             }
         }
+        private void StoryPosterForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            // Si fermeture forcée, ne pas annuler
+            if (e.CloseReason == CloseReason.WindowsShutDown ||
+                e.CloseReason == CloseReason.TaskManagerClosing)
+            {
+                // Forcer l'arrêt
+                isWebViewReady = false;
+                if (postStoryButton != null)
+                    postStoryButton.Enabled = false;
+                return;
+            }
 
+            try
+            {
+                // Désactiver le bouton pour éviter les clicks pendant la fermeture
+                if (postStoryButton != null)
+                    postStoryButton.Enabled = false;
+
+                // Marquer comme non prêt
+                isWebViewReady = false;
+
+                logTextBox?.AppendText("[INFO] Closing form...\r\n");
+            }
+            catch { }
+        }
         protected override void Dispose(bool disposing)
         {
+            if (isDisposing) return;
+            isDisposing = true;
+
             if (disposing)
             {
-                webView?.Dispose();
+                try
+                {
+                    isWebViewReady = false;
+
+                    if (webView != null && !webView.IsDisposed)
+                    {
+                       
+
+                        try
+                        {
+                            webView.Dispose();
+                        }
+                        catch (Exception ex)
+                        {
+                            System.Diagnostics.Debug.WriteLine($"WebView2 dispose error: {ex.Message}");
+                        }
+                        webView = null;
+                    }
+
+                    try
+                    {
+                        logTextBox?.Dispose();
+                        postStoryButton?.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Controls dispose error: {ex.Message}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"General dispose error: {ex.Message}");
+                }
             }
+
             base.Dispose(disposing);
         }
     }

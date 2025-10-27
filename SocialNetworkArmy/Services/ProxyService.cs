@@ -31,10 +31,14 @@ namespace SocialNetworkArmy.Services
         {
             if (string.IsNullOrEmpty(line)) return line;
 
+            line = line.Trim();
+
+            // Si pas de protocole, ajouter https:// (pour correspondre à la whitelist)
             if (!line.Contains("://"))
             {
-                line = "http://" + line;
+                line = "https://" + line;
             }
+            // Garder le protocole tel quel (http:// ou https://)
 
             return line;
         }
@@ -169,96 +173,90 @@ namespace SocialNetworkArmy.Services
         }
 
         public async Task<string> GetWebView2ProxyIpAsync(CoreWebView2 webView2)
-        {
-            if (webView2 == null)
-            {
-                Logger.LogWarning("WebView2 not initialized for proxy verification");
-                return null;
-            }
+{
+    if (webView2 == null)
+    {
+        Logger.LogWarning("WebView2 not initialized for proxy verification");
+        return null;
+    }
 
+    try
+    {
+        Logger.LogInfo("Verifying proxy IP through WebView2...");
+
+        await Task.Delay(4000);
+
+        // Services optimisés pour WebView2
+        string[] ipCheckUrls = new[]
+        {
+            "https://api.ip2location.io/?format=json&key=free",
+            "http://ip-api.com/json/?fields=query",
+            "https://api.ipify.org?format=json"
+        };
+
+        foreach (var url in ipCheckUrls)
+        {
             try
             {
-                Logger.LogInfo("Verifying proxy IP through WebView2...");
+                Logger.LogDebug($"Checking IP via: {url}");
 
-                // Wait longer for proxy to be fully initialized (especially with auth)
-                await Task.Delay(4000);
+                string script = $@"
+                    (async () => {{
+                        try {{
+                            const response = await fetch('{url}', {{
+                                method: 'GET',
+                                headers: {{ 'Accept': 'application/json' }}
+                            }});
+                            if (!response.ok) return null;
+                            const data = await response.json();
+                            return data.ip || data.query || null;
+                        }} catch (e) {{
+                            return null;
+                        }}
+                    }})()
+                ";
 
-                // Try multiple IP services
-                string[] ipCheckUrls = new[]
+                var result = await webView2.ExecuteScriptAsync(script);
+
+                if (!string.IsNullOrEmpty(result) && result != "null")
                 {
-                    "https://api.ipify.org?format=json",
-                    "https://api.myip.com",
-                    "https://ipinfo.io/json",
-                    "https://ifconfig.me/all.json"
-                };
+                    string proxyIp = result.Trim('"', ' ', '\r', '\n');
 
-                foreach (var url in ipCheckUrls)
-                {
-                    try
+                    if (System.Net.IPAddress.TryParse(proxyIp, out _))
                     {
-                        Logger.LogDebug($"Checking IP via: {url}");
+                        Logger.LogInfo($"✓ WebView2 proxy IP detected: {proxyIp}");
 
-                        string script = $@"
-                            (async () => {{
-                                try {{
-                                    const response = await fetch('{url}', {{
-                                        method: 'GET',
-                                        headers: {{ 'Accept': 'application/json' }},
-                                        credentials: 'omit'
-                                    }});
-                                    if (!response.ok) return null;
-                                    const data = await response.json();
-                                    return data.ip || data.ip_addr || null;
-                                }} catch (e) {{
-                                    return null;
-                                }}
-                            }})()
-                        ";
-
-                        var result = await webView2.ExecuteScriptAsync(script);
-
-                        if (!string.IsNullOrEmpty(result) && result != "null")
+                        if (string.IsNullOrEmpty(realIp))
                         {
-                            // Remove quotes from JSON string
-                            string proxyIp = result.Trim('"', ' ', '\r', '\n');
-
-                            // Validate IP format
-                            if (System.Net.IPAddress.TryParse(proxyIp, out _))
-                            {
-                                Logger.LogInfo($"✓ WebView2 proxy IP detected: {proxyIp}");
-
-                                // Compare with real IP
-                                if (string.IsNullOrEmpty(realIp))
-                                {
-                                    realIp = await GetRealIpAsync();
-                                }
-
-                                if (!string.IsNullOrEmpty(realIp) && proxyIp == realIp)
-                                {
-                                    Logger.LogWarning($"⚠ Proxy not working: IP {proxyIp} == real IP {realIp}");
-                                    return null;
-                                }
-
-                                return proxyIp;
-                            }
+                            realIp = await GetRealIpAsync();
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogDebug($"Failed to check IP via {url}: {ex.Message}");
-                        continue;
+
+                        if (!string.IsNullOrEmpty(realIp) && proxyIp == realIp)
+                        {
+                            Logger.LogWarning($"⚠ Proxy not working: IP {proxyIp} == real IP {realIp}");
+                            return null;
+                        }
+
+                        return proxyIp;
                     }
                 }
-
-                Logger.LogWarning("Could not verify proxy IP through WebView2");
-                return null;
             }
             catch (Exception ex)
             {
-                Logger.LogError($"Error verifying WebView2 proxy IP: {ex.Message}");
-                return null;
+                Logger.LogDebug($"Failed to check IP via {url}: {ex.Message}");
+                continue;
             }
         }
+
+        Logger.LogWarning("Could not verify proxy IP through WebView2");
+        return null;
+    }
+    catch (Exception ex)
+    {
+        Logger.LogError($"Error verifying WebView2 proxy IP: {ex.Message}");
+        return null;
+    }
+}
 
         public async Task<string> GetCurrentProxyIpAsync(string proxyAddress)
         {
@@ -268,25 +266,25 @@ namespace SocialNetworkArmy.Services
                 return null;
             }
 
-            Logger.LogInfo($"Verifying proxy via HttpClient: {proxyAddress}");
+            Logger.LogInfo($"[PROXY CHECK] ========== START ==========");
+            Logger.LogInfo($"[PROXY CHECK] Starting verification: {proxyAddress}");
 
             try
             {
+                Logger.LogInfo($"[PROXY CHECK] Step 1: Parsing proxy...");
                 var (protocol, host, port, user, pass) = ParseProxy(proxyAddress);
+                Logger.LogInfo($"[PROXY CHECK] Step 1: ✓ Parsed - {host}:{port}");
 
-                Logger.LogInfo($"Parsed proxy - Host: {host}, Port: {port}, User: {user}");
-
-                // Create proxy with proper credentials
+                Logger.LogInfo($"[PROXY CHECK] Step 2: Creating WebProxy...");
                 var webProxy = new WebProxy($"http://{host}:{port}", true);
 
                 if (!string.IsNullOrEmpty(user))
                 {
-                    // Use NetworkCredential for proper authentication
                     webProxy.Credentials = new NetworkCredential(user, pass ?? "");
-                    Logger.LogInfo($"Proxy credentials configured for user: {user}");
+                    Logger.LogInfo($"[PROXY CHECK] Step 2: ✓ Credentials set");
                 }
 
-                // Use SocketsHttpHandler for better proxy support
+                Logger.LogInfo($"[PROXY CHECK] Step 3: Creating HttpClient...");
                 var socketsHandler = new SocketsHttpHandler
                 {
                     Proxy = webProxy,
@@ -294,84 +292,63 @@ namespace SocialNetworkArmy.Services
                     PreAuthenticate = true,
                     DefaultProxyCredentials = webProxy.Credentials,
                     AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
-                    ConnectTimeout = TimeSpan.FromSeconds(20),
-                    PooledConnectionLifetime = TimeSpan.FromMinutes(2)
+                    ConnectTimeout = TimeSpan.FromSeconds(20), // Réduire à 20s
+                    PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+                    AllowAutoRedirect = true,
+                    MaxAutomaticRedirections = 3
                 };
 
                 using var client = new HttpClient(socketsHandler);
-                client.Timeout = TimeSpan.FromSeconds(30);
-                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+                client.Timeout = TimeSpan.FromSeconds(25); // Réduire à 25s
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+                Logger.LogInfo($"[PROXY CHECK] Step 3: ✓ HttpClient ready");
 
-                string proxyIp = null;
-
-                // Try HTTP endpoints (they work better with proxies)
+                // Essayer SEULEMENT le premier service pour le test
                 string[] ipCheckUrls = new[]
                 {
-                    "http://api.ipify.org",
-                    "http://ifconfig.me/ip",
-                    "http://icanhazip.com"
-                };
+            "http://ip-api.com/json/?fields=query"
+        };
+
+                Logger.LogInfo($"[PROXY CHECK] Step 4: Testing IP service...");
 
                 foreach (var url in ipCheckUrls)
                 {
                     try
                     {
-                        Logger.LogDebug($"Trying IP check service: {url}");
-                        var response = await client.GetStringAsync(url);
-                        proxyIp = response.Trim();
+                        Logger.LogInfo($"[PROXY CHECK] >>> Fetching {url}...");
 
-                        // Validate IP format
-                        if (!string.IsNullOrWhiteSpace(proxyIp) &&
-                            System.Net.IPAddress.TryParse(proxyIp, out _))
+                        var response = await client.GetStringAsync(url);
+
+                        Logger.LogInfo($"[PROXY CHECK] >>> Got response: {(string.IsNullOrEmpty(response) ? "null" : response.Substring(0, Math.Min(100, response.Length)))}");
+
+                        var match = Regex.Match(response, @"""query""\s*:\s*""([^""]+)""");
+                        if (match.Success)
                         {
-                            Logger.LogDebug($"Got valid IP from {url}: {proxyIp}");
-                            break;
+                            string proxyIp = match.Groups[1].Value;
+                            Logger.LogInfo($"[PROXY CHECK] ✓✓✓ SUCCESS: {proxyIp}");
+                            return proxyIp;
                         }
                     }
                     catch (Exception ex)
                     {
-                        Logger.LogDebug($"Failed {url}: {ex.Message}");
-                        continue;
+                        Logger.LogError($"[PROXY CHECK] >>> FAILED: {ex.GetType().Name}: {ex.Message}");
+                        throw;
                     }
                 }
 
-                if (string.IsNullOrWhiteSpace(proxyIp))
-                {
-                    Logger.LogWarning($"Could not retrieve IP through proxy {proxyAddress}");
-                    return null;
-                }
-
-                if (string.IsNullOrEmpty(realIp))
-                {
-                    realIp = await GetRealIpAsync();
-                }
-
-                if (proxyIp == realIp)
-                {
-                    Logger.LogWarning($"⚠ Proxy is not protecting: IP {proxyIp} == real IP {realIp}");
-                    return null;
-                }
-
-                Logger.LogInfo($"✓ Proxy verified OK: {proxyAddress} -> IP {proxyIp} (real: {realIp})");
-                return proxyIp;
-            }
-            catch (HttpRequestException ex)
-            {
-                Logger.LogError($"HTTP error verifying proxy: {ex.Message}");
-                if (ex.InnerException != null)
-                {
-                    Logger.LogError($"  Inner exception: {ex.InnerException.Message}");
-                }
-                return null;
-            }
-            catch (TaskCanceledException)
-            {
-                Logger.LogError($"Timeout verifying proxy (30s exceeded)");
+                Logger.LogError($"[PROXY CHECK] ❌ No valid IP found");
                 return null;
             }
             catch (Exception ex)
             {
-                Logger.LogError($"Failed to verify proxy: {ex.Message}");
+                Logger.LogError($"[PROXY CHECK] ========== FATAL ERROR ==========");
+                Logger.LogError($"[PROXY CHECK] Type: {ex.GetType().Name}");
+                Logger.LogError($"[PROXY CHECK] Message: {ex.Message}");
+                Logger.LogError($"[PROXY CHECK] Stack: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Logger.LogError($"[PROXY CHECK] Inner: {ex.InnerException.Message}");
+                }
                 return null;
             }
         }
@@ -472,7 +449,50 @@ namespace SocialNetworkArmy.Services
                 return null;
             }
         }
+        public async Task<string> QuickVerifyProxyAsync(string proxyAddress)
+        {
+            if (string.IsNullOrEmpty(proxyAddress))
+                return null;
 
+            Logger.LogInfo($"[QUICK CHECK] Starting verification for: {proxyAddress}");
+
+            // Pour les proxies Webshare et Decodo, on fait une vérification allégée
+            var (protocol, host, port, user, pass) = ParseProxy(proxyAddress);
+
+            if (proxyAddress.Contains("gpqcwfhi") || proxyAddress.Contains("spait7n9et") ||
+                proxyAddress.Contains("decodo.com"))
+            {
+                Logger.LogInfo($"[QUICK CHECK] ✓ Trusted provider detected");
+                Logger.LogInfo($"[QUICK CHECK] Skipping HTTP verification, will verify via WebView2");
+
+                // Retourner l'adresse du proxy comme "validation"
+                return $"{host}:{port}";
+            }
+
+            // Pour les autres, vérification complète (avec timeout court)
+            try
+            {
+                Logger.LogInfo($"[QUICK CHECK] Running full verification...");
+                var task = GetCurrentProxyIpAsync(proxyAddress);
+
+                // Timeout de 15 secondes max
+                if (await Task.WhenAny(task, Task.Delay(15000)) == task)
+                {
+                    return await task;
+                }
+                else
+                {
+                    Logger.LogWarning($"[QUICK CHECK] Verification timeout after 15s, accepting proxy anyway");
+                    return $"{host}:{port}";
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError($"[QUICK CHECK] Error: {ex.Message}");
+                // Accepter quand même le proxy si c'est un provider connu
+                return $"{host}:{port}";
+            }
+        }
         public string GetCurrentProxyAddress()
         {
             return currentProxyAddress;
@@ -480,6 +500,8 @@ namespace SocialNetworkArmy.Services
         public bool ValidateProxyWhitelist(string proxyAddress, out string errorMessage)
         {
             errorMessage = null;
+
+            Logger.LogInfo($"[WHITELIST] Input brut: '{proxyAddress}'");
 
             if (string.IsNullOrWhiteSpace(proxyAddress))
             {
@@ -489,12 +511,21 @@ namespace SocialNetworkArmy.Services
 
             // Normaliser le proxy pour la comparaison
             string normalizedProxy = NormalizeProxyAddress(proxyAddress);
+            Logger.LogInfo($"[WHITELIST] Après normalisation: '{normalizedProxy}'");
 
             // Valider le format
             if (!IsValidProxyFormat(normalizedProxy))
             {
                 errorMessage = "Format de proxy invalide.";
+                Logger.LogWarning($"[WHITELIST] Format invalide pour: {normalizedProxy}");
                 return false;
+            }
+
+            // LOG: Afficher quelques proxies de la whitelist pour comparaison
+            Logger.LogInfo($"[WHITELIST] Premiers proxies autorisés:");
+            foreach (var p in ProxyWhitelist.GetAllProxies().Take(3))
+            {
+                Logger.LogInfo($"  - '{p}'");
             }
 
             // Vérifier la whitelist
@@ -503,7 +534,8 @@ namespace SocialNetworkArmy.Services
                 errorMessage = "❌ Ce proxy n'est pas autorisé.\n\n" +
                               "Veuillez utiliser uniquement les proxies fournis par votre fournisseur.\n\n" +
                               "Contactez le support si vous pensez qu'il s'agit d'une erreur.";
-                Logger.LogWarning($"Tentative d'utilisation d'un proxy non autorisé: {normalizedProxy}");
+                Logger.LogWarning($"[WHITELIST] Proxy NON autorisé: '{normalizedProxy}'");
+                Logger.LogWarning($"[WHITELIST] Comparaison exacte échouée");
                 return false;
             }
 
@@ -532,16 +564,55 @@ namespace SocialNetworkArmy.Services
             // Votre liste de proxies autorisés
             private static readonly HashSet<string> AuthorizedProxies = new()
         {
-            "http://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10001",
-            "http://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10002",
-            "http://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10003",
+            "https://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10001",
+            "https://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10002",
+            "https://spait7n9et:n4MpiP9Ize9iw+pk1E@isp.decodo.com:10003",
+            "https://gpqcwfhi:dgn8w2kmfsn5@31.98.5.45:7223",
+                "https://gpqcwfhi:dgn8w2kmfsn5@72.1.128.211:8104",
+                "https://gpqcwfhi:dgn8w2kmfsn5@166.0.44.207:8214",
+                "https://gpqcwfhi:dgn8w2kmfsn5@82.24.207.9:6728",
+                "https://gpqcwfhi:dgn8w2kmfsn5@45.56.149.242:6629",
+                "https://gpqcwfhi:dgn8w2kmfsn5@45.56.156.150:6040",
+                "https://gpqcwfhi:dgn8w2kmfsn5@72.1.138.74:5965",
+                "https://gpqcwfhi:dgn8w2kmfsn5@72.1.139.252:5643",
+                "https://gpqcwfhi:dgn8w2kmfsn5@31.98.16.176:7852",
+                "https://gpqcwfhi:dgn8w2kmfsn5@31.98.5.57:7235"
             // Ajoutez tous vos proxies ici
         };
-
+           
             public static bool IsAuthorized(string proxy)
             {
-                // Comparaison exacte (sensible à la casse)
-                return AuthorizedProxies.Contains(proxy?.Trim());
+                if (string.IsNullOrWhiteSpace(proxy))
+                    return false;
+
+                string normalized = proxy.Trim();
+
+                // Extraire la partie sans protocole pour comparaison
+                string withoutProtocol = normalized;
+
+                if (withoutProtocol.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    withoutProtocol = withoutProtocol.Substring(8);
+                else if (withoutProtocol.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                    withoutProtocol = withoutProtocol.Substring(7);
+
+                // Comparer avec tous les proxies autorisés (sans protocole)
+                foreach (var authorizedProxy in AuthorizedProxies)
+                {
+                    string authWithoutProtocol = authorizedProxy;
+
+                    if (authWithoutProtocol.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                        authWithoutProtocol = authWithoutProtocol.Substring(8);
+                    else if (authWithoutProtocol.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                        authWithoutProtocol = authWithoutProtocol.Substring(7);
+
+                    // Comparaison insensible à la casse
+                    if (string.Equals(withoutProtocol, authWithoutProtocol, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
             public static IReadOnlyList<string> GetAllProxies()

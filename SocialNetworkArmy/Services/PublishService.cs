@@ -1,6 +1,7 @@
 ﻿using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using SocialNetworkArmy.Forms;
+using SocialNetworkArmy.Models;
 using System;
 using System.IO;
 using System.Text.Json;
@@ -25,36 +26,79 @@ namespace SocialNetworkArmy.Services
             this.log = log ?? throw new ArgumentNullException(nameof(log));
             this.form = form ?? throw new ArgumentNullException(nameof(form));
         }
+        private async Task<bool> CheckInstagramLoginAsync()
+        {
+            try
+            {
+                string script = @"
+            (function() {
+                try {
+                    const hasCreate = document.querySelector('a[href*=""/create""]') !== null;
+                    const hasDirect = document.querySelector('a[href*=""/direct/""]') !== null;
+                    return hasCreate || hasDirect;
+                } catch(e) {
+                    return false;
+                }
+            })();
+        ";
 
+                string result = await webView.CoreWebView2.ExecuteScriptAsync(script);
+                return result.Trim().ToLower() == "true";
+            }
+            catch
+            {
+                return false;
+            }
+        }
         // =============== PUBLIC ENTRY ===============
         public async Task RunAsync(string[] filePaths, string? caption = null, bool autoPublish = false, CancellationToken token = default)
         {
-            // === [NOUVEAU] Vérifie s’il y a un schedule dans Data/schedule.csv ===
+            // Vérifier connexion Instagram
+            bool isLoggedIn = await CheckInstagramLoginAsync();
+
+            // ✅ NOUVEAU: Tenter d'appliquer le schedule
             try
             {
-                string schedInfo;
-                if (!TryApplyScheduleCsv(ref filePaths, ref caption, out schedInfo))
+                var scheduleApplied = TryApplyScheduleCsv(ref filePaths, ref caption, out string schedInfo);
+
+                if (!string.IsNullOrWhiteSpace(schedInfo))
                 {
                     log.AppendText("[SCHEDULE] " + schedInfo + "\r\n");
-                    return; // pas de correspondance → on arrête le flux
                 }
-                if (!string.IsNullOrEmpty(schedInfo))
-                    log.AppendText("[SCHEDULE] " + schedInfo + "\r\n");
+
+                // Si aucun fichier après schedule ET aucun fichier fourni manuellement
+                if (filePaths == null || filePaths.Length == 0)
+                {
+                    log.AppendText("[Publish] ERROR: Aucun fichier (schedule ou manuel).\r\n");
+                    return;
+                }
             }
             catch (Exception ex)
             {
-                log.AppendText("[SCHEDULE] " + ex.Message + "\r\n");
+                log.AppendText("[SCHEDULE] Error: " + ex.Message + "\r\n");
+
+                // Si erreur schedule ET pas de fichiers manuels
+                if (filePaths == null || filePaths.Length == 0)
+                {
+                    log.AppendText("[Publish] ERROR: Aucun fichier.\r\n");
+                    return;
+                }
             }
 
-            if (filePaths == null || filePaths.Length == 0) throw new ArgumentException("Aucun fichier.");
+            // ✅ Validation des fichiers
             for (int i = 0; i < filePaths.Length; i++)
             {
                 filePaths[i] = Path.GetFullPath(filePaths[i]);
-                if (!File.Exists(filePaths[i])) throw new FileNotFoundException(filePaths[i]);
+                if (!File.Exists(filePaths[i]))
+                {
+                    log.AppendText($"[Publish] ERROR: File not found: {filePaths[i]}\r\n");
+                    return;
+                }
             }
 
+            log.AppendText($"[Publish] ✓ Files ready: {string.Join(", ", filePaths.Select(Path.GetFileName))}\r\n");
+
             await webView.EnsureCoreWebView2Async();
-            // UA “classique” pour éviter certains drapeaux anti-bot
             webView.CoreWebView2.Settings.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
 
             await form.StartScriptAsync("Publish");
@@ -69,7 +113,6 @@ namespace SocialNetworkArmy.Services
                 await Cdp("Network.enable");
 
                 log.AppendText("[PUBLISH] Démarrage…\r\n");
-                webView.CoreWebView2.Navigate("https://www.instagram.com/");
                 await Slow(token);
 
                 // Mur de login ?
@@ -88,7 +131,7 @@ namespace SocialNetworkArmy.Services
                 await Slow(token);
 
                 // 2) Publication
-                if (!await ClickPublicationLikeConsole(token))
+                if (!await ClickPublication(token))
                 {
                     log.AppendText("[MENU] Publication introuvable.\r\n");
                     return;
@@ -101,22 +144,26 @@ namespace SocialNetworkArmy.Services
                 await Slow(token);
 
                 // >>> [ADD] clic utilisateur sur “Sélectionner depuis l’ordinateur”, puis petite pause humaine
-               // await ClickSelectFromComputerAsync(token);
-               // await HumanUploadPauseAsync(token);
+                // await ClickSelectFromComputerAsync(token);
+                // await HumanUploadPauseAsync(token);
 
                 // 4) Injecter fichiers (nodeId)
-                var inputNodeId = await GetInputNodeId();
-                if (inputNodeId == null)
+                if (!await SetFilesViaJsAsync(filePaths, token))
                 {
-                    log.AppendText("[NODE] input[type=file] introuvable.\r\n");
-                    return;
+                    // Fallback CDP si vraiment nécessaire
+                    var inputNodeId = await GetInputNodeId();
+                    if (inputNodeId == null) { log.AppendText("[NODE] input[type=file] introuvable.\r\n"); return; }
+                    if (!await SetFiles(inputNodeId.Value, filePaths))
+                    {
+                        log.AppendText("[SET_FILES] KO (JS+CDP).\r\n");
+                        return;
+                    }
+                    log.AppendText("[SET_FILES/CDP] OK (fallback).\r\n");
                 }
-                if (!await SetFiles(inputNodeId.Value, filePaths))
+                else
                 {
-                    log.AppendText("[SET_FILES] KO.\r\n");
-                    return;
+                    log.AppendText("[SET_FILES_JS] OK.\r\n");
                 }
-                log.AppendText("[SET_FILES] OK.\r\n");
                 await Slow(token);
 
                 // 5) Composer prêt ? sinon tenter “Réessayer”
@@ -466,12 +513,21 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
 
         private async Task SimulateClick(double x, double y, CancellationToken token)
         {
-            x += rng.Next(-5, 6);
-            y += rng.Next(-5, 6);
-            await SimulateMouseMove(x, y, token);
-            await Cdp("Input.dispatchMouseEvent", new { type = "mousePressed", x, y, button = "left", clickCount = 1 });
-            await Task.Delay(rng.Next(100, 300), token);
-            await Cdp("Input.dispatchMouseEvent", new { type = "mouseReleased", x, y, button = "left", clickCount = 1 });
+            // Clic JS plus “natif” que CDP, déclenche les handlers React
+            string js = $@"
+(() => {{
+  const el = document.elementFromPoint({x}, {y});
+  if (!el) return 'NO_ELEMENT';
+  const r = el.getBoundingClientRect();
+  const cx = r.left + r.width/2, cy = r.top + r.height/2;
+  ['pointerdown','mousedown','mouseup','pointerup','click'].forEach(ev =>
+    el.dispatchEvent(new MouseEvent(ev, {{bubbles:true, clientX:cx, clientY:cy, button:0}}))
+  );
+  return 'CLICKED';
+}})();";
+            var res = Trim(await webView.CoreWebView2.ExecuteScriptAsync(js));
+            log.AppendText("[SIMCLICK] " + res + "\r\n");
+            await Task.Delay(rng.Next(200, 400), token);
         }
 
         private async Task<bool> ClickCreateLikeConsole(CancellationToken token)
@@ -510,24 +566,139 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             return true;
         }
 
-        private async Task<bool> ClickPublicationLikeConsole(CancellationToken token)
+        private async Task<bool> ClickPublication(CancellationToken token)
         {
-            var pubRes = await GetButtonPosition(@"
-const el = document.querySelector('[aria-label=""Publication"" i]') ||
-[...document.querySelectorAll('[role=""menuitem""],[role=""button""],button')].find(e=>{
-const t=(e.textContent||'').toLowerCase();
-const a=(e.getAttribute && e.getAttribute('aria-label')||'').toLowerCase();
-return /publication|post/.test(t+a);
-});
-if(!el) return {ok:false};
-el.scrollIntoView({block:'center', inline:'center'});
-const r = el.getBoundingClientRect();
-return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y:Math.round(r.top + r.height * (0.2 + Math.random() * 0.6))};
-");
-            if (!pubRes.ok) { log.AppendText("[MENU] NO_EL\r\n"); return false; }
-            await SimulateClick(pubRes.x, pubRes.y, token);
-            log.AppendText("[MENU] HIT\r\n");
-            return true;
+            log.AppendText("[MENU] Recherche du bouton 'Publication/Post'…\r\n");
+
+            string js = @"
+(() => {
+  // 1) Trouver <svg><title>Publication|Post</title>
+  const titles = [...document.querySelectorAll('svg title')];
+  let t = titles.find(n => /^(publication|post)$/i.test((n.textContent||'').trim()));
+
+  // fallback: texte visible dans un <span>
+  let span = null;
+  if (!t) {
+    span = [...document.querySelectorAll('span')]
+      .find(s => /^(publication|post)$/i.test((s.textContent||'').trim()));
+  }
+
+  const svg = t ? t.closest('svg') : null;
+
+  // 2) Déterminer l'élément cliquable
+  let btn =
+    (svg && (svg.closest('[role=""menuitem""],[role=""button""],button,a,[tabindex],div.xamitd3') || svg)) ||
+    (span && span.closest('[role=""menuitem""],[role=""button""],button,a,[tabindex],div.xamitd3'));
+
+  if (!btn) return 'NO_BTN';
+
+  btn.scrollIntoView({block:'center', inline:'center'});
+  btn.style.outline = '2px solid lime'; // debug
+
+  const r = btn.getBoundingClientRect();
+  let x = Math.round(r.left + r.width/2);
+  let y = Math.round(r.top + r.height/2);
+
+  // 3) S'assurer que le point est bien sur le bouton (overlay, etc.)
+  const isPointOnEl = (xx, yy) => {
+    const el = document.elementFromPoint(xx, yy);
+    return el === btn || (el && btn.contains(el));
+  };
+
+  if (!isPointOnEl(x, y)) {
+    const candidates = [
+      [r.left + r.width*0.5, r.top + r.height*0.5],
+      [r.left + r.width*0.2, r.top + r.height*0.5],
+      [r.left + r.width*0.8, r.top + r.height*0.5],
+      [r.left + r.width*0.5, r.top + r.height*0.3],
+      [r.left + r.width*0.5, r.top + r.height*0.7]
+    ];
+    for (const [xx, yy] of candidates) {
+      if (isPointOnEl(xx, yy)) { x = Math.round(xx); y = Math.round(yy); break; }
+    }
+  }
+
+  // 4) Séquence d'événements souris
+  ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+    btn.dispatchEvent(new MouseEvent(ev, {
+      bubbles:true, cancelable:true, view:window, clientX:x, clientY:y, button:0
+    }))
+  );
+
+  return 'CLICK_OK';
+})();
+";
+
+            var res = Trim(await webView.CoreWebView2.ExecuteScriptAsync(js));
+            log.AppendText("[MENU/CLICK_POST] " + res + "\r\n");
+            await Task.Delay(1500, token);
+            return res == "CLICK_OK";
+        }
+        private async Task<bool> SetFilesViaJsAsync(string[] files, CancellationToken token)
+        {
+            try
+            {
+                // Vérifie qu'on a bien un input dans le dialog actuel
+                var ok = Trim(await webView.CoreWebView2.ExecuteScriptAsync(@"
+(() => {
+  const dlg = document.querySelector('[role=""dialog""],[aria-modal=""true""]') || document;
+  return dlg.querySelector('input[type=""file""]') ? 'OK' : 'NO';
+})()")) == "OK";
+                if (!ok) { log.AppendText("[SET_FILES_JS] input introuvable.\r\n"); return false; }
+
+                for (int i = 0; i < files.Length; i++)
+                {
+                    var path = files[i];
+                    var bytes = await File.ReadAllBytesAsync(path, token);
+                    var b64 = Convert.ToBase64String(bytes);
+                    var ext = Path.GetExtension(path)?.ToLowerInvariant();
+                    var mime = ext == ".png" ? "image/png"
+                             : (ext == ".mp4" || ext == ".mov") ? "video/mp4"
+                             : "image/jpeg";
+                    var name = Path.GetFileName(path).Replace("'", "_");
+
+                    string inject = $@"
+(() => {{
+  const b64 = '{b64}';
+  const mime = '{mime}';
+  const name = '{name}';
+  const bin = atob(b64);
+  const u8  = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+  const blob = new Blob([u8], {{ type: mime }});
+  const file = new File([blob], name, {{ type: mime, lastModified: Date.now() }});
+
+  const dlg   = document.querySelector('[role=""dialog""],[aria-modal=""true""]') || document;
+  const input = dlg.querySelector('input[type=""file""]');
+  if (!input) return 'NO_INPUT';
+
+  const dt = new DataTransfer();
+  dt.items.add(file);
+
+  try {{
+    Object.defineProperty(input, 'files', {{ configurable:true, writable:false, value: dt.files }});
+  }} catch(e) {{
+    input.files = dt.files;
+  }}
+  input.dispatchEvent(new Event('input',  {{ bubbles:true }}));
+  input.dispatchEvent(new Event('change', {{ bubbles:true }}));
+  return 'OK';
+}})();";
+
+                    var res = Trim(await webView.CoreWebView2.ExecuteScriptAsync(inject));
+                    if (res != "OK")
+                    {
+                        log.AppendText("[SET_FILES_JS] " + res + "\r\n");
+                        return false;
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                log.AppendText("[SET_FILES_JS] " + ex.Message + "\r\n");
+                return false;
+            }
         }
 
         private async Task ClickNext(CancellationToken token)
@@ -737,160 +908,80 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             return res == "OK_XPATH";
         }
 
-        // [ADD] Lecture/filtrage du schedule.csv et surcharge des paramètres si match trouvé.
-        private bool TryApplyScheduleCsv(ref string[] filePaths, ref string? caption, out string info)
-        {
-            info = string.Empty;
 
-            // Data/ (majuscules) comme tu l'as confirmé
-            string schedulePath = Environment.GetEnvironmentVariable("SNA_SCHEDULE");
-            if (string.IsNullOrWhiteSpace(schedulePath))
-                schedulePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "schedule.csv");
-
-            if (!File.Exists(schedulePath))
-            {
-                info = "schedule.csv introuvable → on continue en mode manuel.";
-                return true; // pas de schedule → on laisse la logique actuelle
-            }
-
-            string? currentAccount = GetCurrentAccountNameSafe();
-
-            var lines = File.ReadAllLines(schedulePath);
-            if (lines.Length < 2)
-            {
-                info = "schedule.csv vide.";
-                return false;
-            }
-
-            var headers = SplitCsvLine(lines[0]);
-            int iDate = IndexOfHeader(headers, "Date");
-            int iAccount = IndexOfHeader(headers, "Account", "Compte", "Name", "Profil", "Profile");
-            int iPlatform = IndexOfHeader(headers, "Plateforme", "Platform");
-            int iMediaPath = IndexOfHeader(headers, "Media Path", "Media", "Path", "MediaPath", "File", "Fichier");
-            int iDesc = IndexOfHeader(headers, "Description", "Caption", "Texte");
-
-            if (iDate < 0 || iAccount < 0 || iPlatform < 0 || iMediaPath < 0)
-            {
-                info = "schedule.csv headers invalides (attendus au minimum: Date, Account, Plateforme/Platform, Media Path).";
-                return false;
-            }
-
-            var today = DateTime.Today;
-            for (int li = 1; li < lines.Length; li++)
-            {
-                var cols = SplitCsvLine(lines[li]);
-                int needed = Math.Max(Math.Max(iDate, iPlatform), Math.Max(iMediaPath, iAccount));
-                if (cols.Length <= needed) continue;
-
-                string dateStr = (cols[iDate] ?? "").Trim();
-                DateTime date;
-                bool okDate =
-                    DateTime.TryParseExact(dateStr, new[] { "yyyy-MM-dd", "dd/MM/yyyy", "yyyy/MM/dd" },
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        System.Globalization.DateTimeStyles.None, out date);
-
-                if (!okDate || date.Date != today) continue;
-
-                string platform = (cols[iPlatform] ?? "").Trim();
-                if (!platform.Equals("Instagram", StringComparison.OrdinalIgnoreCase)) continue;
-
-                string account = (cols[iAccount] ?? "").Trim();
-                if (!string.IsNullOrWhiteSpace(currentAccount) &&
-                    !account.Equals(currentAccount, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                string media = (cols[iMediaPath] ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(media))
-                {
-                    info = "MEDIA_PATH vide dans schedule.csv.";
-                    return false;
-                }
-
-                string fullMedia = Path.GetFullPath(media);
-                if (!File.Exists(fullMedia))
-                {
-                    info = "MEDIA introuvable: " + fullMedia;
-                    return false;
-                }
-
-                filePaths = new[] { fullMedia };
-                if (iDesc >= 0 && iDesc < cols.Length)
-                {
-                    string desc = cols[iDesc];
-                    if (!string.IsNullOrWhiteSpace(desc)) caption = desc;
-                }
-
-                info = $"match: {today:yyyy-MM-dd} / {account} / {platform} → override media & description.";
-                return true;
-            }
-
-            info = "NO_MATCH (aucune ligne pour aujourd’hui et ce compte) → arrêt.";
-            return false;
-        }
-
-        // [ADD] Essaie de deviner le nom du compte courant exposé par le formulaire (réflexion souple, non bloquant).
         private string? GetCurrentAccountNameSafe()
         {
             try
             {
+                // ✅ 1. ESSAYER LA PROPRIÉTÉ PUBLIQUE (AJOUTÉE CI-DESSUS)
                 var t = form.GetType();
+                var prop = t.GetProperty("CurrentAccountName",
+                    System.Reflection.BindingFlags.Instance |
+                    System.Reflection.BindingFlags.Public);
 
-                string[] propNames =
+                if (prop != null && prop.PropertyType == typeof(string))
                 {
-                    "SelectedProfileName","ActiveProfileName","CurrentProfileName",
-                    "ProfileName","AccountName","SelectedName","Name"
-                };
-                for (int i = 0; i < propNames.Length; i++)
-                {
-                    var p = t.GetProperty(propNames[i],
-                        System.Reflection.BindingFlags.Instance |
-                        System.Reflection.BindingFlags.Public |
-                        System.Reflection.BindingFlags.NonPublic);
-                    if (p != null && p.PropertyType == typeof(string))
+                    var val = prop.GetValue(form) as string;
+                    if (!string.IsNullOrWhiteSpace(val))
                     {
-                        var val = p.GetValue(form) as string;
-                        if (!string.IsNullOrWhiteSpace(val)) return val;
+                        log.AppendText($"[ACCOUNT] ✓ Trouvé via CurrentAccountName: {val}\r\n");
+                        return val;
                     }
                 }
 
-                string[] methodNames = { "GetCurrentProfileName", "GetSelectedProfileName", "GetProfileName" };
-                for (int i = 0; i < methodNames.Length; i++)
+                // ✅ 2. FALLBACK: EXTRAIRE DEPUIS LE DOM INSTAGRAM
+                try
                 {
-                    var m = t.GetMethod(methodNames[i],
-                        System.Reflection.BindingFlags.Instance |
-                        System.Reflection.BindingFlags.Public |
-                        System.Reflection.BindingFlags.NonPublic,
-                        null, Type.EmptyTypes, null);
-                    if (m != null && m.ReturnType == typeof(string))
+                    var jsResult = webView.CoreWebView2.ExecuteScriptAsync(@"
+(() => {
+    try {
+        // Méthode 1: Username dans la barre de navigation
+        const profileLink = document.querySelector('a[href*=""instagram.com/""]');
+        if (profileLink) {
+            const match = profileLink.href.match(/instagram\.com\/([^/?]+)/);
+            if (match) return match[1];
+        }
+        
+        // Méthode 2: Meta tags
+        const metaUsername = document.querySelector('meta[property=""og:title""]');
+        if (metaUsername) {
+            const content = metaUsername.getAttribute('content');
+            const match = content.match(/@([a-zA-Z0-9._]+)/);
+            if (match) return match[1];
+        }
+        
+        return '';
+    } catch(e) { return ''; }
+})()
+            ").GetAwaiter().GetResult();
+
+                    var username = jsResult?.Trim().Trim('"');
+                    if (!string.IsNullOrWhiteSpace(username))
                     {
-                        var val = m.Invoke(form, null) as string;
-                        if (!string.IsNullOrWhiteSpace(val)) return val;
+                        log.AppendText($"[ACCOUNT] ✓ Trouvé via DOM: {username}\r\n");
+                        return username;
                     }
                 }
-
-                var pObj = t.GetProperty("SelectedProfile") ??
-                           t.GetProperty("CurrentProfile") ??
-                           t.GetProperty("ActiveProfile");
-                if (pObj != null)
+                catch (Exception ex)
                 {
-                    var obj = pObj.GetValue(form);
-                    if (obj != null)
-                    {
-                        var nameProp = obj.GetType().GetProperty("Name") ?? obj.GetType().GetProperty("name");
-                        if (nameProp != null)
-                        {
-                            var val = nameProp.GetValue(obj) as string;
-                            if (!string.IsNullOrWhiteSpace(val)) return val;
-                        }
-                    }
+                    log.AppendText($"[ACCOUNT] DOM extraction failed: {ex.Message}\r\n");
                 }
 
+                // ✅ 3. FALLBACK: VARIABLE D'ENVIRONNEMENT
                 var env = Environment.GetEnvironmentVariable("SNA_ACCOUNT");
-                if (!string.IsNullOrWhiteSpace(env)) return env;
+                if (!string.IsNullOrWhiteSpace(env))
+                {
+                    log.AppendText($"[ACCOUNT] ✓ Trouvé via ENV: {env}\r\n");
+                    return env;
+                }
+
+                log.AppendText("[ACCOUNT] ✗ Impossible de déterminer le compte actuel\r\n");
             }
-            catch { /* non bloquant */ }
+            catch (Exception ex)
+            {
+                log.AppendText($"[ACCOUNT] Erreur: {ex.Message}\r\n");
+            }
+
             return null;
         }
 
@@ -945,10 +1036,62 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
 
         private async Task Slow(CancellationToken ct) =>
             await Task.Delay(rng.Next(2000, 5000), ct); // 3–5s pour simuler l’humain
+        private bool TryApplyScheduleCsv(ref string[] filePaths, ref string? caption, out string info)
+        {
+            info = string.Empty;
 
-        // ===================== AJOUTS ANTI-DÉTECTION UPLOAD =====================
+            // ✅ RÉCUPÉRER LE NOM DU COMPTE
+            string? currentAccount = GetCurrentAccountNameSafe();
 
-        // [ADD] Clic "Sélectionner depuis l’ordinateur" / "Select from computer" avant l'upload
+            if (string.IsNullOrWhiteSpace(currentAccount))
+            {
+                info = "Cannot identify current account → manual mode.";
+                log.AppendText("[SCHEDULE] " + info + "\r\n");
+                return true; // Continue en mode manuel
+            }
+
+            try
+            {
+                // ✅ UTILISER LA LOGIQUE CENTRALISÉE
+                var match = ScheduleHelper.GetTodayMediaForAccount(
+                    currentAccount,
+                    "Instagram",
+                    "publish"
+                );
+
+                if (match == null)
+                {
+                    info = $"No publish scheduled today for {currentAccount} → manual mode.";
+                    log.AppendText("[SCHEDULE] " + info + "\r\n");
+                    return true; // Continue en mode manuel
+                }
+
+                // ✅ APPLIQUER LE MATCH
+                filePaths = new[] { match.MediaPath };
+
+                if (!string.IsNullOrWhiteSpace(match.Description))
+                {
+                    caption = match.Description;
+                }
+
+                info = $"✓ Match: {DateTime.Today:yyyy-MM-dd} / {match.AccountOrGroup} / Instagram → {Path.GetFileName(match.MediaPath)}";
+                log.AppendText($"[SCHEDULE] {info}\r\n");
+
+                if (match.IsGroup)
+                {
+                    log.AppendText($"[SCHEDULE] ✓ Group mode: path auto-mapped for {currentAccount}\r\n");
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                info = $"Schedule error: {ex.Message}";
+                log.AppendText("[SCHEDULE] " + info + "\r\n");
+                return true; // Continue en mode manuel en cas d'erreur
+            }
+        }
+
         private async Task<bool> ClickSelectFromComputerAsync(CancellationToken token)
         {
             var res = await GetButtonPosition(@"

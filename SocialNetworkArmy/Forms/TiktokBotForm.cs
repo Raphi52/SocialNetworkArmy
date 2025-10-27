@@ -16,7 +16,7 @@ namespace SocialNetworkArmy.Forms
     public partial class TiktokBotForm : Form
     {
         private TargetService targetService;
-        private ScrollService scrollService;
+        private ScrollReelsService scrollService;
         private PublishService publishService;
         private DirectMessageService dmService;
         
