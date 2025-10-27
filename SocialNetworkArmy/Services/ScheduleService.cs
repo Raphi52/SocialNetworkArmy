@@ -1176,15 +1176,43 @@ namespace SocialNetworkArmy.Services
                 {
                     LogToUI($"[Schedule] Executing {activity}...");
 
-                    switch (activity)
+                    // ✅ FIX: Case-insensitive activity matching
+                    switch (activity?.Trim().ToLower())
                     {
-                        case "target": TriggerButton(ig, "targetButton"); break;
-                        case "reels": TriggerButton(ig, "scrollButton"); break;
-                        case "home": TriggerButton(ig, "scrollHomeButton"); break;
-                        case "publish": TriggerButton(ig, "publishButton"); break;
-                        case "dm": TriggerButton(ig, "dmButton"); break;
-                        case "download": TriggerButton(ig, "downloadButton"); break;
-                        default: LogToUI($"[Schedule] ❌ Unknown activity: {activity}"); break;
+                        case "target":
+                            TriggerButton(ig, "targetButton");
+                            break;
+                        case "reels":
+                        case "scrollreels":  // Alias
+                            TriggerButton(ig, "scrollButton");
+                            break;
+                        case "home":
+                        case "scrollhome":  // Alias
+                            TriggerButton(ig, "scrollHomeButton");
+                            break;
+                        case "publish":
+                        case "post":  // Alias
+                            TriggerButton(ig, "publishButton");
+                            break;
+                        case "dm":
+                        case "message":  // Alias
+                            TriggerButton(ig, "dmButton");
+                            break;
+                        case "download":
+                            TriggerButton(ig, "downloadButton");
+                            break;
+                        case "story":
+                            // Story is handled separately, but log it
+                            LogToUI($"[Schedule] ℹ️ Story activity requires special handling");
+                            break;
+                        case "close":
+                            // Close is handled separately
+                            LogToUI($"[Schedule] ℹ️ Close activity requires special handling");
+                            break;
+                        default:
+                            LogToUI($"[Schedule] ❌ Unknown activity: '{activity}'");
+                            LogToUI($"[Schedule] Valid activities: target, reels, home, publish, dm, download, story, close");
+                            break;
                     }
                 }
                 catch (Exception ex)
