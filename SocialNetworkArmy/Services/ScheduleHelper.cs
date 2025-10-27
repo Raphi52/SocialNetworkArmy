@@ -167,123 +167,113 @@ namespace SocialNetworkArmy.Services
                     string accountOrGroup = cols[iAccount].Trim();
                     Console.WriteLine($"[Schedule] Account/Group: '{accountOrGroup}' vs '{accountName}'");
 
-                    // 1) Chercher un compte exact
-                    var singleProfile = allProfiles.FirstOrDefault(p =>
-                        !string.IsNullOrWhiteSpace(p.Name) &&
-                        p.Name.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase));
+                    // ✅ NOUVELLE LOGIQUE: Comparaison directe d'abord, puis groupes
 
-                    if (singleProfile != null)
+                    // 1) ✅ MATCH DIRECT: Comparer directement le CSV avec le compte actuel
+                    if (accountOrGroup.Equals(accountName, StringComparison.OrdinalIgnoreCase))
                     {
-                        Console.WriteLine($"[Schedule] Found single profile: {singleProfile.Name}");
+                        Console.WriteLine($"[Schedule] ✓✓ DIRECT MATCH! Account name matches!");
 
-                        if (!string.IsNullOrWhiteSpace(singleProfile.Name) &&
-                            singleProfile.Name.Equals(accountName, StringComparison.OrdinalIgnoreCase))
+                        string mediaPath = iPath < cols.Length && cols[iPath] != null
+                            ? cols[iPath].Trim()
+                            : null;
+
+                        Console.WriteLine($"[Schedule] Media path: '{mediaPath}'");
+
+                        if (string.IsNullOrWhiteSpace(mediaPath))
                         {
-                            Console.WriteLine($"[Schedule] ✓ Account name matches!");
+                            Console.WriteLine($"[Schedule] ⚠ Empty media path for {accountName}");
+                            continue;
+                        }
 
-                            string mediaPath = iPath < cols.Length && cols[iPath] != null
+                        if (!File.Exists(mediaPath))
+                        {
+                            Console.WriteLine($"[Schedule] ✗ File not found: {mediaPath}");
+                            continue;
+                        }
+
+                        Console.WriteLine($"[Schedule] ✓✓✓ MATCH FOUND! → {Path.GetFileName(mediaPath)}");
+
+                        return new ScheduleMatch
+                        {
+                            MediaPath = mediaPath,
+                            Description = iDesc < cols.Length ? cols[iDesc].Trim() : "",
+                            Activity = csvActivity,
+                            IsGroup = false,
+                            AccountOrGroup = accountOrGroup
+                        };
+                    }
+
+                    // 2) ✅ GROUP MATCH: Vérifier si c'est un groupe contenant le compte actuel
+                    Console.WriteLine($"[Schedule] No direct match, checking if '{accountOrGroup}' is a group...");
+
+                    var groupProfiles = allProfiles
+                        .Where(p => !string.IsNullOrWhiteSpace(p.Name) &&
+                                   !string.IsNullOrWhiteSpace(p.GroupName) &&
+                                   p.GroupName.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    Console.WriteLine($"[Schedule] Found {groupProfiles.Count} profiles in group '{accountOrGroup}'");
+
+                    if (groupProfiles.Any())
+                    {
+                        var matchingProfile = groupProfiles.FirstOrDefault(p =>
+                            !string.IsNullOrWhiteSpace(p.Name) &&
+                            p.Name.Equals(accountName, StringComparison.OrdinalIgnoreCase));
+
+                        if (matchingProfile != null)
+                        {
+                            Console.WriteLine($"[Schedule] ✓ Found account in group: {matchingProfile.Name}");
+
+                            string baseMediaPath = iPath < cols.Length && cols[iPath] != null
                                 ? cols[iPath].Trim()
                                 : null;
 
-                            Console.WriteLine($"[Schedule] Media path: '{mediaPath}'");
-
-                            if (string.IsNullOrWhiteSpace(mediaPath))
+                            if (string.IsNullOrWhiteSpace(baseMediaPath))
                             {
-                                Console.WriteLine($"[Schedule] ⚠ Empty media path for {accountName}");
+                                Console.WriteLine($"[Schedule] ⚠ Empty media path for group {accountOrGroup}");
                                 continue;
                             }
 
-                            if (!File.Exists(mediaPath))
+                            string accountMediaPath = GetAccountSpecificPath(
+                                baseMediaPath,
+                                groupProfiles,
+                                matchingProfile);
+
+                            Console.WriteLine($"[Schedule] Base path: {baseMediaPath}");
+                            Console.WriteLine($"[Schedule] Mapped path: {accountMediaPath}");
+
+                            if (!File.Exists(accountMediaPath))
                             {
-                                Console.WriteLine($"[Schedule] ✗ File not found: {mediaPath}");
+                                Console.WriteLine($"[Schedule] ⚠ Mapped file not found: {accountMediaPath}");
+                                accountMediaPath = baseMediaPath;
+                            }
+
+                            if (!File.Exists(accountMediaPath))
+                            {
+                                Console.WriteLine($"[Schedule] ✗ No valid file found for {accountName}");
                                 continue;
                             }
 
-                            Console.WriteLine($"[Schedule] ✓✓✓ MATCH FOUND! → {Path.GetFileName(mediaPath)}");
+                            Console.WriteLine($"[Schedule] ✓✓✓ GROUP MATCH FOUND! → {Path.GetFileName(accountMediaPath)}");
 
                             return new ScheduleMatch
                             {
-                                MediaPath = mediaPath,
+                                MediaPath = accountMediaPath,
                                 Description = iDesc < cols.Length ? cols[iDesc].Trim() : "",
                                 Activity = csvActivity,
-                                IsGroup = false,
+                                IsGroup = true,
                                 AccountOrGroup = accountOrGroup
                             };
                         }
                         else
                         {
-                            Console.WriteLine($"[Schedule] ✗ Account name doesn't match");
+                            Console.WriteLine($"[Schedule] ✗ Account '{accountName}' not found in group '{accountOrGroup}'");
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"[Schedule] No single profile found, checking groups...");
-
-                        // 2) Chercher un groupe
-                        var groupProfiles = allProfiles
-                            .Where(p => !string.IsNullOrWhiteSpace(p.Name) &&
-                                       !string.IsNullOrWhiteSpace(p.GroupName) &&
-                                       p.GroupName.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase))
-                            .ToList();
-
-                        Console.WriteLine($"[Schedule] Found {groupProfiles.Count} profiles in group '{accountOrGroup}'");
-
-                        if (groupProfiles.Any())
-                        {
-                            var matchingProfile = groupProfiles.FirstOrDefault(p =>
-                                !string.IsNullOrWhiteSpace(p.Name) &&
-                                p.Name.Equals(accountName, StringComparison.OrdinalIgnoreCase));
-
-                            if (matchingProfile != null)
-                            {
-                                Console.WriteLine($"[Schedule] ✓ Found account in group: {matchingProfile.Name}");
-
-                                string baseMediaPath = iPath < cols.Length && cols[iPath] != null
-                                    ? cols[iPath].Trim()
-                                    : null;
-
-                                if (string.IsNullOrWhiteSpace(baseMediaPath))
-                                {
-                                    Console.WriteLine($"[Schedule] ⚠ Empty media path for group {accountOrGroup}");
-                                    continue;
-                                }
-
-                                string accountMediaPath = GetAccountSpecificPath(
-                                    baseMediaPath,
-                                    groupProfiles,
-                                    matchingProfile);
-
-                                Console.WriteLine($"[Schedule] Base path: {baseMediaPath}");
-                                Console.WriteLine($"[Schedule] Mapped path: {accountMediaPath}");
-
-                                if (!File.Exists(accountMediaPath))
-                                {
-                                    Console.WriteLine($"[Schedule] ⚠ Mapped file not found: {accountMediaPath}");
-                                    accountMediaPath = baseMediaPath;
-                                }
-
-                                if (!File.Exists(accountMediaPath))
-                                {
-                                    Console.WriteLine($"[Schedule] ✗ No valid file found for {accountName}");
-                                    continue;
-                                }
-
-                                Console.WriteLine($"[Schedule] ✓✓✓ GROUP MATCH FOUND! → {Path.GetFileName(accountMediaPath)}");
-
-                                return new ScheduleMatch
-                                {
-                                    MediaPath = accountMediaPath,
-                                    Description = iDesc < cols.Length ? cols[iDesc].Trim() : "",
-                                    Activity = csvActivity,
-                                    IsGroup = true,
-                                    AccountOrGroup = accountOrGroup
-                                };
-                            }
-                            else
-                            {
-                                Console.WriteLine($"[Schedule] ✗ Account '{accountName}' not found in group '{accountOrGroup}'");
-                            }
-                        }
+                        Console.WriteLine($"[Schedule] ✗ '{accountOrGroup}' is neither the current account nor a group containing it");
                     }
                 }
 

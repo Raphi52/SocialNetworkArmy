@@ -1040,18 +1040,30 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
         {
             info = string.Empty;
 
+            log.AppendText("[SCHEDULE] ========================================\r\n");
+            log.AppendText("[SCHEDULE] Starting schedule search...\r\n");
+
             // ✅ RÉCUPÉRER LE NOM DU COMPTE
             string? currentAccount = GetCurrentAccountNameSafe();
+
+            log.AppendText($"[SCHEDULE] Current account detected: '{currentAccount ?? "(null)"}'\r\n");
 
             if (string.IsNullOrWhiteSpace(currentAccount))
             {
                 info = "Cannot identify current account → manual mode.";
-                log.AppendText("[SCHEDULE] " + info + "\r\n");
+                log.AppendText("[SCHEDULE] ✗ " + info + "\r\n");
+                log.AppendText("[SCHEDULE] ========================================\r\n");
                 return true; // Continue en mode manuel
             }
 
             try
             {
+                log.AppendText($"[SCHEDULE] Searching CSV for:\r\n");
+                log.AppendText($"[SCHEDULE]   - Date: {DateTime.Today:yyyy-MM-dd}\r\n");
+                log.AppendText($"[SCHEDULE]   - Platform: Instagram\r\n");
+                log.AppendText($"[SCHEDULE]   - Account: {currentAccount}\r\n");
+                log.AppendText($"[SCHEDULE]   - Activity: publish\r\n");
+
                 // ✅ UTILISER LA LOGIQUE CENTRALISÉE
                 var match = ScheduleHelper.GetTodayMediaForAccount(
                     currentAccount,
@@ -1062,7 +1074,8 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 if (match == null)
                 {
                     info = $"No publish scheduled today for {currentAccount} → manual mode.";
-                    log.AppendText("[SCHEDULE] " + info + "\r\n");
+                    log.AppendText("[SCHEDULE] ✗ " + info + "\r\n");
+                    log.AppendText("[SCHEDULE] ========================================\r\n");
                     return true; // Continue en mode manuel
                 }
 
@@ -1075,6 +1088,9 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 }
 
                 info = $"✓ Match: {DateTime.Today:yyyy-MM-dd} / {match.AccountOrGroup} / Instagram → {Path.GetFileName(match.MediaPath)}";
+                log.AppendText($"[SCHEDULE] ✓✓✓ MATCH FOUND!\r\n");
+                log.AppendText($"[SCHEDULE]   - File: {match.MediaPath}\r\n");
+                log.AppendText($"[SCHEDULE]   - Caption: {match.Description}\r\n");
                 log.AppendText($"[SCHEDULE] {info}\r\n");
 
                 if (match.IsGroup)
@@ -1082,12 +1098,14 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                     log.AppendText($"[SCHEDULE] ✓ Group mode: path auto-mapped for {currentAccount}\r\n");
                 }
 
+                log.AppendText("[SCHEDULE] ========================================\r\n");
                 return true;
             }
             catch (Exception ex)
             {
                 info = $"Schedule error: {ex.Message}";
-                log.AppendText("[SCHEDULE] " + info + "\r\n");
+                log.AppendText("[SCHEDULE] ✗ ERROR: " + info + "\r\n");
+                log.AppendText("[SCHEDULE] ========================================\r\n");
                 return true; // Continue en mode manuel en cas d'erreur
             }
         }
