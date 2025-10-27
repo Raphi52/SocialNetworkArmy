@@ -761,14 +761,28 @@ namespace SocialNetworkArmy.Services
 
         private async Task<int> GetHumanWatchTime(Random rand)
         {
+            // ✅ OPTIMIZED: Minimum 10s pour éduquer l'algo sur la niche "influenceuses"
+            // 50% du temps : 10-15 secondes (bon engagement)
+            // 30% du temps : 15-22 secondes (très bon engagement)
+            // 15% du temps : 22-30 secondes (excellent engagement)
+            // 5% du temps : 30-40 secondes (super engagé) + pause longue
             double dice = rand.NextDouble();
-            if (dice < 0.70)
+
+            if (dice < 0.50)
             {
-                return rand.Next(3000, 8001);
+                return rand.Next(10000, 15001); // 10-15s
+            }
+            else if (dice < 0.80)
+            {
+                return rand.Next(15000, 22001); // 15-22s
+            }
+            else if (dice < 0.95)
+            {
+                return rand.Next(22000, 30001); // 22-30s
             }
             else
             {
-                return rand.Next(10000, 20001);
+                return rand.Next(30000, 40001); // 30-40s
             }
         }
 
@@ -1106,8 +1120,8 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             {
                                 logTextBox.AppendText($"[FILTER] ✗ Content filtered (not female) - SKIPPING\r\n");
 
-                                // Skip to next post immediately
-                                await Task.Delay(rand.Next(500, 1000), token);
+                                // ⚡ Skip immediately (algo signal: not interested)
+                                await Task.Delay(rand.Next(100, 300), token);
                                 await RandomHumanNoiseAsync(token);
                                 await ScrollToNextPostAsync(rand, token);
                                 postsScrolled++;
