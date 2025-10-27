@@ -93,8 +93,11 @@ namespace SocialNetworkArmy.Services
             }
             catch (Exception ex)
             {
-                Log($"[Filter] Error: {ex.Message}");
-                return true; // En cas d'erreur, ne pas bloquer
+                Log($"[Filter] ⚠️ CRITICAL ERROR: {ex.Message}");
+                Log($"[Filter] ⚠️ Stack: {ex.StackTrace}");
+                // ⚠️ En cas d'erreur critique, on SKIP pour éviter de laisser passer du mauvais contenu
+                // Si tu préfères ne pas bloquer en cas d'erreur, change en "return true"
+                return false;
             }
         }
 
@@ -105,10 +108,20 @@ namespace SocialNetworkArmy.Services
         {
             try
             {
+                // ✅ Vérifier que le token est chargé
+                if (string.IsNullOrEmpty(HUGGINGFACE_TOKEN))
+                {
+                    Log($"[Filter] ⚠️ HuggingFace token is empty - cannot analyze");
+                    return new AnalysisResult { HasFaces = false };
+                }
+
                 // 1) Télécharger l'image
+                Log($"[Filter] Downloading image...");
                 var imageBytes = await httpClient.GetByteArrayAsync(imageUrl);
+                Log($"[Filter] Downloaded {imageBytes.Length} bytes");
 
                 // 2) Envoyer à HuggingFace
+                Log($"[Filter] Sending to HuggingFace API...");
                 var request = new HttpRequestMessage(HttpMethod.Post, HUGGINGFACE_API_URL);
                 request.Headers.Add("Authorization", $"Bearer {HUGGINGFACE_TOKEN}");
                 request.Content = new ByteArrayContent(imageBytes);
@@ -116,6 +129,9 @@ namespace SocialNetworkArmy.Services
 
                 var response = await httpClient.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
+
+                Log($"[Filter] API Response: {response.StatusCode}");
+                Log($"[Filter] API JSON: {json}");
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -126,17 +142,34 @@ namespace SocialNetworkArmy.Services
                 var data = JsonDocument.Parse(json);
                 var predictions = data.RootElement.EnumerateArray();
 
-                var result = new AnalysisResult { HasFaces = true, FaceCount = 1 };
+                var result = new AnalysisResult { HasFaces = false, FaceCount = 0, IsFemale = false };
 
                 foreach (var pred in predictions)
                 {
                     var label = pred.GetProperty("label").GetString();
                     var score = pred.GetProperty("score").GetDouble();
 
+                    Log($"[Filter] Prediction: {label} = {score:P1}");
+
+                    // ✅ Check for female
                     if (label.Contains("female", StringComparison.OrdinalIgnoreCase) ||
                         label.Contains("woman", StringComparison.OrdinalIgnoreCase))
                     {
+                        result.HasFaces = true;
+                        result.FaceCount = 1;
                         result.IsFemale = score > 0.6; // Seuil de confiance
+                        Log($"[Filter] Female score: {score:P1} → {(result.IsFemale ? "ACCEPTED" : "REJECTED (too low)")}");
+                        break;
+                    }
+
+                    // ✅ Check for male
+                    if (label.Contains("male", StringComparison.OrdinalIgnoreCase) ||
+                        label.Contains("man", StringComparison.OrdinalIgnoreCase))
+                    {
+                        result.HasFaces = true;
+                        result.FaceCount = 1;
+                        result.IsFemale = false; // Explicitly false for male
+                        Log($"[Filter] Male detected: {score:P1} → REJECTED");
                         break;
                     }
                 }
