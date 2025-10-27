@@ -204,51 +204,82 @@ namespace SocialNetworkArmy.Services
             try
             {
                 // 1) Récupérer l'URL de l'image actuellement affichée via JavaScript
-                string imageUrl = await webView.ExecuteScriptAsync(@"
+                string jsResult = await webView.ExecuteScriptAsync(@"
                     (function() {
-                        // Stratégie 1: Chercher dans l'article visible les images
-                        const articles = document.querySelectorAll('article');
-                        let mostVisibleArticle = null;
-                        let maxVisible = 0;
+                        const debug = [];
 
-                        articles.forEach(article => {
-                            const rect = article.getBoundingClientRect();
-                            const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
-                            if (visible > maxVisible) {
-                                maxVisible = visible;
-                                mostVisibleArticle = article;
-                            }
-                        });
+                        // Stratégie 1: Video visible avec poster
+                        const videos = document.querySelectorAll('video');
+                        debug.push(`Videos: ${videos.length}`);
 
-                        if (mostVisibleArticle) {
-                            // Chercher toutes les images dans l'article
-                            const images = mostVisibleArticle.querySelectorAll('img');
-                            for (let img of images) {
-                                // Ignorer les petites images (avatars, icônes)
-                                if (img.naturalWidth > 100 && img.naturalHeight > 100) {
-                                    return img.src || img.currentSrc;
+                        for (let video of videos) {
+                            const rect = video.getBoundingClientRect();
+                            const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+                            if (isVisible) {
+                                debug.push(`VisVideo: poster=${video.poster ? 'yes' : 'no'}`);
+                                if (video.poster) {
+                                    return JSON.stringify({url: video.poster, debug: debug.join(', ')});
                                 }
-                            }
-
-                            // Si pas d'image, chercher le poster de la vidéo
-                            const video = mostVisibleArticle.querySelector('video');
-                            if (video && video.poster) {
-                                return video.poster;
                             }
                         }
 
-                        return null;
+                        // Stratégie 2: Images visibles (ANY size first to debug)
+                        const allImages = Array.from(document.querySelectorAll('img'));
+                        debug.push(`AllImgs: ${allImages.length}`);
+
+                        const visibleImages = allImages.filter(img => {
+                            const rect = img.getBoundingClientRect();
+                            return rect.top < window.innerHeight && rect.bottom > 0;
+                        });
+
+                        debug.push(`VisImgs: ${visibleImages.length}`);
+
+                        if (visibleImages.length > 0) {
+                            // Sort by size (use computed size, not natural)
+                            visibleImages.sort((a, b) => {
+                                const sizeA = a.width * a.height;
+                                const sizeB = b.width * b.height;
+                                return sizeB - sizeA;
+                            });
+
+                            const largest = visibleImages[0];
+                            debug.push(`Largest: ${largest.width}x${largest.height}`);
+
+                            // Skip tiny images (avatars)
+                            if (largest.width > 50 && largest.height > 50) {
+                                return JSON.stringify({url: largest.src || largest.currentSrc, debug: debug.join(', ')});
+                            } else {
+                                debug.push('TooSmall');
+                            }
+                        }
+
+                        return JSON.stringify({url: null, debug: debug.join(', ')});
                     })()
                 ");
 
-                imageUrl = imageUrl?.Trim('"');
+                // Parse the JSON result
+                string imageUrl = null;
+                string debugInfo = "";
 
+                try
+                {
+                    var result = JsonDocument.Parse(jsResult.Trim('"').Replace("\\\"", "\""));
+                    imageUrl = result.RootElement.GetProperty("url").GetString();
+                    debugInfo = result.RootElement.GetProperty("debug").GetString();
+                }
+                catch
+                {
+                    imageUrl = jsResult?.Trim('"');
+                    debugInfo = "Failed to parse JSON";
+                }
+
+                Log($"[Filter] JS Debug: {debugInfo}");
                 Log($"[Filter] Extracted image URL: {imageUrl ?? "(null)"}");
 
                 if (string.IsNullOrWhiteSpace(imageUrl))
                 {
                     Log($"[Filter] ⚠️ No image/poster found - SKIPPING for safety");
-                    return false; // ✅ Changed: Skip if no image (safer)
+                    return false;
                 }
 
                 // 2) Analyser l'image
