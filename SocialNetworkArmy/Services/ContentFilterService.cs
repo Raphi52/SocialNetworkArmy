@@ -65,38 +65,30 @@ namespace SocialNetworkArmy.Services
         {
             try
             {
-                Log($"[Filter] Analyzing image: {imageUrl}");
-
-                // ✅ OPTION 1: HuggingFace (GRATUIT)
                 var result = await AnalyzeWithHuggingFaceAsync(imageUrl);
 
                 if (result.HasFaces)
                 {
-                    Log($"[Filter] Detected {result.FaceCount} face(s)");
-
                     if (result.IsFemale)
                     {
-                        Log($"[Filter] ✓ Female detected - KEEPING");
+                        Log($"[Filter] ✓ Female");
                         return true;
                     }
                     else
                     {
-                        Log($"[Filter] ✗ Male/Other detected - SKIPPING");
+                        Log($"[Filter] ✗ Male");
                         return false;
                     }
                 }
                 else
                 {
-                    Log($"[Filter] ⚠ No faces detected - SKIPPING (safety)");
-                    return false; // Par sécurité, skip si pas de visage
+                    Log($"[Filter] ✗ No face");
+                    return false;
                 }
             }
             catch (Exception ex)
             {
-                Log($"[Filter] ⚠️ CRITICAL ERROR: {ex.Message}");
-                Log($"[Filter] ⚠️ Stack: {ex.StackTrace}");
-                // ⚠️ En cas d'erreur critique, on SKIP pour éviter de laisser passer du mauvais contenu
-                // Si tu préfères ne pas bloquer en cas d'erreur, change en "return true"
+                Log($"[Filter] ⚠️ Error: {ex.Message}");
                 return false;
             }
         }
@@ -108,20 +100,17 @@ namespace SocialNetworkArmy.Services
         {
             try
             {
-                // ✅ Vérifier que le token est chargé
+                // Vérifier que le token est chargé
                 if (string.IsNullOrEmpty(HUGGINGFACE_TOKEN))
                 {
-                    Log($"[Filter] ⚠️ HuggingFace token is empty - cannot analyze");
+                    Log($"[Filter] ⚠️ Token missing");
                     return new AnalysisResult { HasFaces = false };
                 }
 
                 // 1) Télécharger l'image
-                Log($"[Filter] Downloading image...");
                 var imageBytes = await httpClient.GetByteArrayAsync(imageUrl);
-                Log($"[Filter] Downloaded {imageBytes.Length} bytes");
 
                 // 2) Envoyer à HuggingFace
-                Log($"[Filter] Sending to HuggingFace API...");
                 var request = new HttpRequestMessage(HttpMethod.Post, HUGGINGFACE_API_URL);
                 request.Headers.Add("Authorization", $"Bearer {HUGGINGFACE_TOKEN}");
                 request.Content = new ByteArrayContent(imageBytes);
@@ -130,12 +119,10 @@ namespace SocialNetworkArmy.Services
                 var response = await httpClient.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();
 
-                Log($"[Filter] API Response: {response.StatusCode}");
-                Log($"[Filter] API JSON: {json}");
-
                 if (!response.IsSuccessStatusCode)
                 {
-                    throw new Exception($"HuggingFace error: {response.StatusCode} - {json}");
+                    Log($"[Filter] ⚠️ API error: {response.StatusCode}");
+                    return new AnalysisResult { HasFaces = false };
                 }
 
                 // 3) Parser la réponse
@@ -149,27 +136,23 @@ namespace SocialNetworkArmy.Services
                     var label = pred.GetProperty("label").GetString();
                     var score = pred.GetProperty("score").GetDouble();
 
-                    Log($"[Filter] Prediction: {label} = {score:P1}");
-
-                    // ✅ Check for female
+                    // Check for female
                     if (label.Contains("female", StringComparison.OrdinalIgnoreCase) ||
                         label.Contains("woman", StringComparison.OrdinalIgnoreCase))
                     {
                         result.HasFaces = true;
                         result.FaceCount = 1;
-                        result.IsFemale = score > 0.6; // Seuil de confiance
-                        Log($"[Filter] Female score: {score:P1} → {(result.IsFemale ? "ACCEPTED" : "REJECTED (too low)")}");
+                        result.IsFemale = score > 0.6; // Threshold
                         break;
                     }
 
-                    // ✅ Check for male
+                    // Check for male
                     if (label.Contains("male", StringComparison.OrdinalIgnoreCase) ||
                         label.Contains("man", StringComparison.OrdinalIgnoreCase))
                     {
                         result.HasFaces = true;
                         result.FaceCount = 1;
-                        result.IsFemale = false; // Explicitly false for male
-                        Log($"[Filter] Male detected: {score:P1} → REJECTED");
+                        result.IsFemale = false;
                         break;
                     }
                 }
@@ -178,7 +161,7 @@ namespace SocialNetworkArmy.Services
             }
             catch (Exception ex)
             {
-                Log($"[Filter] HuggingFace error: {ex.Message}");
+                Log($"[Filter] ⚠️ Error: {ex.Message}");
                 return new AnalysisResult { HasFaces = false };
             }
         }
@@ -204,81 +187,44 @@ namespace SocialNetworkArmy.Services
             try
             {
                 // 1) Récupérer l'URL de l'image actuellement affichée via JavaScript
-                string jsResult = await webView.ExecuteScriptAsync(@"
+                string imageUrl = await webView.ExecuteScriptAsync(@"
                     (function() {
-                        const debug = [];
-
-                        // Stratégie 1: Video visible avec poster
+                        // Strategy 1: Video poster
                         const videos = document.querySelectorAll('video');
-                        debug.push(`Videos: ${videos.length}`);
-
                         for (let video of videos) {
                             const rect = video.getBoundingClientRect();
-                            const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
-                            if (isVisible) {
-                                debug.push(`VisVideo: poster=${video.poster ? 'yes' : 'no'}`);
-                                if (video.poster) {
-                                    return JSON.stringify({url: video.poster, debug: debug.join(', ')});
-                                }
+                            if (rect.top < window.innerHeight && rect.bottom > 0 && video.poster) {
+                                return video.poster;
                             }
                         }
 
-                        // Stratégie 2: Images visibles (ANY size first to debug)
+                        // Strategy 2: Visible images
                         const allImages = Array.from(document.querySelectorAll('img'));
-                        debug.push(`AllImgs: ${allImages.length}`);
-
                         const visibleImages = allImages.filter(img => {
                             const rect = img.getBoundingClientRect();
                             return rect.top < window.innerHeight && rect.bottom > 0;
                         });
 
-                        debug.push(`VisImgs: ${visibleImages.length}`);
-
                         if (visibleImages.length > 0) {
-                            // Sort by size (use computed size, not natural)
                             visibleImages.sort((a, b) => {
-                                const sizeA = a.width * a.height;
-                                const sizeB = b.width * b.height;
-                                return sizeB - sizeA;
+                                return (b.width * b.height) - (a.width * a.height);
                             });
 
                             const largest = visibleImages[0];
-                            debug.push(`Largest: ${largest.width}x${largest.height}`);
-
-                            // Skip tiny images (avatars)
                             if (largest.width > 50 && largest.height > 50) {
-                                return JSON.stringify({url: largest.src || largest.currentSrc, debug: debug.join(', ')});
-                            } else {
-                                debug.push('TooSmall');
+                                return largest.src || largest.currentSrc;
                             }
                         }
 
-                        return JSON.stringify({url: null, debug: debug.join(', ')});
+                        return null;
                     })()
                 ");
 
-                // Parse the JSON result
-                string imageUrl = null;
-                string debugInfo = "";
-
-                try
-                {
-                    var result = JsonDocument.Parse(jsResult.Trim('"').Replace("\\\"", "\""));
-                    imageUrl = result.RootElement.GetProperty("url").GetString();
-                    debugInfo = result.RootElement.GetProperty("debug").GetString();
-                }
-                catch
-                {
-                    imageUrl = jsResult?.Trim('"');
-                    debugInfo = "Failed to parse JSON";
-                }
-
-                Log($"[Filter] JS Debug: {debugInfo}");
-                Log($"[Filter] Extracted image URL: {imageUrl ?? "(null)"}");
+                imageUrl = imageUrl?.Trim('"');
 
                 if (string.IsNullOrWhiteSpace(imageUrl))
                 {
-                    Log($"[Filter] ⚠️ No image/poster found - SKIPPING for safety");
+                    Log($"[Filter] ✗ No image");
                     return false;
                 }
 
@@ -287,8 +233,8 @@ namespace SocialNetworkArmy.Services
             }
             catch (Exception ex)
             {
-                Log($"[Filter] Screenshot analysis error: {ex.Message}");
-                return false; // ✅ Changed: Skip on error (safer)
+                Log($"[Filter] ⚠️ Error: {ex.Message}");
+                return false;
             }
         }
 
