@@ -20,6 +20,7 @@ namespace SocialNetworkArmy.Services
         private readonly TextBox logTextBox;
         private readonly Profile profile;
         private readonly Random rand = new Random();
+        private readonly HumanBehaviorSimulator humanBehavior;
 
         public TargetService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -28,86 +29,10 @@ namespace SocialNetworkArmy.Services
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.form = form ?? throw new ArgumentNullException(nameof(form));
             this.navigationService = new NavigationService(webView, logTextBox);
-        }
-        private string GetNextButtonScript()
-        {
-            return @"
-(function(){
-  try {
-    console.log('[TEST] Script started');
-    
-    var dialog = document.querySelector('div[role=""dialog""]');
-    if (!dialog) {
-      console.log('[TEST] No dialog');
-      return 'NO_DIALOG';
-    }
-    
-    console.log('[TEST] Dialog found');
-    
-    // Stratégie simple : dernier bouton visible
-    var allBtns = Array.from(dialog.querySelectorAll('button')).filter(b => {
-      var rect = b.getBoundingClientRect();
-      return b.offsetWidth > 0 && b.offsetHeight > 0 && rect.width > 0;
-    });
-    
-    console.log('[TEST] Found ' + allBtns.length + ' buttons');
-    
-    if (allBtns.length < 2) {
-      console.log('[TEST] Not enough buttons');
-      return 'NO_NEXT_BUTTON';
-    }
-    
-    // Trier par position horizontale, prendre le dernier (à droite)
-    allBtns.sort(function(a, b) {
-      return a.getBoundingClientRect().left - b.getBoundingClientRect().left;
-    });
-    
-    var nextBtn = allBtns[allBtns.length - 1];
-    console.log('[TEST] Selected rightmost button');
-    
-    var rect = nextBtn.getBoundingClientRect();
-    var clientX = Math.floor(rect.left + rect.width / 2);
-    var clientY = Math.floor(rect.top + rect.height / 2);
-    
-    console.log('[TEST] Click at ' + clientX + ',' + clientY);
-    
-    nextBtn.click();
-    
-    var result = 'NEXT_CLICKED:' + clientX + ',' + clientY;
-    console.log('[TEST] Returning: ' + result);
-    return result;
-    
-  } catch(e) {
-    console.error('[TEST] Error: ' + e.message);
-    return 'EXCEPTION: ' + e.message;
-  }
-})()";
+            this.humanBehavior = new HumanBehaviorSimulator(webView);
         }
 
-        private static bool JsBoolIsTrue(string jsResult)
-        {
-            if (string.IsNullOrWhiteSpace(jsResult)) return false;
-            var s = jsResult.Trim();
-            if (s.StartsWith("\"") && s.EndsWith("\""))
-                s = s.Substring(1, s.Length - 2);
-            return s.Equals("true", StringComparison.OrdinalIgnoreCase);
-        }
 
-        private async Task RandomHumanPauseAsync(CancellationToken token, int minShort = 500, int maxShort = 2000, double longPauseChance = 0.04, int minLong = 10000, int maxLong = 60000)
-        {
-            if (rand.NextDouble() < longPauseChance)
-            {
-                int longDelay = rand.Next(minLong, maxLong);
-                logTextBox.AppendText($"[HUMAN PAUSE] Long distraction pause: {longDelay}ms\r\n");
-                await Task.Delay(longDelay, token);
-            }
-            else
-            {
-                int shortDelay = rand.Next(minShort, maxShort);
-                logTextBox.AppendText($"[HUMAN PAUSE] Short pause: {shortDelay}ms\r\n");
-                await Task.Delay(shortDelay, token);
-            }
-        }
         private void MarkTargetAsDone(string target, string doneTargetsPath, string reason = "")
         {
             try
@@ -140,36 +65,6 @@ namespace SocialNetworkArmy.Services
             catch (Exception ex)
             {
                 logTextBox.AppendText($"[DONE_TARGETS ERROR] Unable to add {target}: {ex.Message}\r\n");
-            }
-        }
-        private async Task RandomHumanNoiseAsync(CancellationToken token)
-        {
-            if (rand.NextDouble() < 0.3)  // 30% chance for noise
-            {
-                logTextBox.AppendText("[HUMAN NOISE] Adding idle scroll or hover...\r\n");
-
-                var noiseScript = @"
-(async function(){
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-  // Random scroll
-  window.scrollBy(0, Math.random() * 200 - 100);  // Small up/down scroll
-  await sleep(500);
-
-  // Hover over a random element (e.g., a post or button without clicking)
-  var elements = document.querySelectorAll('a, button, div[role=""button""]');
-  if (elements.length > 0) {
-    var randomEl = elements[Math.floor(Math.random() * elements.length)];
-    var rect = randomEl.getBoundingClientRect();
-    var x = rect.left + rect.width / 2;
-    var y = rect.top + rect.height / 2;
-    randomEl.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, clientX: x, clientY: y}));
-    await sleep(Math.random() * 1000 + 500);  // Hover 0.5-1.5s
-    randomEl.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true, clientX: x, clientY: y}));
-  }
-  return 'NOISE_ADDED';
-})()";
-                var noiseResult = await webView.ExecuteScriptAsync(noiseScript);
-                logTextBox.AppendText($"[NOISE] {noiseResult}\r\n");
             }
         }
 
@@ -243,7 +138,7 @@ namespace SocialNetworkArmy.Services
   return url.includes('/reels/') ? 'true' : 'false';
 })()");
 
-            if (!JsBoolIsTrue(checkReels))
+            if (!TargetJavaScriptHelper.JsBoolIsTrue(checkReels))
             {
                 logTextBox.AppendText("[NAV] ✗ Reels tab did not load\r\n");
                 return false;
@@ -314,7 +209,7 @@ namespace SocialNetworkArmy.Services
   return !document.querySelector('div[role=""dialog""]') ? 'true' : 'false';
 })()");
 
-            if (!JsBoolIsTrue(checkClosed))
+            if (!TargetJavaScriptHelper.JsBoolIsTrue(checkClosed))
             {
                 logTextBox.AppendText("[NAV] ✗ Modal did not close\r\n");
                 return false;
@@ -523,7 +418,7 @@ namespace SocialNetworkArmy.Services
                     logTextBox.AppendText($"[SCROLL_BACK] Clicking Next again to sync...\r\n");
 
                     // ✅ Cliquer Next une fois de plus pour resynchroniser
-                    var resyncScript = GetNextButtonScript();
+                    var resyncScript = TargetJavaScriptHelper.GetNextButtonScript();
                     await webView.ExecuteScriptAsync(resyncScript);
                     await Task.Delay(rand.Next(2000, 3000), token);
 
@@ -816,8 +711,8 @@ namespace SocialNetworkArmy.Services
                             continue;
                         }
 
-                        await RandomHumanNoiseAsync(token);
-                        await RandomHumanNoiseAsync(token);
+                        await humanBehavior.RandomHumanNoiseAsync(token);
+                        await humanBehavior.RandomHumanNoiseAsync(token);
 
                         // Click on Reels tab
                         bool reelsSuccess = await ClickReelsTabAsync(currentTarget, lang, token);
@@ -834,7 +729,7 @@ namespace SocialNetworkArmy.Services
                         while (!isLoaded && loadRetries < 5)
                         {
                             var loadCheck = await webView.ExecuteScriptAsync("document.querySelectorAll('a[href*=\"/reel/\"]').length > 0 ? 'true' : 'false';");
-                            isLoaded = JsBoolIsTrue(loadCheck);
+                            isLoaded = TargetJavaScriptHelper.JsBoolIsTrue(loadCheck);
                             if (!isLoaded)
                             {
                                 await Task.Delay(2000, token);
@@ -859,7 +754,7 @@ namespace SocialNetworkArmy.Services
                             return;
                         }
 
-                        await RandomHumanNoiseAsync(token);
+                        await humanBehavior.RandomHumanNoiseAsync(token);
 
                         // Sélecteur 1er Reel
                         var findReelScript = @"
@@ -911,7 +806,7 @@ namespace SocialNetworkArmy.Services
   return (urlHasReel || hasDialog || hasOverlay).toString();
 })()");
 
-                        if (!JsBoolIsTrue(openedCheck))
+                        if (!TargetJavaScriptHelper.JsBoolIsTrue(openedCheck))
                         {
                             var clickMouseEvents = await webView.ExecuteScriptAsync(@"
 (async function(){
@@ -937,7 +832,7 @@ namespace SocialNetworkArmy.Services
 })()");
                         }
 
-                        if (!JsBoolIsTrue(openedCheck))
+                        if (!TargetJavaScriptHelper.JsBoolIsTrue(openedCheck))
                         {
                             logTextBox.AppendText("[KO] Impossible d'ouvrir le 1er Reel.\r\n");
                             continue;
@@ -1055,7 +950,7 @@ namespace SocialNetworkArmy.Services
                                 }
                                 else
                                 {
-                                    nextScript = GetNextButtonScript();  // ✅ Appel de la méthode
+                                    nextScript = TargetJavaScriptHelper.GetNextButtonScript();
                                 }
 
 
@@ -1123,7 +1018,7 @@ namespace SocialNetworkArmy.Services
   return (hasDialog && hasVideo) ? 'true' : 'false';
 })()");
 
-                                    if (newReelId != reelId && newReelId != "NO_ID" && JsBoolIsTrue(checkAdvanced))
+                                    if (newReelId != reelId && newReelId != "NO_ID" && TargetJavaScriptHelper.JsBoolIsTrue(checkAdvanced))
                                     {
                                         logTextBox.AppendText("[SKIP] ✓ Successfully advanced to next reel\r\n");
                                         break;
@@ -1164,7 +1059,7 @@ namespace SocialNetworkArmy.Services
                             }
 
                             // ✅ SINON, TRAITER NORMALEMENT (WATCH, LIKE, COMMENT SI shouldComment)
-                            await RandomHumanPauseAsync(token);
+                            await humanBehavior.RandomHumanPauseAsync(token);
 
                             // Watch delay with possible pause
                             int watchTime = rand.Next(5000, 10001);
@@ -1596,8 +1491,8 @@ namespace SocialNetworkArmy.Services
                                 logTextBox.AppendText($"[COMMENT] Skipped: Reel is {ageHours:F1}h old (not < 24h)\r\n");
                             }
 
-                            await RandomHumanPauseAsync(token);
-                            await RandomHumanNoiseAsync(token);
+                            await humanBehavior.RandomHumanPauseAsync(token);
+                            await humanBehavior.RandomHumanNoiseAsync(token);
 
                             // NEXT si pas le dernier
                             if (reelNum < maxReels)
@@ -1630,7 +1525,7 @@ namespace SocialNetworkArmy.Services
                                 }
                                 else
                                 {
-                                    nextScript = GetNextButtonScript();  // ✅ Appel de la méthode
+                                    nextScript = TargetJavaScriptHelper.GetNextButtonScript();
                                 }
 
                                 var nextTry = await webView.ExecuteScriptAsync(nextScript);
@@ -1694,7 +1589,7 @@ namespace SocialNetworkArmy.Services
   return (hasDialog && hasVideo) ? 'true' : 'false';
 })()");
 
-                                    if (newReelId != previousReelId && newReelId != "NO_ID" && JsBoolIsTrue(checkAdvanced))
+                                    if (newReelId != previousReelId && newReelId != "NO_ID" && TargetJavaScriptHelper.JsBoolIsTrue(checkAdvanced))
                                     {
                                         logTextBox.AppendText("[NEXT] ✓ Successfully advanced to next reel\r\n");
                                         break;
@@ -1733,7 +1628,7 @@ namespace SocialNetworkArmy.Services
   const hasDialog  = !!document.querySelector('div[role=""dialog""]');
   return hasDialog.toString();
 })()");
-                                if (!JsBoolIsTrue(stillOpened))
+                                if (!TargetJavaScriptHelper.JsBoolIsTrue(stillOpened))
                                 {
                                     logTextBox.AppendText("[NEXT] Plus de modal, arrêt boucle.\r\n");
                                     break;
