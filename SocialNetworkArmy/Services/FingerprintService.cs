@@ -121,6 +121,108 @@ namespace SocialNetworkArmy.Services
             };
         }
 
+        // ✅ NOUVEAU: Fingerprint pour appareils mobiles (Story posting)
+        public Fingerprint GenerateMobileFingerprint()
+        {
+            // ✅ User-Agents mobiles réalistes (Android Chrome récents)
+            var userAgents = new[]
+            {
+                "Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+                "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                "Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+                "Mozilla/5.0 (Linux; Android 14; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                "Mozilla/5.0 (Linux; Android 13; OnePlus 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/130.0.6723.37 Mobile/15E148 Safari/604.1",
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1",
+                "Mozilla/5.0 (Linux; Android 14; SM-A546B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+                "Mozilla/5.0 (Linux; Android 13; Redmi Note 12 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+            };
+
+            // ✅ Résolutions mobiles courantes
+            var resolutions = new[]
+            {
+                "360x800",   // Samsung Galaxy A series
+                "375x812",   // iPhone X/XS/11 Pro
+                "390x844",   // iPhone 12/13/14
+                "393x852",   // Pixel 7
+                "412x915",   // Samsung Galaxy S21/S22
+                "414x896",   // iPhone 11/XR
+                "428x926",   // iPhone 12/13/14 Pro Max
+                "360x780",   // Various Android
+                "384x854",   // Various Android
+                "411x823",   // Pixel 6
+            };
+
+            // ✅ Timezones
+            var timezones = new[]
+            {
+                "Europe/Paris", "Europe/London", "Europe/Berlin", "Europe/Madrid", "Europe/Rome",
+                "America/New_York", "America/Chicago", "America/Los_Angeles", "America/Toronto",
+                "Asia/Tokyo", "Asia/Shanghai", "Australia/Sydney"
+            };
+
+            // ✅ GPUs mobiles réalistes
+            var gpuConfigs = new[]
+            {
+                new { vendor = "Qualcomm", renderer = "Adreno (TM) 730" },
+                new { vendor = "Qualcomm", renderer = "Adreno (TM) 740" },
+                new { vendor = "ARM", renderer = "Mali-G78" },
+                new { vendor = "ARM", renderer = "Mali-G710" },
+                new { vendor = "Apple", renderer = "Apple A16 GPU" },
+                new { vendor = "Apple", renderer = "Apple A17 Pro GPU" },
+                new { vendor = "Qualcomm", renderer = "Adreno (TM) 650" },
+                new { vendor = "ARM", renderer = "Mali-G77" },
+            };
+
+            var gpu = gpuConfigs[rand.Next(gpuConfigs.Length)];
+
+            var platforms = new[] { "Linux armv81", "iPhone" };
+            var vendorsUA = new[] { "Google Inc.", "Apple Computer, Inc." };
+
+            var languages = new List<string> { "en-US", "en" };
+
+            // ✅ Calculer viewport basé sur résolution mobile
+            var selectedRes = resolutions[rand.Next(resolutions.Length)];
+            var resParts = selectedRes.Split('x');
+            int width = int.Parse(resParts[0]);
+            int height = int.Parse(resParts[1]);
+            string viewport = $"{width}x{height - rand.Next(40, 80)}"; // Soustraire barre URL
+
+            // ✅ Fonts mobiles (moins que desktop)
+            var baseFonts = new[] { "Arial", "Helvetica", "sans-serif", "Roboto", "San Francisco" };
+            var fonts = baseFonts.Take(rand.Next(3, 6)).ToList();
+
+            return new Fingerprint
+            {
+                UserAgent = userAgents[rand.Next(userAgents.Length)],
+                Timezone = timezones[rand.Next(timezones.Length)],
+                Languages = languages,
+                ScreenResolution = selectedRes,
+                Viewport = viewport,
+                WebGLVendor = gpu.vendor,
+                WebGLRenderer = gpu.renderer,
+                AudioContext = $"noise_{rand.Next(10000, 99999)}",
+                Fonts = fonts,
+                HardwareConcurrency = rand.Next(4, 9), // Mobile: 4-8 cores
+                Platform = platforms[rand.Next(platforms.Length)],
+                Vendor = vendorsUA[rand.Next(vendorsUA.Length)],
+                ScreenDepth = 24, // Mobile toujours 24-bit
+                MaxTouchPoints = rand.Next(5, 11), // Mobile: 5-10 touch points
+                Plugins = GenerateMobilePlugins()
+            };
+        }
+
+        private List<object> GenerateMobilePlugins()
+        {
+            // Plugins mobiles (moins que desktop)
+            return new List<object>
+            {
+                new { name = "Chrome PDF Viewer", filename = "internal-pdf-viewer", description = "Portable Document Format" },
+                new { name = "PDF Viewer", filename = "mhjfbmdgcfjbbpaeojofohoefgiehjai", description = "PDF Viewer" }
+            };
+        }
+
         private List<object> GeneratePlugins()
         {
             // Liste simple mais valable ; on renvoie des objets pour sérialiser proprement en JS

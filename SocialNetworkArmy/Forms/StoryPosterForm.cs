@@ -27,6 +27,9 @@ namespace SocialNetworkArmy.Forms
         private Button postStoryButton;
         private bool isWebViewReady = false;
         private bool isDisposing = false;
+        // ✅ NOUVEAU: Fingerprinting pour stealth 10/10
+        private readonly FingerprintService fingerprintService;
+        private readonly Models.Fingerprint fingerprint;
         // Dimensions Samsung Galaxy S23 (mode portrait)
         private const int DEVICE_WIDTH = 360;
         private const int DEVICE_HEIGHT = 780;
@@ -505,6 +508,11 @@ namespace SocialNetworkArmy.Forms
          ControlStyles.OptimizedDoubleBuffer, true);
             this.UpdateStyles();
             proxyService = new ProxyService();
+
+            // ✅ NOUVEAU: Générer fingerprint mobile unique
+            fingerprintService = new FingerprintService();
+            fingerprint = fingerprintService.GenerateMobileFingerprint();
+
             InitializeComponent();
             if (Environment.OSVersion.Version.Major >= 10)
             {
@@ -603,6 +611,7 @@ namespace SocialNetworkArmy.Forms
                 logTextBox.AppendText("[INFO] Initializing browser...\r\n");
                 Directory.CreateDirectory(userDataFolder);
 
+                // ✅ AMÉLIORATION: Utiliser User-Agent du fingerprint (randomisé)
                 var options = new CoreWebView2EnvironmentOptions
                 {
                     AdditionalBrowserArguments =
@@ -614,8 +623,7 @@ namespace SocialNetworkArmy.Forms
                         "--no-default-browser-check " +
                         "--autoplay-policy=no-user-gesture-required " +
                         $"--window-size={DEVICE_WIDTH},{DEVICE_HEIGHT} " +
-                        // ✅ User-Agent Chrome Mobile STANDARD (pas Edge)
-                        "--user-agent=\"Mozilla/5.0 (Linux; Android 14; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36\""
+                        $"--user-agent=\"{fingerprint.UserAgent}\""
                 };
 
                 if (!string.IsNullOrWhiteSpace(profile.Proxy))
@@ -633,14 +641,10 @@ namespace SocialNetworkArmy.Forms
                 await webView.EnsureCoreWebView2Async(env);
                 logTextBox.AppendText("[OK] WebView2 ready\r\n");
 
-
-                var script = STEALTH_SCRIPT
-                    .Replace("__WIDTH__", DEVICE_WIDTH.ToString(CultureInfo.InvariantCulture))
-                    .Replace("__HEIGHT__", DEVICE_HEIGHT.ToString(CultureInfo.InvariantCulture))
-                    .Replace("__DPR__", DEVICE_PIXEL_RATIO.ToString(CultureInfo.InvariantCulture));
-
-                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script);
-                logTextBox.AppendText("[OK] Stealth script injected\r\n");
+                // ✅ AMÉLIORATION: Utiliser FingerprintService pour JS spoof complet
+                var stealthScript = fingerprintService.GenerateJSSpoof(fingerprint);
+                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
+                logTextBox.AppendText("[OK] Advanced fingerprint stealth injected (10/10)\r\n");
 
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
