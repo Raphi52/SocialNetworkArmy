@@ -194,35 +194,46 @@ namespace SocialNetworkArmy.Services
         {
             logTextBox.AppendText("[SCROLL_BACK] Going back to previous reel...\r\n");
 
-            var scrollBackScript = @"
-(function() {
+            // ✅ AMÉLIORATION: Légère dérive horizontale pour scroll plus humain
+            int horizontalDrift = rand.Next(-8, 9);
+
+            var scrollBackScript = $@"
+(function() {{
   let scroller = document.querySelector('div[role=""main""] > div') ||
                  document.querySelector('div[data-testid=""reels-tab""]') ||
-                 Array.from(document.querySelectorAll('div')).find(div => {
+                 Array.from(document.querySelectorAll('div')).find(div => {{
                    const style = window.getComputedStyle(div);
                    return (style.overflowY === 'scroll' || style.overflowY === 'auto') && div.clientHeight >= window.innerHeight * 0.8;
-                 }) || document.body;
+                 }}) || document.body;
 
   if (!scroller) return 'NO_SCROLLER_FOUND';
 
   const startY = scroller.scrollTop;
+  const startX = scroller.scrollLeft || 0;
   const targetY = Math.max(0, startY - window.innerHeight);
   const duration = 800 + Math.random() * 400;
+  const horizontalDrift = {horizontalDrift};
   const startTime = performance.now();
 
-  function scrollStep(currentTime) {
+  function scrollStep(currentTime) {{
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
     const easeOut = 1 - Math.pow(1 - progress, 3);
-    scroller.scrollTo(0, startY + (targetY - startY) * easeOut);
-    if (progress < 1) {
+
+    // ✅ Calcul Y avec easing + X avec légère oscillation humaine
+    const y = startY + (targetY - startY) * easeOut;
+    const x = startX + horizontalDrift * Math.sin(progress * Math.PI);
+
+    scroller.scrollTo(x, y);
+
+    if (progress < 1) {{
       requestAnimationFrame(scrollStep);
-    }
-  }
+    }}
+  }}
 
   requestAnimationFrame(scrollStep);
   return 'SCROLLED_BACK';
-})();
+}})();
 ";
 
             var result = await webView.ExecuteScriptAsync(scrollBackScript);
@@ -255,6 +266,9 @@ namespace SocialNetworkArmy.Services
                 logTextBox.AppendText("[SCROLL] Slow scroll (hesitant)\r\n");
             }
 
+            // ✅ AMÉLIORATION: Légère dérive horizontale pour scroll plus humain
+            int horizontalDrift = rand.Next(-8, 9); // ±8px de drift horizontal
+
             var scrollScript = $@"
 (function() {{
   let scroller = document.querySelector('div[role=""main""] > div') ||
@@ -267,15 +281,23 @@ namespace SocialNetworkArmy.Services
   if (!scroller) return 'NO_SCROLLER_FOUND';
 
   const startY = scroller.scrollTop;
+  const startX = scroller.scrollLeft || 0;
   const targetY = startY + window.innerHeight;
   const duration = {duration};
+  const horizontalDrift = {horizontalDrift};
   const startTime = performance.now();
 
   function scrollStep(currentTime) {{
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
     const easeOut = 1 - Math.pow(1 - progress, 3);
-    scroller.scrollTo(0, startY + (targetY - startY) * easeOut);
+
+    // ✅ Calcul Y avec easing + X avec légère oscillation humaine
+    const y = startY + (targetY - startY) * easeOut;
+    const x = startX + horizontalDrift * Math.sin(progress * Math.PI); // Oscillation sinusoïdale
+
+    scroller.scrollTo(x, y);
+
     if (progress < 1) {{
       requestAnimationFrame(scrollStep);
     }}

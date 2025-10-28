@@ -14,44 +14,108 @@ namespace SocialNetworkArmy.Services
 
         public Fingerprint GenerateDesktopFingerprint()
         {
+            // ✅ AMÉLIORATION: Plus de User-Agents (versions récentes Chrome 120-131)
             var userAgents = new[]
             {
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             };
 
-            var resolutions = new[] { "1920x1080", "1366x768", "1536x864" };
-            var timezones = new[] { "Europe/Paris", "America/New_York", "Europe/London" };
+            // ✅ AMÉLIORATION: Plus de résolutions courantes
+            var resolutions = new[]
+            {
+                "1920x1080", // 23%
+                "1366x768",  // 14%
+                "1536x864",  // 9%
+                "1440x900",  // 8%
+                "2560x1440", // 7%
+                "1600x900",  // 5%
+                "1280x1024", // 4%
+                "2560x1080", // Ultrawide
+                "3440x1440", // Ultrawide
+                "1680x1050",
+                "1280x720"
+            };
 
-            var baseFonts = new[] { "Arial", "Times New Roman", "Helvetica", "Courier New", "Verdana" };
+            // ✅ AMÉLIORATION: Plus de timezones réalistes
+            var timezones = new[]
+            {
+                "Europe/Paris",
+                "Europe/London",
+                "Europe/Berlin",
+                "Europe/Madrid",
+                "Europe/Rome",
+                "America/New_York",
+                "America/Chicago",
+                "America/Los_Angeles",
+                "America/Toronto",
+                "Asia/Tokyo",
+                "Asia/Shanghai",
+                "Australia/Sydney"
+            };
+
+            var baseFonts = new[] { "Arial", "Times New Roman", "Helvetica", "Courier New", "Verdana", "Georgia", "Calibri", "Segoe UI" };
             var fonts = baseFonts
-                .Concat(Enumerable.Range(0, rand.Next(5, 8)).Select(_ => baseFonts[rand.Next(baseFonts.Length)]))
+                .Concat(Enumerable.Range(0, rand.Next(8, 15)).Select(_ => baseFonts[rand.Next(baseFonts.Length)]))
+                .Distinct()
                 .ToList();
 
-            var vendors = new[] { "NVIDIA Corporation", "Intel Inc.", "Google Inc." };
-            var renderers = new[] { "NVIDIA GeForce RTX 3060", "Intel UHD Graphics 630", "ANGLE (Intel, Intel(R) UHD Graphics 630, D3D11)" };
+            // ✅ AMÉLIORATION: Plus de GPUs réalistes
+            var gpuConfigs = new[]
+            {
+                new { vendor = "NVIDIA Corporation", renderer = "NVIDIA GeForce RTX 3060" },
+                new { vendor = "NVIDIA Corporation", renderer = "NVIDIA GeForce RTX 3070" },
+                new { vendor = "NVIDIA Corporation", renderer = "NVIDIA GeForce RTX 4060" },
+                new { vendor = "NVIDIA Corporation", renderer = "NVIDIA GeForce RTX 4070" },
+                new { vendor = "NVIDIA Corporation", renderer = "NVIDIA GeForce GTX 1660" },
+                new { vendor = "Intel Inc.", renderer = "Intel UHD Graphics 630" },
+                new { vendor = "Intel Inc.", renderer = "Intel Iris Xe Graphics" },
+                new { vendor = "Google Inc.", renderer = "ANGLE (Intel, Intel(R) UHD Graphics 630, D3D11)" },
+                new { vendor = "Google Inc.", renderer = "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060, D3D11)" },
+                new { vendor = "Apple", renderer = "Apple M1" },
+                new { vendor = "Apple", renderer = "Apple M2" },
+                new { vendor = "AMD", renderer = "AMD Radeon RX 6700 XT" },
+            };
+
+            var gpu = gpuConfigs[rand.Next(gpuConfigs.Length)];
 
             var platforms = new[] { "Win32", "MacIntel" };
-            var vendorsUA = new[] { "Google Inc.", "Apple Computer, Inc." };
+            var vendorsUA = new[] { "Google Inc.", "Apple Computer, Inc.", "" };
 
             var languages = new List<string> { "en-US", "en" };
+
+            // ✅ Calculer viewport basé sur résolution (réaliste)
+            var selectedRes = resolutions[rand.Next(resolutions.Length)];
+            var resParts = selectedRes.Split('x');
+            int width = int.Parse(resParts[0]);
+            int height = int.Parse(resParts[1]);
+            string viewport = $"{width}x{height - rand.Next(60, 120)}"; // Soustraire barre d'outils/favoris
 
             return new Fingerprint
             {
                 UserAgent = userAgents[rand.Next(userAgents.Length)],
                 Timezone = timezones[rand.Next(timezones.Length)],
                 Languages = languages,
-                ScreenResolution = resolutions[rand.Next(resolutions.Length)],
-                Viewport = "1920x1017",
-                WebGLVendor = vendors[rand.Next(vendors.Length)],
-                WebGLRenderer = renderers[rand.Next(renderers.Length)],
-                AudioContext = $"noise_{rand.Next(1000, 9999)}",
+                ScreenResolution = selectedRes,
+                Viewport = viewport,
+                WebGLVendor = gpu.vendor,
+                WebGLRenderer = gpu.renderer,
+                AudioContext = $"noise_{rand.Next(10000, 99999)}",
                 Fonts = fonts,
-                HardwareConcurrency = rand.Next(4, 12),
+                HardwareConcurrency = rand.Next(4, 17), // 4-16 cores
                 Platform = platforms[rand.Next(platforms.Length)],
                 Vendor = vendorsUA[rand.Next(vendorsUA.Length)],
-                ScreenDepth = rand.Next(2) == 0 ? 24 : 32,
+                ScreenDepth = rand.NextDouble() < 0.85 ? 24 : 32, // 85% ont 24-bit
                 MaxTouchPoints = 0,
                 Plugins = GeneratePlugins()
             };
@@ -220,8 +284,35 @@ namespace SocialNetworkArmy.Services
         }} catch(e){{ console.warn('plugins spoof failed', e); }}
     }})();
 
-    // ---------- Misc ----------
+    // ---------- Misc & WebView2 Detection Masking ----------
+    // ✅ Mask navigator.webdriver
     try {{ Object.defineProperty(navigator, 'webdriver', {{ get: () => undefined }}); }} catch(e){{}}
+
+    // ✅ Mask window.chrome.webview (WebView2 specific)
+    try {{
+        if (window.chrome && window.chrome.webview) {{
+            delete window.chrome.webview;
+        }}
+    }} catch(e){{}}
+
+    // ✅ Mask automation detection properties
+    try {{ delete window.__playwright; }} catch(e){{}}
+    try {{ delete window.__puppeteer; }} catch(e){{}}
+    try {{ delete window.__selenium; }} catch(e){{}}
+    try {{ delete window.callPhantom; }} catch(e){{}}
+    try {{ delete window._phantom; }} catch(e){{}}
+    try {{ delete navigator.__proto__.webdriver; }} catch(e){{}}
+
+    // ✅ Override chrome runtime (make it look real)
+    try {{
+        if (!window.chrome) {{
+            window.chrome = {{}};
+        }}
+        if (!window.chrome.runtime) {{
+            window.chrome.runtime = {{}};
+        }}
+    }} catch(e){{}}
+
     try {{ window.RTCPeerConnection = undefined; }} catch(e){{}}
 
     try {{
