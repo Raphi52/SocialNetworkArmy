@@ -232,12 +232,22 @@ namespace SocialNetworkArmy.Forms
                 // Load min comments
                 minCommentsInput.Value = config.MinCommentsToAddToFutureTargets;
 
+                // ✅ FIX: Clear ALL checkboxes first to ensure clean state
+                for (int i = 0; i < languagesCheckedList.Items.Count; i++)
+                {
+                    languagesCheckedList.SetItemChecked(i, false);
+                }
+
                 // Load languages
                 bool hasAny = config.TargetLanguages.Contains("Any");
-                languagesCheckedList.SetItemChecked(0, hasAny);
 
-                if (!hasAny)
+                if (hasAny)
                 {
+                    languagesCheckedList.SetItemChecked(0, true); // Check "Any"
+                }
+                else
+                {
+                    // Check specific languages
                     if (config.TargetLanguages.Contains("English"))
                         languagesCheckedList.SetItemChecked(1, true);
                     if (config.TargetLanguages.Contains("French"))
