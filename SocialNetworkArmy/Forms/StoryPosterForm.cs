@@ -641,10 +641,14 @@ namespace SocialNetworkArmy.Forms
                 await webView.EnsureCoreWebView2Async(env);
                 logTextBox.AppendText("[OK] WebView2 ready\r\n");
 
-                // ✅ ROLLBACK: Utiliser l'ancien stealth script qui fonctionnait bien pour mobile
-                // Le nouveau FingerprintService était trop agressif et Instagram détectait le bot
-                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(STEALTH_SCRIPT);
-                logTextBox.AppendText("[OK] Mobile stealth script injected\r\n");
+                // ✅ FIX: Replace tokens before injecting (WIDTH, HEIGHT, DPR)
+                var stealthScript = STEALTH_SCRIPT
+                    .Replace("__WIDTH__", DEVICE_WIDTH.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    .Replace("__HEIGHT__", DEVICE_HEIGHT.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    .Replace("__DPR__", DEVICE_PIXEL_RATIO.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
+                logTextBox.AppendText("[OK] Mobile stealth script injected (360x780, portrait)\r\n");
 
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
