@@ -578,6 +578,32 @@ namespace SocialNetworkArmy.Services
                     logTextBox.AppendText($"[TARGET] Total targets: {targets.Count}\r\n");
                     logTextBox.AppendText($"[TARGET] Already done by group '{groupName}': {doneTargets.Count}\r\n");
                     logTextBox.AppendText($"[TARGET] Pending targets: {pendingTargets.Count}\r\n");
+
+                    // ✅ FALLBACK: Si Targets.txt est vide, lire FutureTargets.txt
+                    if (pendingTargets.Count == 0)
+                    {
+                        var futureTargetsPath = Path.Combine(dataDir, "FutureTargets.txt");
+                        if (File.Exists(futureTargetsPath))
+                        {
+                            logTextBox.AppendText($"[TARGET] Targets.txt is empty, checking FutureTargets.txt...\r\n");
+
+                            var futureTargets = File.ReadAllLines(futureTargetsPath)
+                                                    .Where(line => !string.IsNullOrWhiteSpace(line))
+                                                    .Select(line => line.Trim())
+                                                    .ToList();
+
+                            // Filtrer ceux déjà traités
+                            pendingTargets = futureTargets.Where(t => !doneTargets.Contains(t)).ToList();
+
+                            logTextBox.AppendText($"[TARGET] Loaded {futureTargets.Count} from FutureTargets.txt\r\n");
+                            logTextBox.AppendText($"[TARGET] Pending from FutureTargets: {pendingTargets.Count}\r\n");
+                        }
+                        else
+                        {
+                            logTextBox.AppendText($"[TARGET] No FutureTargets.txt found\r\n");
+                        }
+                    }
+
                     // ✅ DISTRIBUTION ENTRELACÉE DES TARGETS PAR GROUPE
                     // Pour récupérer les autres profils du groupe, on lit directement le JSON
                     var profilesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "profiles.json");

@@ -430,9 +430,9 @@ namespace SocialNetworkArmy.Services
                 }
 
                 // ⭐ Filtre minimum commentaires (config)
-                if (comments < config.MinCommentsToComment)
+                if (comments < config.MinCommentsToAddToFutureTargets)
                 {
-                    logTextBox.AppendText($"[TARGET] ⊘ Skipped '{creator}' ({comments} comments < {config.MinCommentsToComment})\r\n");
+                    logTextBox.AppendText($"[TARGET] ⊘ Skipped '{creator}' ({comments} comments < {config.MinCommentsToAddToFutureTargets})\r\n");
                     return;
                 }
 

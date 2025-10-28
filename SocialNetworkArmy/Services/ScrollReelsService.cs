@@ -840,7 +840,7 @@ getCurrentComments();
                                 int.TryParse(digitsOnly, out comments);
                             }
 
-                            if (comments >= config.MinCommentsToComment && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
+                            if (comments >= config.MinCommentsToAddToFutureTargets && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
                             {
                                 bool alreadyExists = false;
                                 if (File.Exists(targetFile))
@@ -886,7 +886,7 @@ getCurrentComments();
                             }
 
                             // ✅ AMÉLIORATION: Visite du profil (5-8% si bon engagement)
-                            bool shouldVisitProfile = comments >= config.MinCommentsToComment &&
+                            bool shouldVisitProfile = comments >= config.MinCommentsToAddToFutureTargets &&
                                                       watchTime > 15000 &&
                                                       rand.NextDouble() < 0.08;
                             if (shouldVisitProfile)

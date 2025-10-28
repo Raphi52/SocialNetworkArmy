@@ -230,7 +230,7 @@ namespace SocialNetworkArmy.Forms
             try
             {
                 // Load min comments
-                minCommentsInput.Value = config.MinCommentsToComment;
+                minCommentsInput.Value = config.MinCommentsToAddToFutureTargets;
 
                 // Load languages
                 bool hasAny = config.TargetLanguages.Contains("Any");
@@ -270,7 +270,7 @@ namespace SocialNetworkArmy.Forms
             try
             {
                 // Save min comments
-                config.MinCommentsToComment = (int)minCommentsInput.Value;
+                config.MinCommentsToAddToFutureTargets = (int)minCommentsInput.Value;
 
                 // Save languages
                 config.TargetLanguages.Clear();

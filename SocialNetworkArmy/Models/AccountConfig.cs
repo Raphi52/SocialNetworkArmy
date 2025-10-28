@@ -8,8 +8,8 @@ namespace SocialNetworkArmy.Models
         [JsonProperty("accountName")]
         public string AccountName { get; set; }
 
-        [JsonProperty("minCommentsToComment")]
-        public int MinCommentsToComment { get; set; } = 300;
+        [JsonProperty("minCommentsToAddToFutureTargets")]
+        public int MinCommentsToAddToFutureTargets { get; set; } = 300;
 
         [JsonProperty("targetLanguages")]
         public List<string> TargetLanguages { get; set; } = new List<string> { "Any" };
