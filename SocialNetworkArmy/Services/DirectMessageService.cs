@@ -20,11 +20,12 @@ namespace SocialNetworkArmy.Services
         private readonly InstagramBotForm _form;
         private readonly NavigationService _navigationService;
         private readonly MessageService _messageService;
+        private readonly Random _rng;
 
-        // Timings
-        private const int WaitAfterDirectMs = 3000;
-        private const int WaitAfterKItemMs = 5000;
-        private const int InterProfileMs = 5000;
+        // Timings (humanized - no longer constants)
+        private int WaitAfterDirectMs => 2500 + _rng.Next(500, 1500);
+        private int WaitAfterKItemMs => 4000 + _rng.Next(800, 2000);
+        private int InterProfileMs => 4000 + _rng.Next(1000, 3000);
 
         public DirectMessageService(WebView2 webView, System.Windows.Forms.TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -32,11 +33,133 @@ namespace SocialNetworkArmy.Services
             _log = logTextBox;
             _profile = profile;
             _form = form;
+            _rng = new Random();
             _navigationService = new NavigationService(webView, logTextBox);
             _messageService = new MessageService(webView, Log);
         }
 
         private void Log(string m) => _log?.AppendText("[DM] " + m + Environment.NewLine);
+
+        /// <summary>
+        /// ✅ NOUVEAU: Comportement humain - Micro-pause aléatoire
+        /// </summary>
+        private async Task HumanMicroPauseAsync(CancellationToken token)
+        {
+            try
+            {
+                // 60% chance de faire une micro-pause (0.3s-1.2s)
+                if (_rng.NextDouble() < 0.60)
+                {
+                    int pauseDuration = _rng.Next(300, 1200);
+                    await Task.Delay(pauseDuration, token);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[HUMAN] Micro-pause error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// ✅ NOUVEAU: Comportement humain - Mouvement de souris aléatoire
+        /// </summary>
+        private async Task HumanMouseMovementAsync(CancellationToken token)
+        {
+            try
+            {
+                // 40% chance de faire un mouvement de souris
+                if (_rng.NextDouble() < 0.40)
+                {
+                    var mouseMoveScript = @"
+(function() {
+    try {
+        const elements = document.querySelectorAll('a, button, div[role=""button""], article');
+        if (elements.length === 0) return 'NO_ELEMENTS';
+
+        const randomEl = elements[Math.floor(Math.random() * Math.min(elements.length, 15))];
+        const rect = randomEl.getBoundingClientRect();
+
+        if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+
+            randomEl.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, clientX: x, clientY: y}));
+
+            setTimeout(() => {
+                randomEl.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true, clientX: x, clientY: y}));
+            }, Math.random() * 800 + 300);
+        }
+
+        return 'MOUSE_MOVED';
+    } catch(e) {
+        return 'ERROR: ' + e.message;
+    }
+})();";
+
+                    await _webView.ExecuteScriptAsync(mouseMoveScript);
+                    await Task.Delay(_rng.Next(300, 800), token);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[HUMAN] Mouse movement error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// ✅ NOUVEAU: Comportement humain - Hésitation (pause avant action importante)
+        /// </summary>
+        private async Task HumanHesitationAsync(CancellationToken token)
+        {
+            try
+            {
+                // 30% chance d'hésiter (0.5s-2s)
+                if (_rng.NextDouble() < 0.30)
+                {
+                    int hesitationDuration = _rng.Next(500, 2000);
+                    Log($"[HUMAN] Hesitating ({hesitationDuration}ms)...");
+                    await Task.Delay(hesitationDuration, token);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[HUMAN] Hesitation error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// ✅ NOUVEAU: Comportement humain - Scroll léger aléatoire
+        /// </summary>
+        private async Task HumanRandomScrollAsync(CancellationToken token)
+        {
+            try
+            {
+                // 25% chance de faire un petit scroll
+                if (_rng.NextDouble() < 0.25)
+                {
+                    var scrollScript = @"
+(function() {
+    try {
+        const scrollAmount = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 150 + 50);
+        window.scrollBy({
+            top: scrollAmount,
+            behavior: 'smooth'
+        });
+        return 'SCROLLED';
+    } catch(e) {
+        return 'ERROR: ' + e.message;
+    }
+})();";
+
+                    await _webView.ExecuteScriptAsync(scrollScript);
+                    await Task.Delay(_rng.Next(500, 1200), token);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[HUMAN] Random scroll error: {ex.Message}");
+            }
+        }
 
         public async Task RunAsync(CancellationToken token = default)
         {
@@ -90,6 +213,9 @@ namespace SocialNetworkArmy.Services
                     runToken.ThrowIfCancellationRequested();
                     Log($"Profil : {target}");
 
+                    // ✅ Comportement humain : hésitation avant navigation
+                    await HumanHesitationAsync(runToken);
+
                     bool navSuccess = await _navigationService.NavigateToProfileViaSearchAsync(target, runToken);
                     if (!navSuccess)
                     {
@@ -97,13 +223,24 @@ namespace SocialNetworkArmy.Services
                         await Task.Delay(InterProfileMs, runToken);
                         continue;
                     }
-                    await Task.Delay(400, runToken);
+
+                    // ✅ Comportement humain : micro-pause après navigation
+                    await HumanMicroPauseAsync(runToken);
+
+                    // ✅ Comportement humain : mouvement de souris aléatoire
+                    await HumanMouseMovementAsync(runToken);
 
                     bool messageSent = false;
                     var msg = messages[rng.Next(messages.Count)];
 
+                    // ✅ Comportement humain : hésitation avant clic sur bouton message
+                    await HumanHesitationAsync(runToken);
+
                     var buttonResult = await _messageService.TryClickMessageButtonAsync(runToken);
                     Log($"[BUTTON] Résultat: {buttonResult}");
+
+                    // ✅ Comportement humain : micro-pause après clic bouton
+                    await HumanMicroPauseAsync(runToken);
 
                     // ========== CAS 1: MODAL PRO AVEC INPUT ==========
                     if (buttonResult == "pro_modal_opened")
@@ -217,13 +354,21 @@ namespace SocialNetworkArmy.Services
                         {
                             Log($"⚠ Erreur sauvegarde : {ex.Message}");
                         }
+
+                        // ✅ Comportement humain : micro-pause après succès
+                        await HumanMicroPauseAsync(runToken);
                     }
                     else
                     {
                         Log("✗ Échec total pour ce profil");
                     }
 
-                    await Task.Delay(800, runToken);
+                    // ✅ Comportement humain : scroll aléatoire avant le prochain profil
+                    await HumanRandomScrollAsync(runToken);
+
+                    // ✅ Comportement humain : mouvement de souris aléatoire
+                    await HumanMouseMovementAsync(runToken);
+
                     await Task.Delay(InterProfileMs, runToken);
                 }
 

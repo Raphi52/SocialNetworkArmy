@@ -31,6 +31,9 @@ namespace SocialNetworkArmy.Forms
         public bool AreServicesReady { get; private set; } = false;
         private readonly CleanupService cleanupService;
         private readonly MonitoringService monitoringService;
+        // ✅ NOUVEAU: Fingerprinting pour stealth 10/10 (DM + toutes features)
+        private readonly FingerprintService fingerprintService;
+        private readonly Models.Fingerprint fingerprint;
         private WebView2 webView;
         private Button targetButton;
         private Button scrollButton;
@@ -68,6 +71,11 @@ namespace SocialNetworkArmy.Forms
             monitoringService = new MonitoringService();
             proxyService = new ProxyService();
             _initCts = new CancellationTokenSource(); // ✅ Initialize cancellation for async init
+
+            // ✅ NOUVEAU: Générer fingerprint desktop unique pour stealth 10/10
+            fingerprintService = new FingerprintService();
+            fingerprint = fingerprintService.GenerateDesktopFingerprint();
+
             InitializeComponent();
             if (Environment.OSVersion.Version.Major >= 10)
             {
@@ -544,15 +552,12 @@ namespace SocialNetworkArmy.Forms
                     }
                 }
 
-                // ✅ 4. CREATE ENVIRONMENT OPTIONS
+                // ✅ 4. CREATE ENVIRONMENT OPTIONS WITH FINGERPRINT
                 var options = new CoreWebView2EnvironmentOptions();
 
-                string[] realUserAgents = new[]
-                {
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
-        };
-                var userAgent = realUserAgents[new Random().Next(realUserAgents.Length)];
+                // ✅ AMÉLIORATION: Utiliser l'UA du fingerprint généré (10/10 stealth)
+                var userAgent = fingerprint.UserAgent;
+                logTextBox.AppendText($"[INFO] Using fingerprint UA: {userAgent.Substring(0, Math.Min(80, userAgent.Length))}...\r\n");
 
                 // SIMPLIFIED ARGUMENTS (removed aggressive flags that can break loading)
                 options.AdditionalBrowserArguments =
@@ -670,8 +675,10 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
                 webView.CoreWebView2.Settings.UserAgent = userAgent;
 
-                // ✅ 10. INJECT STEALTH SCRIPT (SIMPLIFIED VERSION)
-                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(StealthScriptGenerator.GenerateScript());
+                // ✅ 10. INJECT ADVANCED FINGERPRINT STEALTH (10/10)
+                var stealthScript = fingerprintService.GenerateJSSpoof(fingerprint);
+                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
+                logTextBox.AppendText("[INFO] ✓ Advanced fingerprint stealth injected (10/10)\r\n");
 
                 // ✅ 11. SET EXTRA HEADERS
                 await webView.CoreWebView2.CallDevToolsProtocolMethodAsync(
