@@ -43,7 +43,7 @@ namespace SocialNetworkArmy.Services
                 if (File.Exists(configPath))
                 {
                     HUGGINGFACE_TOKEN = File.ReadAllText(configPath).Trim();
-                    Log("[CONFIG] HuggingFace token loaded successfully");
+                    // Token loaded silently (no log to avoid duplicates)
                 }
                 else
                 {

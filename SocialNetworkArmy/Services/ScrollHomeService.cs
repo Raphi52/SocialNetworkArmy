@@ -823,28 +823,28 @@ namespace SocialNetworkArmy.Services
 
         private async Task<int> GetHumanWatchTime(Random rand)
         {
-            // ✅ OPTIMIZED: Minimum 10s pour éduquer l'algo sur la niche "influenceuses"
-            // 50% du temps : 10-15 secondes (bon engagement)
-            // 30% du temps : 15-22 secondes (très bon engagement)
-            // 15% du temps : 22-30 secondes (excellent engagement)
-            // 5% du temps : 30-40 secondes (super engagé) + pause longue
+            // ✅ OPTIMIZED FOR SPEED: Shorter watch times, bonus will extend for perfect matches
+            // 60% du temps : 5-8 secondes (engagement rapide)
+            // 25% du temps : 8-12 secondes (bon engagement)
+            // 10% du temps : 12-18 secondes (très bon engagement)
+            // 5% du temps : 18-25 secondes (excellent engagement)
             double dice = rand.NextDouble();
 
-            if (dice < 0.50)
+            if (dice < 0.60)
             {
-                return rand.Next(10000, 15001); // 10-15s
+                return rand.Next(5000, 8001); // 5-8s (fast scroll, algo still learns)
             }
-            else if (dice < 0.80)
+            else if (dice < 0.85)
             {
-                return rand.Next(15000, 22001); // 15-22s
+                return rand.Next(8000, 12001); // 8-12s (good engagement)
             }
             else if (dice < 0.95)
             {
-                return rand.Next(22000, 30001); // 22-30s
+                return rand.Next(12000, 18001); // 12-18s (very good)
             }
             else
             {
-                return rand.Next(30000, 40001); // 30-40s
+                return rand.Next(18000, 25001); // 18-25s (excellent)
             }
         }
 
@@ -1300,7 +1300,8 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             }
                             else
                             {
-                                watchTime = rand.Next(1500, 4000);
+                                // ✅ OPTIMIZED: Shorter static post watch time (1-2.5s vs 1.5-4s)
+                                watchTime = rand.Next(1000, 2500);
 
                                 // 🎯 BONUS: +30-50% temps si femme + langue correspondent (éduquer l'algo)
                                 if (passedNicheFilter && passedLanguageFilter &&
