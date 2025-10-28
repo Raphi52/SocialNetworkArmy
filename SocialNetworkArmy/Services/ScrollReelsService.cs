@@ -21,6 +21,18 @@ namespace SocialNetworkArmy.Services
         private readonly LanguageDetectionService languageDetector;
         private readonly Models.AccountConfig config;
 
+        // ✅ Cache for recent detection results (avoid re-detecting on scrollBack)
+        private class ReelDetectionCache
+        {
+            public bool IsFemale { get; set; }
+            public string Language { get; set; }
+            public bool PassedFilters { get; set; }
+            public DateTime Timestamp { get; set; }
+        }
+        private readonly System.Collections.Generic.Dictionary<string, ReelDetectionCache> recentDetections
+            = new System.Collections.Generic.Dictionary<string, ReelDetectionCache>();
+        private static readonly TimeSpan DETECTION_CACHE_DURATION = TimeSpan.FromMinutes(5);
+
         public ScrollReelsService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
             this.webView = webView ?? throw new ArgumentNullException(nameof(webView));
@@ -30,6 +42,43 @@ namespace SocialNetworkArmy.Services
             this.contentFilter = new ContentFilterService(webView, logTextBox);
             this.languageDetector = new LanguageDetectionService(logTextBox);
             this.config = ConfigService.LoadConfig(profile.Name);
+        }
+
+        /// <summary>
+        /// Safe logging that checks if logTextBox is disposed before writing
+        /// Fixes: "cannot access disposed object" exception on form close
+        /// </summary>
+        private void SafeLog(string message)
+        {
+            try
+            {
+                if (logTextBox == null || logTextBox.IsDisposed || logTextBox.Disposing)
+                    return;
+
+                if (logTextBox.InvokeRequired)
+                {
+                    logTextBox.BeginInvoke(new Action(() =>
+                    {
+                        if (!logTextBox.IsDisposed && !logTextBox.Disposing)
+                        {
+                            logTextBox.AppendText(message + "\r\n");
+                            logTextBox.SelectionStart = logTextBox.TextLength;
+                            logTextBox.ScrollToCaret();
+                        }
+                    }));
+                }
+                else
+                {
+                    logTextBox.AppendText(message + "\r\n");
+                    logTextBox.SelectionStart = logTextBox.TextLength;
+                    logTextBox.ScrollToCaret();
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // Form closed while logging - ignore silently
+            }
+            catch { }
         }
 
         private static bool JsBoolIsTrue(string jsResult)

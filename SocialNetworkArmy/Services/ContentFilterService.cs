@@ -145,34 +145,53 @@ namespace SocialNetworkArmy.Services
 
                 var result = new AnalysisResult { HasFaces = false, FaceCount = 0, IsFemale = false, Confidence = 0 };
 
+                // ✅ Capture BOTH Female AND Male scores for logging
+                double femaleScore = 0;
+                double maleScore = 0;
+
                 foreach (var pred in predictions)
                 {
                     var label = pred.GetProperty("label").GetString();
                     var score = pred.GetProperty("score").GetDouble();
 
-                    // ✅ STRICT THRESHOLDS:
-                    // Female: need >80% confidence to KEEP
-                    // Male: need >40% confidence to SKIP
-
                     if (label.Contains("female", StringComparison.OrdinalIgnoreCase) ||
                         label.Contains("woman", StringComparison.OrdinalIgnoreCase))
                     {
+                        femaleScore = score;
                         result.HasFaces = true;
                         result.FaceCount = 1;
-                        result.Confidence = score;
-                        result.IsFemale = score > 0.80; // ✅ Strict: only keep if >80% confident it's female
-                        break;
                     }
 
                     if (label.Contains("male", StringComparison.OrdinalIgnoreCase) ||
                         label.Contains("man", StringComparison.OrdinalIgnoreCase))
                     {
+                        maleScore = score;
                         result.HasFaces = true;
                         result.FaceCount = 1;
-                        result.Confidence = score;
-                        result.IsFemale = false; // Male detected, will skip if >40% confidence
-                        break;
                     }
+                }
+
+                // ✅ Log BOTH scores for debugging
+                Log($"[Filter] API scores: Female={femaleScore:P0}, Male={maleScore:P0}");
+
+                // ✅ STRICT THRESHOLDS:
+                // Female: need >80% confidence to KEEP
+                // Male: need >40% confidence to SKIP
+                if (femaleScore > 0.80)
+                {
+                    result.IsFemale = true;
+                    result.Confidence = femaleScore;
+                }
+                else if (maleScore > 0.40)
+                {
+                    result.IsFemale = false;
+                    result.Confidence = maleScore;
+                }
+                else
+                {
+                    // Uncertain - default to false (skip)
+                    result.IsFemale = false;
+                    result.Confidence = Math.Max(femaleScore, maleScore);
                 }
 
                 return result;
