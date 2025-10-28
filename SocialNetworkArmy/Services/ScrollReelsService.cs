@@ -419,9 +419,11 @@ namespace SocialNetworkArmy.Services
         // ✅ AMÉLIORATION: Réécoute partielle du reel
         private async Task ReplayReelAsync(Random rand, CancellationToken token)
         {
-            logTextBox.AppendText("[REPLAY] Replaying reel from start...\r\n");
+            try
+            {
+                logTextBox.AppendText("[REPLAY] Replaying reel from start...\r\n");
 
-            await webView.ExecuteScriptAsync(@"
+                await webView.ExecuteScriptAsync(@"
 (function() {
   const videos = document.querySelectorAll('video');
   for(let v of videos) {
@@ -434,149 +436,211 @@ namespace SocialNetworkArmy.Services
   return 'NO_VIDEO';
 })();");
 
-            int replayDuration = rand.Next(3000, 8000);
-            logTextBox.AppendText($"[REPLAY] Re-watching for {replayDuration / 1000}s...\r\n");
-            await Task.Delay(replayDuration, token);
+                int replayDuration = rand.Next(3000, 8000);
+                logTextBox.AppendText($"[REPLAY] Re-watching for {replayDuration / 1000}s...\r\n");
+                await Task.Delay(replayDuration, token);
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[REPLAY ERROR] {ex.Message}\r\n");
+            }
         }
 
         // ✅ AMÉLIORATION: Consultation du profil créateur
         private async Task VisitCreatorProfileAsync(Random rand, CancellationToken token)
         {
-            logTextBox.AppendText("[PROFILE] Visiting creator profile...\r\n");
+            try
+            {
+                logTextBox.AppendText("[PROFILE] Visiting creator profile...\r\n");
 
-            var clickProfileScript = @"
+                var clickProfileScript = @"
 (function(){
-  const videos = document.querySelectorAll('video');
-  let mostVisible = null;
-  let maxVisible = 0;
+  try {
+    const videos = document.querySelectorAll('video');
+    let mostVisible = null;
+    let maxVisible = 0;
 
-  videos.forEach(video => {
-    const rect = video.getBoundingClientRect();
-    const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
-    if (visible > maxVisible) {
-      maxVisible = visible;
-      mostVisible = video;
+    videos.forEach(video => {
+      const rect = video.getBoundingClientRect();
+      const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      if (visible > maxVisible) {
+        maxVisible = visible;
+        mostVisible = video;
+      }
+    });
+
+    if (!mostVisible) return 'NO_VIDEO';
+
+    const parent = mostVisible.parentElement?.parentElement?.parentElement;
+    if (!parent) return 'NO_PARENT';
+
+    const creatorLink = parent.querySelector('a[role=""link""]');
+
+    if (creatorLink) {
+      creatorLink.click();
+      return 'CLICKED';
     }
-  });
-
-  if (!mostVisible) return 'NO_VIDEO';
-
-  const parent = mostVisible.parentElement.parentElement.parentElement;
-  const creatorLink = parent.querySelector('a[role=""link""]');
-
-  if (creatorLink) {
-    creatorLink.click();
-    return 'CLICKED';
+    return 'NO_LINK';
+  } catch(e) {
+    return 'ERROR: ' + e.message;
   }
-  return 'NO_LINK';
 })();";
 
-            var result = await webView.ExecuteScriptAsync(clickProfileScript);
+                var result = await webView.ExecuteScriptAsync(clickProfileScript);
 
-            if (result.Contains("CLICKED"))
-            {
-                await Task.Delay(rand.Next(3000, 7000), token); // Browse profile
+                if (result.Contains("CLICKED"))
+                {
+                    await Task.Delay(rand.Next(3000, 7000), token); // Browse profile
 
-                // Scroll profile
-                await webView.ExecuteScriptAsync("window.scrollBy(0, " + rand.Next(200, 500) + ");");
-                await Task.Delay(rand.Next(2000, 4000), token);
+                    // Scroll profile
+                    await webView.ExecuteScriptAsync("window.scrollBy(0, " + rand.Next(200, 500) + ");");
+                    await Task.Delay(rand.Next(2000, 4000), token);
 
-                // Back button
-                logTextBox.AppendText("[PROFILE] Returning to reels...\r\n");
-                await webView.ExecuteScriptAsync("window.history.back();");
-                await Task.Delay(rand.Next(2000, 3500), token);
+                    // Back button (safe)
+                    logTextBox.AppendText("[PROFILE] Returning to reels...\r\n");
+                    await webView.ExecuteScriptAsync(@"
+(function() {
+  try {
+    if (window.history.length > 1) {
+      window.history.back();
+      return 'BACK';
+    }
+    return 'NO_HISTORY';
+  } catch(e) {
+    return 'ERROR';
+  }
+})();");
+                    await Task.Delay(rand.Next(2000, 3500), token);
+                }
+                else
+                {
+                    logTextBox.AppendText("[PROFILE] Could not find creator link\r\n");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                logTextBox.AppendText("[PROFILE] Could not find creator link\r\n");
+                logTextBox.AppendText($"[PROFILE ERROR] {ex.Message}\r\n");
             }
         }
 
         // ✅ AMÉLIORATION: Expand caption
         private async Task ExpandCaptionAsync(Random rand, CancellationToken token)
         {
-            var expandScript = @"
+            try
+            {
+                var expandScript = @"
 (function(){
-  const moreButtons = document.querySelectorAll('[role=""button""]');
-  for (let btn of moreButtons) {
-    const text = btn.textContent || '';
-    if (text.includes('more') || text.includes('plus')) {
-      const rect = btn.getBoundingClientRect();
-      if (rect.top < window.innerHeight && rect.bottom > 0) {
-        btn.click();
-        return 'EXPANDED';
+  try {
+    const moreButtons = document.querySelectorAll('[role=""button""]');
+    for (let btn of moreButtons) {
+      const text = btn.textContent || '';
+      if (text.includes('more') || text.includes('plus')) {
+        const rect = btn.getBoundingClientRect();
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+          btn.click();
+          return 'EXPANDED';
+        }
       }
     }
+    return 'NO_MORE_BUTTON';
+  } catch(e) {
+    return 'ERROR: ' + e.message;
   }
-  return 'NO_MORE_BUTTON';
 })();";
 
-            var result = await webView.ExecuteScriptAsync(expandScript);
-            if (result.Contains("EXPANDED"))
+                var result = await webView.ExecuteScriptAsync(expandScript);
+                if (result.Contains("EXPANDED"))
+                {
+                    logTextBox.AppendText("[CAPTION] Expanded caption to read more\r\n");
+                    await Task.Delay(rand.Next(1500, 3500), token); // Read full caption
+                }
+            }
+            catch (Exception ex)
             {
-                logTextBox.AppendText("[CAPTION] Expanded caption to read more\r\n");
-                await Task.Delay(rand.Next(1500, 3500), token); // Read full caption
+                logTextBox.AppendText($"[CAPTION ERROR] {ex.Message}\r\n");
             }
         }
 
         // ✅ AMÉLIORATION: Double-tap like
         private async Task DoubleTapLikeAsync(Random rand, CancellationToken token)
         {
-            logTextBox.AppendText("[LIKE] Double-tap like...\r\n");
+            try
+            {
+                logTextBox.AppendText("[LIKE] Double-tap like...\r\n");
 
-            var doubleTapScript = @"
+                var doubleTapScript = @"
 (async function(){
-  const videos = document.querySelectorAll('video');
-  let mostVisible = null;
-  let maxVisible = 0;
+  try {
+    const videos = document.querySelectorAll('video');
+    let mostVisible = null;
+    let maxVisible = 0;
 
-  videos.forEach(video => {
-    const rect = video.getBoundingClientRect();
-    const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
-    if (visible > maxVisible) {
-      maxVisible = visible;
-      mostVisible = video;
-    }
-  });
+    videos.forEach(video => {
+      const rect = video.getBoundingClientRect();
+      const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      if (visible > maxVisible) {
+        maxVisible = visible;
+        mostVisible = video;
+      }
+    });
 
-  if (!mostVisible) return 'NO_VIDEO';
+    if (!mostVisible) return 'NO_VIDEO';
 
-  const rect = mostVisible.getBoundingClientRect();
-  const x = rect.left + rect.width / 2;
-  const y = rect.top + rect.height / 2;
+    const rect = mostVisible.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
 
-  const opts = {bubbles: true, cancelable: true, clientX: x, clientY: y};
-  mostVisible.dispatchEvent(new MouseEvent('click', opts));
+    const opts = {bubbles: true, cancelable: true, clientX: x, clientY: y};
+    mostVisible.dispatchEvent(new MouseEvent('click', opts));
 
-  await new Promise(r => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 150));
 
-  mostVisible.dispatchEvent(new MouseEvent('click', opts));
+    mostVisible.dispatchEvent(new MouseEvent('click', opts));
 
-  return 'DOUBLE_TAPPED';
+    return 'DOUBLE_TAPPED';
+  } catch(e) {
+    return 'ERROR: ' + e.message;
+  }
 })();";
 
-            await webView.ExecuteScriptAsync(doubleTapScript);
+                await webView.ExecuteScriptAsync(doubleTapScript);
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[DOUBLE_TAP ERROR] {ex.Message}\r\n");
+            }
         }
 
         // ✅ AMÉLIORATION: Mini-pauses pendant le visionnage
         private async Task WatchWithMicroPausesAsync(int totalWatchTime, Random rand, CancellationToken token)
         {
-            int elapsed = 0;
-
-            while (elapsed < totalWatchTime)
+            try
             {
-                int segment = rand.Next(2000, 5000);
-                await Task.Delay(Math.Min(segment, totalWatchTime - elapsed), token);
-                elapsed += segment;
+                int elapsed = 0;
 
-                // 30% de chance de micro-pause (regard ailleurs)
-                if (elapsed < totalWatchTime && rand.NextDouble() < 0.30)
+                while (elapsed < totalWatchTime && !token.IsCancellationRequested)
                 {
-                    int microPause = rand.Next(400, 1200);
-                    logTextBox.AppendText($"[MICRO_PAUSE] {microPause}ms (looking away)\r\n");
-                    await Task.Delay(microPause, token);
-                    elapsed += microPause;
+                    int segment = rand.Next(2000, 5000);
+                    await Task.Delay(Math.Min(segment, totalWatchTime - elapsed), token);
+                    elapsed += segment;
+
+                    // 30% de chance de micro-pause (regard ailleurs)
+                    if (elapsed < totalWatchTime && rand.NextDouble() < 0.30)
+                    {
+                        int microPause = rand.Next(400, 1200);
+                        logTextBox.AppendText($"[MICRO_PAUSE] {microPause}ms (looking away)\r\n");
+                        await Task.Delay(microPause, token);
+                        elapsed += microPause;
+                    }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal cancellation, just return
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[WATCH ERROR] {ex.Message}\r\n");
             }
         }
 
@@ -597,26 +661,37 @@ namespace SocialNetworkArmy.Services
         // ✅ AMÉLIORATION: Mouvement de souris réaliste
         private async Task RandomMouseMovementAsync(Random rand, CancellationToken token)
         {
-            if (rand.NextDouble() < 0.20)
+            try
             {
-                var mouseScript = @"
+                if (rand.NextDouble() < 0.20)
+                {
+                    var mouseScript = @"
 (function(){
-  const container = document.querySelector('video')?.parentElement || document.body;
-  const rect = container.getBoundingClientRect();
+  try {
+    const container = document.querySelector('video')?.parentElement || document.body;
+    const rect = container.getBoundingClientRect();
 
-  const x = rect.left + Math.random() * rect.width;
-  const y = rect.top + Math.random() * rect.height;
+    const x = rect.left + Math.random() * rect.width;
+    const y = rect.top + Math.random() * rect.height;
 
-  container.dispatchEvent(new MouseEvent('mousemove', {
-    bubbles: true,
-    clientX: x,
-    clientY: y
-  }));
+    container.dispatchEvent(new MouseEvent('mousemove', {
+      bubbles: true,
+      clientX: x,
+      clientY: y
+    }));
 
-  return 'MOVED';
+    return 'MOVED';
+  } catch(e) {
+    return 'ERROR: ' + e.message;
+  }
 })();";
 
-                await webView.ExecuteScriptAsync(mouseScript);
+                    await webView.ExecuteScriptAsync(mouseScript);
+                }
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[MOUSE ERROR] {ex.Message}\r\n");
             }
         }
 

@@ -64,15 +64,15 @@ namespace SocialNetworkArmy.Forms
             {
                 Text = "Min Comments to Add to FutureTargets:",
                 Location = new Point(20, 70),
-                Size = new Size(250, 25),
+                Size = new Size(340, 25),
                 Font = font
             };
             this.Controls.Add(minCommentsLabel);
 
             minCommentsInput = new NumericUpDown
             {
-                Location = new Point(280, 68),
-                Size = new Size(180, 25),
+                Location = new Point(370, 68),
+                Size = new Size(90, 25),
                 Minimum = 0,
                 Maximum = 10000,
                 Increment = 50,
