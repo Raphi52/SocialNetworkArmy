@@ -236,36 +236,54 @@ namespace SocialNetworkArmy.Services
 
         private async Task<bool> ScrollToNextReelAsync(Random rand, CancellationToken token)
         {
-            // Scroll progressif avec easing (ancienne méthode qui fonctionnait)
-            var scrollScript = @"
-(function() {
+            // ✅ AMÉLIORATION: Variations de vitesse de scroll (humain)
+            double speedProfile = rand.NextDouble();
+            int duration;
+
+            if (speedProfile < 0.15) // 15% : Scroll rapide (impatient)
+            {
+                duration = 400 + rand.Next(0, 200);
+                logTextBox.AppendText("[SCROLL] Fast scroll (impatient)\r\n");
+            }
+            else if (speedProfile < 0.75) // 60% : Scroll normal
+            {
+                duration = 800 + rand.Next(0, 400);
+            }
+            else // 25% : Scroll lent (hésitant)
+            {
+                duration = 1200 + rand.Next(0, 600);
+                logTextBox.AppendText("[SCROLL] Slow scroll (hesitant)\r\n");
+            }
+
+            var scrollScript = $@"
+(function() {{
   let scroller = document.querySelector('div[role=""main""] > div') ||
                  document.querySelector('div[data-testid=""reels-tab""]') ||
-                 Array.from(document.querySelectorAll('div')).find(div => {
+                 Array.from(document.querySelectorAll('div')).find(div => {{
                    const style = window.getComputedStyle(div);
                    return (style.overflowY === 'scroll' || style.overflowY === 'auto') && div.clientHeight >= window.innerHeight * 0.8;
-                 }) || document.body;
+                 }}) || document.body;
 
   if (!scroller) return 'NO_SCROLLER_FOUND';
 
   const startY = scroller.scrollTop;
   const targetY = startY + window.innerHeight;
-  const duration = 800 + Math.random() * 400;
+  const duration = {duration};
   const startTime = performance.now();
 
-  function scrollStep(currentTime) {
+  function scrollStep(currentTime) {{
     const elapsed = currentTime - startTime;
     const progress = Math.min(elapsed / duration, 1);
     const easeOut = 1 - Math.pow(1 - progress, 3);
     scroller.scrollTo(0, startY + (targetY - startY) * easeOut);
-    if (progress < 1) {
+    if (progress < 1) {{
       requestAnimationFrame(scrollStep);
-    }
-  }
+    }}
+  }}
 
   requestAnimationFrame(scrollStep);
   return 'SCROLLED_TO_NEXT';
-})();
+}})();
 ";
 
             var result = await webView.ExecuteScriptAsync(scrollScript);
@@ -397,6 +415,211 @@ namespace SocialNetworkArmy.Services
                 logTextBox.AppendText($"[NOISE] {noiseResult}\r\n");
             }
         }
+
+        // ✅ AMÉLIORATION: Réécoute partielle du reel
+        private async Task ReplayReelAsync(Random rand, CancellationToken token)
+        {
+            logTextBox.AppendText("[REPLAY] Replaying reel from start...\r\n");
+
+            await webView.ExecuteScriptAsync(@"
+(function() {
+  const videos = document.querySelectorAll('video');
+  for(let v of videos) {
+    const rect = v.getBoundingClientRect();
+    if (rect.top < window.innerHeight && rect.bottom > 0) {
+      v.currentTime = 0;
+      return 'REPLAYED';
+    }
+  }
+  return 'NO_VIDEO';
+})();");
+
+            int replayDuration = rand.Next(3000, 8000);
+            logTextBox.AppendText($"[REPLAY] Re-watching for {replayDuration / 1000}s...\r\n");
+            await Task.Delay(replayDuration, token);
+        }
+
+        // ✅ AMÉLIORATION: Consultation du profil créateur
+        private async Task VisitCreatorProfileAsync(Random rand, CancellationToken token)
+        {
+            logTextBox.AppendText("[PROFILE] Visiting creator profile...\r\n");
+
+            var clickProfileScript = @"
+(function(){
+  const videos = document.querySelectorAll('video');
+  let mostVisible = null;
+  let maxVisible = 0;
+
+  videos.forEach(video => {
+    const rect = video.getBoundingClientRect();
+    const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+    if (visible > maxVisible) {
+      maxVisible = visible;
+      mostVisible = video;
+    }
+  });
+
+  if (!mostVisible) return 'NO_VIDEO';
+
+  const parent = mostVisible.parentElement.parentElement.parentElement;
+  const creatorLink = parent.querySelector('a[role=""link""]');
+
+  if (creatorLink) {
+    creatorLink.click();
+    return 'CLICKED';
+  }
+  return 'NO_LINK';
+})();";
+
+            var result = await webView.ExecuteScriptAsync(clickProfileScript);
+
+            if (result.Contains("CLICKED"))
+            {
+                await Task.Delay(rand.Next(3000, 7000), token); // Browse profile
+
+                // Scroll profile
+                await webView.ExecuteScriptAsync("window.scrollBy(0, " + rand.Next(200, 500) + ");");
+                await Task.Delay(rand.Next(2000, 4000), token);
+
+                // Back button
+                logTextBox.AppendText("[PROFILE] Returning to reels...\r\n");
+                await webView.ExecuteScriptAsync("window.history.back();");
+                await Task.Delay(rand.Next(2000, 3500), token);
+            }
+            else
+            {
+                logTextBox.AppendText("[PROFILE] Could not find creator link\r\n");
+            }
+        }
+
+        // ✅ AMÉLIORATION: Expand caption
+        private async Task ExpandCaptionAsync(Random rand, CancellationToken token)
+        {
+            var expandScript = @"
+(function(){
+  const moreButtons = document.querySelectorAll('[role=""button""]');
+  for (let btn of moreButtons) {
+    const text = btn.textContent || '';
+    if (text.includes('more') || text.includes('plus')) {
+      const rect = btn.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) {
+        btn.click();
+        return 'EXPANDED';
+      }
+    }
+  }
+  return 'NO_MORE_BUTTON';
+})();";
+
+            var result = await webView.ExecuteScriptAsync(expandScript);
+            if (result.Contains("EXPANDED"))
+            {
+                logTextBox.AppendText("[CAPTION] Expanded caption to read more\r\n");
+                await Task.Delay(rand.Next(1500, 3500), token); // Read full caption
+            }
+        }
+
+        // ✅ AMÉLIORATION: Double-tap like
+        private async Task DoubleTapLikeAsync(Random rand, CancellationToken token)
+        {
+            logTextBox.AppendText("[LIKE] Double-tap like...\r\n");
+
+            var doubleTapScript = @"
+(async function(){
+  const videos = document.querySelectorAll('video');
+  let mostVisible = null;
+  let maxVisible = 0;
+
+  videos.forEach(video => {
+    const rect = video.getBoundingClientRect();
+    const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+    if (visible > maxVisible) {
+      maxVisible = visible;
+      mostVisible = video;
+    }
+  });
+
+  if (!mostVisible) return 'NO_VIDEO';
+
+  const rect = mostVisible.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+
+  const opts = {bubbles: true, cancelable: true, clientX: x, clientY: y};
+  mostVisible.dispatchEvent(new MouseEvent('click', opts));
+
+  await new Promise(r => setTimeout(r, 150));
+
+  mostVisible.dispatchEvent(new MouseEvent('click', opts));
+
+  return 'DOUBLE_TAPPED';
+})();";
+
+            await webView.ExecuteScriptAsync(doubleTapScript);
+        }
+
+        // ✅ AMÉLIORATION: Mini-pauses pendant le visionnage
+        private async Task WatchWithMicroPausesAsync(int totalWatchTime, Random rand, CancellationToken token)
+        {
+            int elapsed = 0;
+
+            while (elapsed < totalWatchTime)
+            {
+                int segment = rand.Next(2000, 5000);
+                await Task.Delay(Math.Min(segment, totalWatchTime - elapsed), token);
+                elapsed += segment;
+
+                // 30% de chance de micro-pause (regard ailleurs)
+                if (elapsed < totalWatchTime && rand.NextDouble() < 0.30)
+                {
+                    int microPause = rand.Next(400, 1200);
+                    logTextBox.AppendText($"[MICRO_PAUSE] {microPause}ms (looking away)\r\n");
+                    await Task.Delay(microPause, token);
+                    elapsed += microPause;
+                }
+            }
+        }
+
+        // ✅ AMÉLIORATION: Adaptive behavior based on engagement
+        private double GetLikeProbability(int watchTime, int comments)
+        {
+            double baseProbability = 0.04;
+
+            // Si on a regardé longtemps (>20s), plus de chance de like
+            if (watchTime > 20000) baseProbability *= 2.5;
+
+            // Si beaucoup d'engagement, plus de chance de like
+            if (comments > 5000) baseProbability *= 1.5;
+
+            return Math.Min(baseProbability, 0.25); // Cap à 25%
+        }
+
+        // ✅ AMÉLIORATION: Mouvement de souris réaliste
+        private async Task RandomMouseMovementAsync(Random rand, CancellationToken token)
+        {
+            if (rand.NextDouble() < 0.20)
+            {
+                var mouseScript = @"
+(function(){
+  const container = document.querySelector('video')?.parentElement || document.body;
+  const rect = container.getBoundingClientRect();
+
+  const x = rect.left + Math.random() * rect.width;
+  const y = rect.top + Math.random() * rect.height;
+
+  container.dispatchEvent(new MouseEvent('mousemove', {
+    bubbles: true,
+    clientX: x,
+    clientY: y
+  }));
+
+  return 'MOVED';
+})();";
+
+                await webView.ExecuteScriptAsync(mouseScript);
+            }
+        }
+
         public async Task RunAsync(CancellationToken token = default)
         {
             // Sécurité : s'assurer que CoreWebView2 est prêt même si on est appelé tôt
@@ -636,10 +859,19 @@ getCurrentComments();
                                 }
                             }
 
-                            // Temps de visionnage humain: 80% -> 1-5s, 20% -> 10-15s
+                            // ✅ AMÉLIORATION: Expand caption avant watch (20% des captions)
+                            if (!string.IsNullOrWhiteSpace(reelCaption) && reelCaption.Length > 100 && rand.NextDouble() < 0.20)
+                            {
+                                await ExpandCaptionAsync(rand, token);
+                            }
+
+                            // ✅ AMÉLIORATION: Watch time avec micro-pauses
                             int watchTime = await GetHumanWatchTime(rand);
                             logTextBox.AppendText($"[WATCH] Watching for {watchTime / 1000}s...\r\n");
-                            await Task.Delay(watchTime, token);
+                            await WatchWithMicroPausesAsync(watchTime, rand, token);
+
+                            // ✅ AMÉLIORATION: Mouvement de souris pendant visionnage
+                            await RandomMouseMovementAsync(rand, token);
 
                             // Pause longue aléatoire (5% de chance)
                             if (await ShouldTakeLongPause(rand))
@@ -647,11 +879,35 @@ getCurrentComments();
                                 await TakeLongPauseWithVideo(rand, token);
                             }
 
-                            // Like ~4% des reels
-                            bool shouldLike = rand.NextDouble() < 0.04;
+                            // ✅ AMÉLIORATION: Réécoute partielle (15% si watch time > 15s)
+                            if (watchTime > 15000 && rand.NextDouble() < 0.15)
+                            {
+                                await ReplayReelAsync(rand, token);
+                            }
+
+                            // ✅ AMÉLIORATION: Visite du profil (5-8% si bon engagement)
+                            bool shouldVisitProfile = comments >= config.MinCommentsToComment &&
+                                                      watchTime > 15000 &&
+                                                      rand.NextDouble() < 0.08;
+                            if (shouldVisitProfile)
+                            {
+                                await VisitCreatorProfileAsync(rand, token);
+                            }
+
+                            // ✅ AMÉLIORATION: Like avec probabilité adaptative
+                            double likeProbability = GetLikeProbability(watchTime, comments);
+                            bool shouldLike = rand.NextDouble() < likeProbability;
+
                             if (shouldLike)
                             {
-                                var likeScript = $@"
+                                // 30% de chance de double-tap au lieu du bouton
+                                if (rand.NextDouble() < 0.30)
+                                {
+                                    await DoubleTapLikeAsync(rand, token);
+                                }
+                                else
+                                {
+                                    var likeScript = $@"
 (function(){{
   const likeSVGs = document.querySelectorAll('svg[aria-label*=""{likeContains}""]');
   let visibleBtn = null;
@@ -675,8 +931,9 @@ getCurrentComments();
   return /{unlikeRegex}/i.test(newAria) ? 'OK:LIKED' : 'CLICKED';
 }})();
 ";
-                                var likeTry = await webView.ExecuteScriptAsync(likeScript);
-                                logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
+                                    var likeTry = await webView.ExecuteScriptAsync(likeScript);
+                                    logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
+                                }
                                 await Task.Delay(rand.Next(1500, 3500), token);
                             }
 
@@ -686,6 +943,33 @@ getCurrentComments();
                                 await Task.Delay(rand.Next(1000, 3000), token);
                             }
                             await RandomHumanScrollNoiseAsync(rand, token);
+
+                            // ✅ AMÉLIORATION: Hésitation avant de scroller (35% de chance)
+                            if (rand.NextDouble() < 0.35)
+                            {
+                                int hesitationTime = rand.Next(800, 2500);
+                                logTextBox.AppendText($"[HESITATION] Pausing {hesitationTime}ms before scrolling...\r\n");
+                                await Task.Delay(hesitationTime, token);
+                            }
+
+                            // ✅ AMÉLIORATION: Comportement "oops" - scroll rapide + retour immédiat (8% de chance)
+                            if (reelNum > 2 && rand.NextDouble() < 0.08)
+                            {
+                                logTextBox.AppendText("[OOPS] Fast scroll then immediate return...\r\n");
+
+                                // Scroll rapide
+                                await ScrollToNextReelAsync(rand, token);
+                                string tempCreator = await WaitForNewReelAsync(previousCreator, creatorScript, rand, token);
+
+                                await Task.Delay(rand.Next(300, 800), token); // Court délai
+
+                                // Retour immédiat
+                                await ScrollBackToPreviousReelAsync(rand, token);
+                                previousCreator = await WaitForNewReelAsync(tempCreator, creatorScript, rand, token);
+
+                                await Task.Delay(rand.Next(2000, 4000), token); // Re-watch
+                                continue; // Continue la boucle sur ce reel
+                            }
 
                             // ✅ DÉCISION : Scroll back ou scroll next
                             bool shouldScrollBack = false;

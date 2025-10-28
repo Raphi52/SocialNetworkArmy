@@ -62,7 +62,7 @@ namespace SocialNetworkArmy.Forms
             // Min Comments Section
             var minCommentsLabel = new Label
             {
-                Text = "Minimum Comments to Comment:",
+                Text = "Min Comments to Add to FutureTargets:",
                 Location = new Point(20, 70),
                 Size = new Size(250, 25),
                 Font = font
