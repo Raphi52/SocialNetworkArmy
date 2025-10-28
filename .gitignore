@@ -124,6 +124,7 @@ Data/*.log
 Data/*.csv
 Data/*.txt
 Data/Profiles/
+Data/Configs/
 !Data/Icons/
 !Data/*.example.csv
 

@@ -185,6 +185,16 @@ namespace SocialNetworkArmy.Forms
 
             profilesGridView.Columns.Add(new DataGridViewButtonColumn
             {
+                Name = "Config",
+                HeaderText = "Config",
+                Text = "⚙️ Config",
+                UseColumnTextForButtonValue = true,
+                Width = 100,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.None
+            });
+
+            profilesGridView.Columns.Add(new DataGridViewButtonColumn
+            {
                 Name = "Delete",
                 HeaderText = "Delete",
                 Text = "🗑️ Delete",
@@ -480,13 +490,29 @@ namespace SocialNetworkArmy.Forms
             if (e.RowIndex < 0) return;
 
             if (e.ColumnIndex == profilesGridView.Columns["Edit"].Index ||
+                e.ColumnIndex == profilesGridView.Columns["Config"].Index ||
                 e.ColumnIndex == profilesGridView.Columns["Delete"].Index)
             {
                 e.Graphics.FillRectangle(new SolidBrush(Color.FromArgb(200, 28, 28, 28)), e.CellBounds);
 
-                Color buttonColor = e.ColumnIndex == profilesGridView.Columns["Edit"].Index
-                    ? Color.FromArgb(33, 150, 243)
-                    : Color.FromArgb(244, 67, 54);
+                Color buttonColor;
+                string buttonText;
+
+                if (e.ColumnIndex == profilesGridView.Columns["Edit"].Index)
+                {
+                    buttonColor = Color.FromArgb(33, 150, 243); // Blue
+                    buttonText = "✏️ Edit";
+                }
+                else if (e.ColumnIndex == profilesGridView.Columns["Config"].Index)
+                {
+                    buttonColor = Color.FromArgb(255, 152, 0); // Orange
+                    buttonText = "⚙️ Config";
+                }
+                else // Delete
+                {
+                    buttonColor = Color.FromArgb(244, 67, 54); // Red
+                    buttonText = "🗑️ Delete";
+                }
 
                 bool isHovered = hoveredCell.X == e.ColumnIndex && hoveredCell.Y == e.RowIndex;
                 if (isHovered)
@@ -502,8 +528,6 @@ namespace SocialNetworkArmy.Forms
                 );
 
                 e.Graphics.FillRectangle(new SolidBrush(buttonColor), buttonRect);
-
-                string buttonText = e.ColumnIndex == profilesGridView.Columns["Edit"].Index ? "✏️ Edit" : "🗑️ Delete";
                 TextRenderer.DrawText(
                     e.Graphics,
                     buttonText,
@@ -730,6 +754,7 @@ namespace SocialNetworkArmy.Forms
                     string.IsNullOrEmpty(profile.GroupName) ? "Solo" : profile.GroupName,
                     profile.Proxy ?? "Local",
                     "✏️ Edit",
+                    "⚙️ Config",
                     "🗑️ Delete"
                 );
             }
@@ -803,6 +828,16 @@ namespace SocialNetworkArmy.Forms
                         profileService.SaveProfiles(profiles);
                         PopulateProfilesList();
                         statusLabel.Text = $"✅ Profile '{newName}' updated!";
+                    }
+                }
+            }
+            else if (e.ColumnIndex == profilesGridView.Columns["Config"].Index)
+            {
+                using (var configForm = new ConfigForm(profile.Name))
+                {
+                    if (configForm.ShowDialog() == DialogResult.OK)
+                    {
+                        statusLabel.Text = $"✅ Configuration saved for '{profile.Name}'";
                     }
                 }
             }
@@ -959,6 +994,7 @@ namespace SocialNetworkArmy.Forms
             if (e.RowIndex < 0) return;
 
             if (e.ColumnIndex == profilesGridView.Columns["Edit"].Index ||
+                e.ColumnIndex == profilesGridView.Columns["Config"].Index ||
                 e.ColumnIndex == profilesGridView.Columns["Delete"].Index)
             {
                 hoveredCell = new Point(e.ColumnIndex, e.RowIndex);
@@ -972,6 +1008,7 @@ namespace SocialNetworkArmy.Forms
             if (e.RowIndex < 0) return;
 
             if (e.ColumnIndex == profilesGridView.Columns["Edit"].Index ||
+                e.ColumnIndex == profilesGridView.Columns["Config"].Index ||
                 e.ColumnIndex == profilesGridView.Columns["Delete"].Index)
             {
                 hoveredCell = new Point(-1, -1);
