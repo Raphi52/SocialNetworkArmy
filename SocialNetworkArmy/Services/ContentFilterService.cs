@@ -275,7 +275,7 @@ namespace SocialNetworkArmy.Services
                 {
                     if (DateTime.Now - cached.timestamp < CREATOR_CACHE_DURATION)
                     {
-                        Log($"[Filter] Cache: @{creator} → {(cached.isFemale ? "✓ Female" : "✗ Male")}");
+                        Log($"[Filter] ✓ CACHE hit: @{creator} → {(cached.isFemale ? "Female" : "Male")} (no API)");
                         return cached.isFemale;
                     }
                     else
@@ -308,9 +308,9 @@ namespace SocialNetworkArmy.Services
 
                 // ✅ 4) Voting result (majority wins)
                 bool finalResult = femaleVotes > maleVotes;
-                Log($"[Filter] Vote: {femaleVotes}F/{maleVotes}M → {(finalResult ? "✓ Female" : "✗ Male")}");
+                Log($"[Filter] ✓ API vote: {femaleVotes}F/{maleVotes}M → {(finalResult ? "Female" : "Male")} (@{creator})");
 
-                // ✅ 5) Cache the result by creator
+                // ✅ 5) Cache the result by creator (24h)
                 if (!string.IsNullOrWhiteSpace(creator))
                 {
                     creatorGenderCache[creator] = (finalResult, DateTime.Now);

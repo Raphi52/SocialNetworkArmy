@@ -1280,6 +1280,16 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             if (isReel)
                             {
                                 watchTime = await GetHumanWatchTime(rand);
+
+                                // 🎯 BONUS: +30-50% temps si femme + langue correspondent (éduquer l'algo)
+                                if (passedNicheFilter && passedLanguageFilter &&
+                                    config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any"))
+                                {
+                                    int bonus = (int)(watchTime * (0.30 + rand.NextDouble() * 0.20)); // +30-50%
+                                    watchTime += bonus;
+                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match (Female + {detectedLanguage}) → +{bonus / 1000}s bonus!\r\n");
+                                }
+
                                 logTextBox.AppendText($"[WATCH] Reel - {watchTime / 1000}s...\r\n");
                                 await Task.Delay(watchTime, token);
 
@@ -1291,6 +1301,16 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             else
                             {
                                 watchTime = rand.Next(1500, 4000);
+
+                                // 🎯 BONUS: +30-50% temps si femme + langue correspondent (éduquer l'algo)
+                                if (passedNicheFilter && passedLanguageFilter &&
+                                    config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any"))
+                                {
+                                    int bonus = (int)(watchTime * (0.30 + rand.NextDouble() * 0.20)); // +30-50%
+                                    watchTime += bonus;
+                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match (Female + {detectedLanguage}) → +{bonus}ms bonus!\r\n");
+                                }
+
                                 logTextBox.AppendText($"[WATCH] Static - {watchTime}ms...\r\n");
                                 await Task.Delay(watchTime, token);
                             }

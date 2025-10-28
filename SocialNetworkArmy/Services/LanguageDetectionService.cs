@@ -70,11 +70,11 @@ namespace SocialNetworkArmy.Services
                     return "Unknown";
                 }
 
-                // ✅ AMÉLIORATION: Détection locale ultra-rapide (0ms) pour langues courantes
+                // ✅ STEP 1: Détection locale ultra-rapide (0ms) pour langues courantes
                 string localDetection = DetectLanguageLocally(text);
                 if (localDetection != null)
                 {
-                    Log($"[LangDetect] Local pattern: {localDetection} (0ms)");
+                    Log($"[LangDetect] ✓ LOCAL pattern: {localDetection} (0ms, no API)");
                     return localDetection;
                 }
 
@@ -93,13 +93,13 @@ namespace SocialNetworkArmy.Services
                 // ✅ AMÉLIORATION: Optimiser la taille du texte (plus court = plus rapide)
                 string truncatedText = text.Length > 200 ? text.Substring(0, 200) : text;
 
-                // ✅ AMÉLIORATION: Check cache first
+                // ✅ STEP 2: Check cache (30min duration)
                 string cacheKey = truncatedText.GetHashCode().ToString();
                 if (languageCache.TryGetValue(cacheKey, out var cached))
                 {
                     if (DateTime.Now - cached.timestamp < CACHE_DURATION)
                     {
-                        Log($"[LangDetect] Cache hit: {cached.language}");
+                        Log($"[LangDetect] ✓ CACHE hit: {cached.language} (no API)");
                         return cached.language;
                     }
                     else
@@ -146,10 +146,10 @@ namespace SocialNetworkArmy.Services
                         // Map language codes to full names
                         string languageName = MapLanguageCode(label);
 
-                        // ✅ AMÉLIORATION: Store in cache
+                        // ✅ Store in cache for 30min
                         languageCache[cacheKey] = (languageName, DateTime.Now);
 
-                        Log($"[LangDetect] Detected: {languageName} ({score:P0})");
+                        Log($"[LangDetect] ✓ API call: {languageName} ({score:P0} confidence)");
                         return languageName;
                     }
                 }

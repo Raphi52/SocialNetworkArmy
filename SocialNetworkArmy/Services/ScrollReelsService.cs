@@ -962,8 +962,18 @@ getCurrentComments();
                                 await ExpandCaptionAsync(rand, token);
                             }
 
-                            // ✅ AMÉLIORATION: Watch time avec micro-pauses
+                            // ✅ AMÉLIORATION: Watch time adaptatif basé sur les filtres (éduquer l'algo)
                             int watchTime = await GetHumanWatchTime(rand);
+
+                            // 🎯 BONUS: +30-50% temps si femme + langue correspondent (contenu ciblé = plus d'attention)
+                            if (passedNicheFilter && passedLanguageFilter &&
+                                config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any"))
+                            {
+                                int bonus = (int)(watchTime * (0.30 + rand.NextDouble() * 0.20)); // +30-50%
+                                watchTime += bonus;
+                                logTextBox.AppendText($"[WATCH] 🎯 Perfect match (Female + {detectedLanguage}) → +{bonus / 1000}s bonus!\r\n");
+                            }
+
                             logTextBox.AppendText($"[WATCH] Watching for {watchTime / 1000}s...\r\n");
                             await WatchWithMicroPausesAsync(watchTime, rand, token);
 
