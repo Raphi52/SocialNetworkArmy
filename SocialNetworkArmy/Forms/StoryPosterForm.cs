@@ -641,10 +641,10 @@ namespace SocialNetworkArmy.Forms
                 await webView.EnsureCoreWebView2Async(env);
                 logTextBox.AppendText("[OK] WebView2 ready\r\n");
 
-                // ✅ AMÉLIORATION: Utiliser FingerprintService pour JS spoof complet
-                var stealthScript = fingerprintService.GenerateJSSpoof(fingerprint);
-                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
-                logTextBox.AppendText("[OK] Advanced fingerprint stealth injected (10/10)\r\n");
+                // ✅ ROLLBACK: Utiliser l'ancien stealth script qui fonctionnait bien pour mobile
+                // Le nouveau FingerprintService était trop agressif et Instagram détectait le bot
+                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(STEALTH_SCRIPT);
+                logTextBox.AppendText("[OK] Mobile stealth script injected\r\n");
 
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;
