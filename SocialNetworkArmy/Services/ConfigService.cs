@@ -31,11 +31,21 @@ namespace SocialNetworkArmy.Services
                 }
 
                 string json = File.ReadAllText(filePath);
-                var config = JsonConvert.DeserializeObject<AccountConfig>(json);
+
+                // ✅ FIX: Force proper deserialization with ObjectCreationHandling
+                var settings = new JsonSerializerSettings
+                {
+                    ObjectCreationHandling = ObjectCreationHandling.Replace
+                };
+                var config = JsonConvert.DeserializeObject<AccountConfig>(json, settings);
 
                 // Ensure accountName is set
                 if (string.IsNullOrEmpty(config.AccountName))
                     config.AccountName = accountName;
+
+                // ✅ FIX: Ensure TargetLanguages is never null
+                if (config.TargetLanguages == null)
+                    config.TargetLanguages = new List<string> { "Any" };
 
                 return config;
             }
