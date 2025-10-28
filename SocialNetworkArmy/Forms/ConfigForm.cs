@@ -27,6 +27,11 @@ namespace SocialNetworkArmy.Forms
             this.config = ConfigService.LoadConfig(accountName);
 
             InitializeComponent();
+
+            // Ensure handle is created before loading config
+            if (!this.IsHandleCreated)
+                this.CreateHandle();
+
             LoadConfigToUI();
         }
 
@@ -192,6 +197,10 @@ namespace SocialNetworkArmy.Forms
 
         private void LanguagesCheckedList_ItemCheck(object sender, ItemCheckEventArgs e)
         {
+            // Only process if handle is created
+            if (!this.IsHandleCreated)
+                return;
+
             // If "Any" is being checked, uncheck all others
             if (e.Index == 0 && e.NewValue == CheckState.Checked)
             {
@@ -215,34 +224,45 @@ namespace SocialNetworkArmy.Forms
 
         private void LoadConfigToUI()
         {
-            // Load min comments
-            minCommentsInput.Value = config.MinCommentsToComment;
+            // Temporarily disconnect event to avoid triggers during loading
+            languagesCheckedList.ItemCheck -= LanguagesCheckedList_ItemCheck;
 
-            // Load languages
-            bool hasAny = config.TargetLanguages.Contains("Any");
-            languagesCheckedList.SetItemChecked(0, hasAny);
-
-            if (!hasAny)
+            try
             {
-                if (config.TargetLanguages.Contains("English"))
-                    languagesCheckedList.SetItemChecked(1, true);
-                if (config.TargetLanguages.Contains("French"))
-                    languagesCheckedList.SetItemChecked(2, true);
-                if (config.TargetLanguages.Contains("Spanish"))
-                    languagesCheckedList.SetItemChecked(3, true);
-                if (config.TargetLanguages.Contains("Portuguese"))
-                    languagesCheckedList.SetItemChecked(4, true);
-                if (config.TargetLanguages.Contains("German"))
-                    languagesCheckedList.SetItemChecked(5, true);
+                // Load min comments
+                minCommentsInput.Value = config.MinCommentsToComment;
+
+                // Load languages
+                bool hasAny = config.TargetLanguages.Contains("Any");
+                languagesCheckedList.SetItemChecked(0, hasAny);
+
+                if (!hasAny)
+                {
+                    if (config.TargetLanguages.Contains("English"))
+                        languagesCheckedList.SetItemChecked(1, true);
+                    if (config.TargetLanguages.Contains("French"))
+                        languagesCheckedList.SetItemChecked(2, true);
+                    if (config.TargetLanguages.Contains("Spanish"))
+                        languagesCheckedList.SetItemChecked(3, true);
+                    if (config.TargetLanguages.Contains("Portuguese"))
+                        languagesCheckedList.SetItemChecked(4, true);
+                    if (config.TargetLanguages.Contains("German"))
+                        languagesCheckedList.SetItemChecked(5, true);
+                }
+
+                // Load max post age
+                maxPostAgeInput.Value = config.MaxPostAgeHours;
+
+                // Load niche
+                nicheComboBox.SelectedItem = config.Niche;
+                if (nicheComboBox.SelectedItem == null)
+                    nicheComboBox.SelectedItem = "Girls"; // Default
             }
-
-            // Load max post age
-            maxPostAgeInput.Value = config.MaxPostAgeHours;
-
-            // Load niche
-            nicheComboBox.SelectedItem = config.Niche;
-            if (nicheComboBox.SelectedItem == null)
-                nicheComboBox.SelectedItem = "Girls"; // Default
+            finally
+            {
+                // Reconnect event
+                languagesCheckedList.ItemCheck += LanguagesCheckedList_ItemCheck;
+            }
         }
 
         private void SaveButton_Click(object sender, EventArgs e)
