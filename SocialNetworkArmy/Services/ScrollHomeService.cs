@@ -1276,48 +1276,44 @@ document.querySelector('article, main') ? 'true' : 'false';");
                                 continue;
                             }
 
+                            // ✅ SPEED OPTIMIZED: Simple watch time logic (same as ScrollReels)
+                            bool isPerfectMatch = passedNicheFilter && passedLanguageFilter &&
+                                                  config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any");
+
                             int watchTime;
-                            if (isReel)
+                            if (isPerfectMatch)
                             {
-                                watchTime = await GetHumanWatchTime(rand);
-
-                                // 🎯 BONUS: +30-50% temps si femme + langue correspondent (éduquer l'algo)
-                                if (passedNicheFilter && passedLanguageFilter &&
-                                    config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any"))
+                                if (isReel)
                                 {
-                                    int bonus = (int)(watchTime * (0.30 + rand.NextDouble() * 0.20)); // +30-50%
-                                    watchTime += bonus;
-                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match (Female + {detectedLanguage}) → +{bonus / 1000}s bonus!\r\n");
+                                    // 🎯 Perfect match reel: 10-25s
+                                    watchTime = rand.Next(10000, 25001);
+                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match reel → {watchTime / 1000}s\r\n");
+                                    await Task.Delay(watchTime, token);
+
+                                    if (await ShouldTakeLongPause(rand))
+                                    {
+                                        await TakeLongPauseWithVideo(rand, token);
+                                    }
                                 }
-
-                                logTextBox.AppendText($"[WATCH] Reel - {watchTime / 1000}s...\r\n");
-                                await Task.Delay(watchTime, token);
-
-                                if (await ShouldTakeLongPause(rand))
+                                else
                                 {
-                                    await TakeLongPauseWithVideo(rand, token);
+                                    // 🎯 Perfect match static: 1-3s
+                                    watchTime = rand.Next(1000, 3001);
+                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match static → {watchTime}ms\r\n");
+                                    await Task.Delay(watchTime, token);
                                 }
                             }
                             else
                             {
-                                // ✅ OPTIMIZED: Shorter static post watch time (1-2.5s vs 1.5-4s)
-                                watchTime = rand.Next(1000, 2500);
-
-                                // 🎯 BONUS: +30-50% temps si femme + langue correspondent (éduquer l'algo)
-                                if (passedNicheFilter && passedLanguageFilter &&
-                                    config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any"))
-                                {
-                                    int bonus = (int)(watchTime * (0.30 + rand.NextDouble() * 0.20)); // +30-50%
-                                    watchTime += bonus;
-                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match (Female + {detectedLanguage}) → +{bonus}ms bonus!\r\n");
-                                }
-
-                                logTextBox.AppendText($"[WATCH] Static - {watchTime}ms...\r\n");
+                                // ⚡ NOT a match: SKIP FAST (0.5-1s)
+                                watchTime = rand.Next(500, 1001);
+                                logTextBox.AppendText($"[SKIP] Fast skip → {watchTime}ms\r\n");
                                 await Task.Delay(watchTime, token);
                             }
 
-                            double likeChance = isReel ? 0.08 : 0.03;
-                            if (rand.NextDouble() < likeChance)
+                            // ✅ Like only for perfect matches
+                            double likeChance = isPerfectMatch ? (isReel ? 0.08 : 0.03) : 0.0;
+                            if (likeChance > 0 && rand.NextDouble() < likeChance)
                             {
                                 var likeTry = await LikeCurrentPostAsync(likeSelectors, unlikeTest, token);
                                 logTextBox.AppendText($"[LIKE] {likeTry}\r\n");

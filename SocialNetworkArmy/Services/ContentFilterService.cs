@@ -284,33 +284,11 @@ namespace SocialNetworkArmy.Services
                     }
                 }
 
-                // ✅ 3) Multi-image detection with voting (try up to 3 images)
-                int maxImagesToCheck = Math.Min(3, imageUrls.Count);
-                int femaleVotes = 0;
-                int maleVotes = 0;
+                // ✅ 3) SPEED OPTIMIZED: Single image detection (no voting, 3x faster)
+                bool finalResult = await IsImageFemaleAsync(imageUrls[0]);
+                Log($"[Filter] ✓ {(finalResult ? "Female" : "Male")} (@{creator})");
 
-                Log($"[Filter] Analyzing {maxImagesToCheck} images for @{creator}...");
-
-                for (int i = 0; i < maxImagesToCheck; i++)
-                {
-                    bool isFemale = await IsImageFemaleAsync(imageUrls[i]);
-                    if (isFemale)
-                        femaleVotes++;
-                    else
-                        maleVotes++;
-
-                    // Early exit if we already have a majority
-                    if (femaleVotes >= 2)
-                        break;
-                    if (maleVotes >= 2)
-                        break;
-                }
-
-                // ✅ 4) Voting result (majority wins)
-                bool finalResult = femaleVotes > maleVotes;
-                Log($"[Filter] ✓ API vote: {femaleVotes}F/{maleVotes}M → {(finalResult ? "Female" : "Male")} (@{creator})");
-
-                // ✅ 5) Cache the result by creator (24h)
+                // ✅ 4) Cache the result by creator (24h)
                 if (!string.IsNullOrWhiteSpace(creator))
                 {
                     creatorGenderCache[creator] = (finalResult, DateTime.Now);

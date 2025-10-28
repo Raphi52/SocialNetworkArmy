@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -163,7 +164,7 @@ namespace SocialNetworkArmy.Services
             }
         }
 
-        // ✅ NOUVEAU: Détection locale ultra-rapide par patterns (0ms, 80% des cas)
+        // ✅ IMPROVED: Enhanced local detection with more keywords and scoring
         private string DetectLanguageLocally(string text)
         {
             if (string.IsNullOrWhiteSpace(text) || text.Length < 10)
@@ -173,62 +174,60 @@ namespace SocialNetworkArmy.Services
             int totalWords = lowerText.Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
 
             if (totalWords < 3)
-                return null; // Trop court pour être fiable
+                return null;
 
-            // Patterns pour les 5 langues principales (couvre ~80% des posts Instagram)
-            var patterns = new[]
+            // ✅ ENHANCED: More keywords + character-based detection + scoring system
+            var languageScores = new Dictionary<string, int>();
+
+            // English detection (common words + no accents)
+            var englishKeywords = new[] { " the ", " and ", " is ", " are ", " you ", " for ", " with ", " this ", " that ", " have ", " was ", " were ", " from ", " your ", " can ", " will ", " not ", " but ", " all ", " out ", " get ", " like ", " love ", " just ", " more ", " what ", " when ", " good ", " new ", " day ", " time ", " life " };
+            languageScores["English"] = CountMatches(lowerText, englishKeywords);
+
+            // French detection (avec accents!)
+            var frenchKeywords = new[] { " le ", " la ", " les ", " de ", " je ", " tu ", " il ", " elle ", " nous ", " vous ", " est ", " sont ", " pour ", " avec ", " dans ", " sur ", " par ", " un ", " une ", " des ", " mon ", " ma ", " mes ", " ton ", " ta ", " son ", " sa ", " ce ", " cette ", " qui ", " que ", " pas ", " plus ", " tout ", " très ", " bien ", " faire ", " été ", " merci ", " j'ai ", " c'est ", " n'est ", " aujourd'hui ", "être", "avoir", "français", "française" };
+            languageScores["French"] = CountMatches(lowerText, frenchKeywords);
+            if (lowerText.Contains("é") || lowerText.Contains("à") || lowerText.Contains("è") || lowerText.Contains("ç") || lowerText.Contains("ê"))
+                languageScores["French"] += 3; // Bonus pour accents français
+
+            // Spanish detection (con acentos!)
+            var spanishKeywords = new[] { " el ", " la ", " los ", " las ", " de ", " que ", " es ", " son ", " para ", " con ", " por ", " en ", " un ", " una ", " del ", " al ", " mi ", " tu ", " su ", " este ", " esta ", " como ", " más ", " muy ", " todo ", " todos ", " bien ", " estar ", " hacer ", " hoy ", " día ", " vida ", " gracias ", " español ", " española ", " qué ", " cómo ", " dónde ", " cuándo ", " está ", " están " };
+            languageScores["Spanish"] = CountMatches(lowerText, spanishKeywords);
+            if (lowerText.Contains("ñ") || lowerText.Contains("á") || lowerText.Contains("é") || lowerText.Contains("í") || lowerText.Contains("ó") || lowerText.Contains("ú") || lowerText.Contains("¿") || lowerText.Contains("¡"))
+                languageScores["Spanish"] += 3; // Bonus pour caractères espagnols
+
+            // Portuguese detection (com acentos!)
+            var portugueseKeywords = new[] { " o ", " a ", " os ", " as ", " de ", " que ", " é ", " são ", " para ", " com ", " não ", " em ", " um ", " uma ", " do ", " da ", " dos ", " das ", " por ", " no ", " na ", " meu ", " minha ", " seu ", " sua ", " este ", " esta ", " como ", " mais ", " muito ", " tudo ", " bem ", " estar ", " fazer ", " hoje ", " dia ", " vida ", " obrigado ", " obrigada ", " português ", " portuguesa ", " você ", " está ", " estão ", " português", " até ", " também " };
+            languageScores["Portuguese"] = CountMatches(lowerText, portugueseKeywords);
+            if (lowerText.Contains("ã") || lowerText.Contains("õ") || lowerText.Contains("ç"))
+                languageScores["Portuguese"] += 3; // Bonus pour accents portugais
+
+            // German detection (mit Umlauten!)
+            var germanKeywords = new[] { " der ", " die ", " das ", " und ", " ist ", " sind ", " für ", " mit ", " auf ", " den ", " dem ", " des ", " ein ", " eine ", " ich ", " du ", " er ", " sie ", " wir ", " ihr ", " nicht ", " auch ", " aus ", " bei ", " nach ", " von ", " zu ", " im ", " am ", " vom ", " zum ", " wie ", " was ", " wann ", " gut ", " sehr ", " haben ", " sein ", " werden ", " deutsch ", " deutsche " };
+            languageScores["German"] = CountMatches(lowerText, germanKeywords);
+            if (lowerText.Contains("ä") || lowerText.Contains("ö") || lowerText.Contains("ü") || lowerText.Contains("ß"))
+                languageScores["German"] += 3; // Bonus pour umlauts
+
+            // Find highest score
+            var bestMatch = languageScores.OrderByDescending(kvp => kvp.Value).FirstOrDefault();
+
+            // Need at least 3 matches to be confident
+            if (bestMatch.Value >= 3)
             {
-                // English (très courant)
-                new {
-                    Language = "English",
-                    Keywords = new[] { " the ", " and ", " is ", " are ", " you ", " for ", " with ", " this ", " that ", " have " },
-                    MinMatches = 3
-                },
-                // French
-                new {
-                    Language = "French",
-                    Keywords = new[] { " le ", " la ", " les ", " de ", " je ", " tu ", " est ", " pour ", " avec ", " dans ", " c'est ", " c'était " },
-                    MinMatches = 3
-                },
-                // Spanish
-                new {
-                    Language = "Spanish",
-                    Keywords = new[] { " el ", " la ", " los ", " las ", " de ", " que ", " es ", " para ", " con ", " por ", " está ", " están " },
-                    MinMatches = 3
-                },
-                // Portuguese
-                new {
-                    Language = "Portuguese",
-                    Keywords = new[] { " o ", " a ", " os ", " as ", " de ", " que ", " é ", " para ", " com ", " não ", " está ", " estão " },
-                    MinMatches = 3
-                },
-                // German
-                new {
-                    Language = "German",
-                    Keywords = new[] { " der ", " die ", " das ", " und ", " ist ", " für ", " mit ", " auf ", " den ", " ich ", " sie " },
-                    MinMatches = 3
-                }
-            };
-
-            // Compter les matches pour chaque langue
-            foreach (var pattern in patterns)
-            {
-                int matches = 0;
-                foreach (var keyword in pattern.Keywords)
-                {
-                    if (lowerText.Contains(keyword))
-                        matches++;
-                }
-
-                // Si on a assez de matches, on retourne cette langue
-                if (matches >= pattern.MinMatches)
-                {
-                    return pattern.Language;
-                }
+                return bestMatch.Key;
             }
 
-            // Aucun pattern détecté → fallback API
-            return null;
+            return null; // Fallback to API
+        }
+
+        private int CountMatches(string text, string[] keywords)
+        {
+            int count = 0;
+            foreach (var keyword in keywords)
+            {
+                if (text.Contains(keyword))
+                    count++;
+            }
+            return count;
         }
 
         private string MapLanguageCode(string code)

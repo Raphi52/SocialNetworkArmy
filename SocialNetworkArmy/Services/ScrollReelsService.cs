@@ -938,7 +938,12 @@ getCurrentComments();
                                 int.TryParse(digitsOnly, out comments);
                             }
 
-                            if (comments >= config.MinCommentsToAddToFutureTargets && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
+                            // ✅ FutureTargets: ONLY if perfect match (Female + target language)
+                            bool isPerfectMatch = passedNicheFilter && passedLanguageFilter &&
+                                                  config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any");
+
+                            if (isPerfectMatch && comments >= config.MinCommentsToAddToFutureTargets &&
+                                creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
                             {
                                 bool alreadyExists = false;
                                 if (File.Exists(targetFile))
@@ -949,62 +954,59 @@ getCurrentComments();
                                 if (!alreadyExists)
                                 {
                                     File.AppendAllText(targetFile, creatorName.Trim() + "\r\n");
-                                    logTextBox.AppendText($"[TARGET] Added {creatorName} to FutureTargets.txt (comments: {comments})\r\n");
+                                    logTextBox.AppendText($"[TARGET] ✓ Added {creatorName} to FutureTargets.txt (perfect match!)\r\n");
                                 }
                                 else
                                 {
-                                    logTextBox.AppendText($"[TARGET] {creatorName} already in FutureTargets.txt (comments: {comments})\r\n");
+                                    logTextBox.AppendText($"[TARGET] {creatorName} already in FutureTargets.txt\r\n");
                                 }
                             }
 
-                            // ✅ AMÉLIORATION: Expand caption avant watch (20% des captions)
-                            if (!string.IsNullOrWhiteSpace(reelCaption) && reelCaption.Length > 100 && rand.NextDouble() < 0.20)
+                            // ✅ SPEED OPTIMIZED: Simple watch time logic
+                            int watchTime;
+                            if (isPerfectMatch)
                             {
-                                await ExpandCaptionAsync(rand, token);
+                                // 🎯 Perfect match (Female + target language): 10-25s watch
+                                watchTime = rand.Next(10000, 25001);
+                                logTextBox.AppendText($"[WATCH] 🎯 Perfect match → {watchTime / 1000}s\r\n");
+
+                                // Expand caption (20% chance)
+                                if (!string.IsNullOrWhiteSpace(reelCaption) && reelCaption.Length > 100 && rand.NextDouble() < 0.20)
+                                {
+                                    await ExpandCaptionAsync(rand, token);
+                                }
+
+                                await WatchWithMicroPausesAsync(watchTime, rand, token);
+                                await RandomMouseMovementAsync(rand, token);
+
+                                // Long pause (5% chance)
+                                if (await ShouldTakeLongPause(rand))
+                                {
+                                    await TakeLongPauseWithVideo(rand, token);
+                                }
+
+                                // Replay (15% chance if watch > 15s)
+                                if (watchTime > 15000 && rand.NextDouble() < 0.15)
+                                {
+                                    await ReplayReelAsync(rand, token);
+                                }
+
+                                // Profile visit (5-8% chance if high engagement)
+                                if (comments >= config.MinCommentsToAddToFutureTargets && rand.NextDouble() < 0.08)
+                                {
+                                    await VisitCreatorProfileAsync(rand, token);
+                                }
+                            }
+                            else
+                            {
+                                // ⚡ NOT a match: SKIP FAST (0.5-1s)
+                                watchTime = rand.Next(500, 1001);
+                                logTextBox.AppendText($"[SKIP] Fast skip → {watchTime}ms\r\n");
+                                await Task.Delay(watchTime, token);
                             }
 
-                            // ✅ AMÉLIORATION: Watch time adaptatif basé sur les filtres (éduquer l'algo)
-                            int watchTime = await GetHumanWatchTime(rand);
-
-                            // 🎯 BONUS: +30-50% temps si femme + langue correspondent (contenu ciblé = plus d'attention)
-                            if (passedNicheFilter && passedLanguageFilter &&
-                                config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any"))
-                            {
-                                int bonus = (int)(watchTime * (0.30 + rand.NextDouble() * 0.20)); // +30-50%
-                                watchTime += bonus;
-                                logTextBox.AppendText($"[WATCH] 🎯 Perfect match (Female + {detectedLanguage}) → +{bonus / 1000}s bonus!\r\n");
-                            }
-
-                            logTextBox.AppendText($"[WATCH] Watching for {watchTime / 1000}s...\r\n");
-                            await WatchWithMicroPausesAsync(watchTime, rand, token);
-
-                            // ✅ AMÉLIORATION: Mouvement de souris pendant visionnage
-                            await RandomMouseMovementAsync(rand, token);
-
-                            // Pause longue aléatoire (5% de chance)
-                            if (await ShouldTakeLongPause(rand))
-                            {
-                                await TakeLongPauseWithVideo(rand, token);
-                            }
-
-                            // ✅ AMÉLIORATION: Réécoute partielle (15% si watch time > 15s)
-                            if (watchTime > 15000 && rand.NextDouble() < 0.15)
-                            {
-                                await ReplayReelAsync(rand, token);
-                            }
-
-                            // ✅ AMÉLIORATION: Visite du profil (5-8% si bon engagement)
-                            bool shouldVisitProfile = comments >= config.MinCommentsToAddToFutureTargets &&
-                                                      watchTime > 15000 &&
-                                                      rand.NextDouble() < 0.08;
-                            if (shouldVisitProfile)
-                            {
-                                await VisitCreatorProfileAsync(rand, token);
-                            }
-
-                            // ✅ AMÉLIORATION: Like avec probabilité adaptative
-                            double likeProbability = GetLikeProbability(watchTime, comments);
-                            bool shouldLike = rand.NextDouble() < likeProbability;
+                            // ✅ Like logic (only for perfect matches)
+                            bool shouldLike = isPerfectMatch && rand.NextDouble() < GetLikeProbability(watchTime, comments);
 
                             if (shouldLike)
                             {
