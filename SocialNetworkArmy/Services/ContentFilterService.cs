@@ -61,6 +61,7 @@ namespace SocialNetworkArmy.Services
 
         /// <summary>
         /// Analyse une image depuis une URL et détermine si c'est une fille
+        /// ✅ Seuils stricts: Female >80%, Male >40%
         /// </summary>
         public async Task<bool> IsImageFemaleAsync(string imageUrl)
         {
@@ -68,22 +69,28 @@ namespace SocialNetworkArmy.Services
             {
                 var result = await AnalyzeWithHuggingFaceAsync(imageUrl);
 
-                if (result.HasFaces)
+                if (!result.HasFaces)
                 {
-                    if (result.IsFemale)
-                    {
-                        Log($"[Filter] ✓ Female");
-                        return true;
-                    }
-                    else
-                    {
-                        Log($"[Filter] ✗ Male");
-                        return false;
-                    }
+                    Log($"[Filter] ✗ No face detected");
+                    return false;
+                }
+
+                // ✅ Apply confidence thresholds
+                if (result.IsFemale && result.Confidence > 0.80)
+                {
+                    Log($"[Filter] ✓ Female ({result.Confidence:P0} confidence) - KEEP");
+                    return true;
+                }
+                else if (!result.IsFemale && result.Confidence > 0.40)
+                {
+                    Log($"[Filter] ✗ Male ({result.Confidence:P0} confidence) - SKIP");
+                    return false;
                 }
                 else
                 {
-                    Log($"[Filter] ✗ No face");
+                    // Uncertain (low confidence) → skip by default
+                    string gender = result.IsFemale ? "Female" : "Male";
+                    Log($"[Filter] ? {gender} ({result.Confidence:P0} confidence) - UNCERTAIN, skip");
                     return false;
                 }
             }
@@ -132,34 +139,38 @@ namespace SocialNetworkArmy.Services
                     return new AnalysisResult { HasFaces = false };
                 }
 
-                // 3) Parser la réponse
+                // 3) Parser la réponse avec seuils de confiance stricts
                 var data = JsonDocument.Parse(json);
                 var predictions = data.RootElement.EnumerateArray();
 
-                var result = new AnalysisResult { HasFaces = false, FaceCount = 0, IsFemale = false };
+                var result = new AnalysisResult { HasFaces = false, FaceCount = 0, IsFemale = false, Confidence = 0 };
 
                 foreach (var pred in predictions)
                 {
                     var label = pred.GetProperty("label").GetString();
                     var score = pred.GetProperty("score").GetDouble();
 
-                    // Check for female
+                    // ✅ STRICT THRESHOLDS:
+                    // Female: need >80% confidence to KEEP
+                    // Male: need >40% confidence to SKIP
+
                     if (label.Contains("female", StringComparison.OrdinalIgnoreCase) ||
                         label.Contains("woman", StringComparison.OrdinalIgnoreCase))
                     {
                         result.HasFaces = true;
                         result.FaceCount = 1;
-                        result.IsFemale = score > 0.6; // Threshold
+                        result.Confidence = score;
+                        result.IsFemale = score > 0.80; // ✅ Strict: only keep if >80% confident it's female
                         break;
                     }
 
-                    // Check for male
                     if (label.Contains("male", StringComparison.OrdinalIgnoreCase) ||
                         label.Contains("man", StringComparison.OrdinalIgnoreCase))
                     {
                         result.HasFaces = true;
                         result.FaceCount = 1;
-                        result.IsFemale = false;
+                        result.Confidence = score;
+                        result.IsFemale = false; // Male detected, will skip if >40% confidence
                         break;
                     }
                 }
@@ -395,6 +406,7 @@ namespace SocialNetworkArmy.Services
             public bool HasFaces { get; set; }
             public int FaceCount { get; set; }
             public bool IsFemale { get; set; }
+            public double Confidence { get; set; } // ✅ Confidence score (0-1)
         }
     }
 }

@@ -1305,10 +1305,10 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             }
                             else
                             {
-                                // ⚡ NOT a match: SKIP FAST (0.5-1s)
-                                watchTime = rand.Next(500, 1001);
-                                logTextBox.AppendText($"[SKIP] Fast skip → {watchTime}ms\r\n");
-                                await Task.Delay(watchTime, token);
+                                // ⚡ NOT a match: INSTANT SKIP (0ms)
+                                watchTime = 0;
+                                logTextBox.AppendText($"[SKIP] ⚡ Instant skip\r\n");
+                                // No delay at all - skip immediately
                             }
 
                             // ✅ Like only for perfect matches
