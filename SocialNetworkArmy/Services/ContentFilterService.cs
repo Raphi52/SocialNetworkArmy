@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Text;
@@ -19,6 +20,11 @@ namespace SocialNetworkArmy.Services
         // ✅ Configuration HuggingFace (GRATUIT)
         private const string HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/rizvandwiki/gender-classification";
         private static string HUGGINGFACE_TOKEN = null;
+
+        // ✅ NOUVEAU: Cache par créateur (évite de ré-analyser le même créateur)
+        private static readonly System.Collections.Generic.Dictionary<string, (bool isFemale, DateTime timestamp)> creatorGenderCache
+            = new System.Collections.Generic.Dictionary<string, (bool, DateTime)>();
+        private static readonly TimeSpan CREATOR_CACHE_DURATION = TimeSpan.FromHours(24);
 
         public ContentFilterService(WebView2 webView, TextBox logTextBox)
         {
@@ -182,20 +188,33 @@ namespace SocialNetworkArmy.Services
 
         /// <summary>
         /// Détecte le genre depuis le screenshot actuel dans Instagram
+        /// ✅ AMÉLIORATION: Cache par créateur + détection multi-images avec vote
         /// </summary>
         public async Task<bool> IsCurrentContentFemaleAsync()
         {
             try
             {
-                // 1) Récupérer l'URL de l'image actuellement affichée via JavaScript
-                string imageUrl = await webView.ExecuteScriptAsync(@"
+                // 1) Récupérer le créateur + les images disponibles via JavaScript
+                string scriptResult = await webView.ExecuteScriptAsync(@"
                     (function() {
+                        // Extract creator username
+                        let creator = '';
+                        const creatorLink = document.querySelector('article a[href*=""/""]');
+                        if (creatorLink) {
+                            const href = creatorLink.getAttribute('href');
+                            const match = href.match(/^\/([^\/]+)\/?$/);
+                            if (match) creator = match[1];
+                        }
+
+                        // Extract multiple images
+                        const imageUrls = [];
+
                         // Strategy 1: Video poster
                         const videos = document.querySelectorAll('video');
                         for (let video of videos) {
                             const rect = video.getBoundingClientRect();
                             if (rect.top < window.innerHeight && rect.bottom > 0 && video.poster) {
-                                return video.poster;
+                                imageUrls.push(video.poster);
                             }
                         }
 
@@ -203,34 +222,101 @@ namespace SocialNetworkArmy.Services
                         const allImages = Array.from(document.querySelectorAll('img'));
                         const visibleImages = allImages.filter(img => {
                             const rect = img.getBoundingClientRect();
-                            return rect.top < window.innerHeight && rect.bottom > 0;
+                            return rect.top < window.innerHeight && rect.bottom > 0 && img.width > 50 && img.height > 50;
                         });
 
-                        if (visibleImages.length > 0) {
-                            visibleImages.sort((a, b) => {
-                                return (b.width * b.height) - (a.width * a.height);
-                            });
+                        visibleImages.sort((a, b) => {
+                            return (b.width * b.height) - (a.width * a.height);
+                        });
 
-                            const largest = visibleImages[0];
-                            if (largest.width > 50 && largest.height > 50) {
-                                return largest.src || largest.currentSrc;
+                        for (let img of visibleImages.slice(0, 3)) {
+                            const url = img.src || img.currentSrc;
+                            if (url && !imageUrls.includes(url)) {
+                                imageUrls.push(url);
                             }
                         }
 
-                        return null;
+                        return JSON.stringify({
+                            creator: creator,
+                            images: imageUrls
+                        });
                     })()
                 ");
 
-                imageUrl = imageUrl?.Trim('"');
+                scriptResult = scriptResult?.Trim('"')?.Replace("\\\"", "\"");
 
-                if (string.IsNullOrWhiteSpace(imageUrl))
+                if (string.IsNullOrWhiteSpace(scriptResult))
                 {
-                    Log($"[Filter] ✗ No image");
+                    Log($"[Filter] ✗ No data");
                     return false;
                 }
 
-                // 2) Analyser l'image
-                return await IsImageFemaleAsync(imageUrl);
+                // Parse JSON result
+                var data = JsonDocument.Parse(scriptResult);
+                string creator = data.RootElement.GetProperty("creator").GetString();
+                var images = data.RootElement.GetProperty("images");
+
+                var imageUrls = new System.Collections.Generic.List<string>();
+                foreach (var img in images.EnumerateArray())
+                {
+                    string url = img.GetString();
+                    if (!string.IsNullOrWhiteSpace(url))
+                        imageUrls.Add(url);
+                }
+
+                if (imageUrls.Count == 0)
+                {
+                    Log($"[Filter] ✗ No images");
+                    return false;
+                }
+
+                // ✅ 2) Check creator cache first (24h duration)
+                if (!string.IsNullOrWhiteSpace(creator) && creatorGenderCache.TryGetValue(creator, out var cached))
+                {
+                    if (DateTime.Now - cached.timestamp < CREATOR_CACHE_DURATION)
+                    {
+                        Log($"[Filter] Cache: @{creator} → {(cached.isFemale ? "✓ Female" : "✗ Male")}");
+                        return cached.isFemale;
+                    }
+                    else
+                    {
+                        creatorGenderCache.Remove(creator); // Expired
+                    }
+                }
+
+                // ✅ 3) Multi-image detection with voting (try up to 3 images)
+                int maxImagesToCheck = Math.Min(3, imageUrls.Count);
+                int femaleVotes = 0;
+                int maleVotes = 0;
+
+                Log($"[Filter] Analyzing {maxImagesToCheck} images for @{creator}...");
+
+                for (int i = 0; i < maxImagesToCheck; i++)
+                {
+                    bool isFemale = await IsImageFemaleAsync(imageUrls[i]);
+                    if (isFemale)
+                        femaleVotes++;
+                    else
+                        maleVotes++;
+
+                    // Early exit if we already have a majority
+                    if (femaleVotes >= 2)
+                        break;
+                    if (maleVotes >= 2)
+                        break;
+                }
+
+                // ✅ 4) Voting result (majority wins)
+                bool finalResult = femaleVotes > maleVotes;
+                Log($"[Filter] Vote: {femaleVotes}F/{maleVotes}M → {(finalResult ? "✓ Female" : "✗ Male")}");
+
+                // ✅ 5) Cache the result by creator
+                if (!string.IsNullOrWhiteSpace(creator))
+                {
+                    creatorGenderCache[creator] = (finalResult, DateTime.Now);
+                }
+
+                return finalResult;
             }
             catch (Exception ex)
             {
