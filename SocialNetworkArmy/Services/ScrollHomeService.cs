@@ -22,6 +22,8 @@ namespace SocialNetworkArmy.Services
         private System.Collections.Generic.HashSet<string> donePostIds;
         private string donePostsPath;
         private readonly ContentFilterService contentFilter;
+        private readonly LanguageDetectionService languageDetector;
+        private readonly Models.AccountConfig config;
 
         public ScrollHomeService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -30,6 +32,8 @@ namespace SocialNetworkArmy.Services
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.form = form ?? throw new ArgumentNullException(nameof(form));
             this.contentFilter = new ContentFilterService(webView, logTextBox);
+            this.languageDetector = new LanguageDetectionService(logTextBox);
+            this.config = ConfigService.LoadConfig(profile.Name);
         }
 
         private static bool JsBoolIsTrue(string jsResult)
@@ -89,6 +93,64 @@ namespace SocialNetworkArmy.Services
             }
         }
 
+        private async Task<string> ExtractPostCaptionAsync(CancellationToken token)
+        {
+            var captionScript = @"
+(function(){
+  try {
+    const articles = document.querySelectorAll('article');
+    let targetArticle = null;
+    let bestScore = -1;
+
+    for (let article of articles) {
+      const rect = article.getBoundingClientRect();
+      const visibleTop = Math.max(rect.top, 0);
+      const visibleBottom = Math.min(rect.bottom, window.innerHeight);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const visiblePercent = visibleHeight / rect.height;
+
+      if (visiblePercent > 0.3 && visibleHeight > bestScore) {
+        bestScore = visibleHeight;
+        targetArticle = article;
+      }
+    }
+
+    if (!targetArticle) return '';
+
+    // Try to find caption text
+    // Strategy 1: Look for h1 (usually contains the caption)
+    const h1 = targetArticle.querySelector('h1');
+    if (h1 && h1.textContent && h1.textContent.trim().length > 0) {
+      return h1.textContent.trim();
+    }
+
+    // Strategy 2: Look for spans with caption-like content
+    const spans = targetArticle.querySelectorAll('span');
+    for (let span of spans) {
+      const text = span.textContent || '';
+      if (text.length > 20 && !text.includes('ago') && !text.includes('il y a') && !text.includes('comment')) {
+        return text.trim();
+      }
+    }
+
+    return '';
+  } catch(e) {
+    return '';
+  }
+})();";
+
+            try
+            {
+                var result = await webView.ExecuteScriptAsync(captionScript);
+                return result?.Trim('"').Trim() ?? "";
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[CAPTION ERROR] {ex.Message}\r\n");
+                return "";
+            }
+        }
+
         private async Task<(bool found, string datetime, string text, double ageHours, bool isReel)> ExtractPostInfoAsync(CancellationToken token)
         {
             var extractScript = @"
@@ -104,7 +166,7 @@ namespace SocialNetworkArmy.Services
       const visibleBottom = Math.min(rect.bottom, window.innerHeight);
       const visibleHeight = Math.max(0, visibleBottom - visibleTop);
       const visiblePercent = visibleHeight / rect.height;
-  
+
       if (visiblePercent > 0.3 && visibleHeight > bestScore) {
         bestScore = visibleHeight;
         targetArticle = article;
@@ -367,10 +429,10 @@ namespace SocialNetworkArmy.Services
                     return;
                 }
 
-                // ⭐ NOUVEAU : Filtre minimum 300 commentaires
-                if (comments < 300)
+                // ⭐ Filtre minimum commentaires (config)
+                if (comments < config.MinCommentsToComment)
                 {
-                    logTextBox.AppendText($"[TARGET] ⊘ Skipped '{creator}' ({comments} comments < 300)\r\n");
+                    logTextBox.AppendText($"[TARGET] ⊘ Skipped '{creator}' ({comments} comments < {config.MinCommentsToComment})\r\n");
                     return;
                 }
 
@@ -1114,20 +1176,50 @@ document.querySelector('article, main') ? 'true' : 'false';");
                                 continue;
                             }
 
-                            // ✅ CONTENT FILTER: Check if content is female
-                            bool isFemale = await contentFilter.IsCurrentContentFemaleAsync();
-                            if (!isFemale)
-                            {
-                                logTextBox.AppendText($"[FILTER] ✗ Content filtered (not female) - SKIPPING\r\n");
+                            // ✅ COMBINED FILTER: Niche (if enabled) && Language
+                            bool passedNicheFilter = true;
+                            bool passedLanguageFilter = true;
 
+                            // 1️⃣ NICHE FILTER (if enabled in config)
+                            if (config.ShouldApplyNicheFilter())
+                            {
+                                passedNicheFilter = await contentFilter.IsCurrentContentFemaleAsync();
+                                if (!passedNicheFilter)
+                                {
+                                    logTextBox.AppendText($"[FILTER] ✗ Niche filter failed (not female) - SKIPPING\r\n");
+                                }
+                            }
+
+                            // 2️⃣ LANGUAGE FILTER
+                            string detectedLanguage = "Unknown";
+                            string postCaption = await ExtractPostCaptionAsync(token);
+
+                            if (!string.IsNullOrWhiteSpace(postCaption))
+                            {
+                                detectedLanguage = await languageDetector.DetectLanguageAsync(postCaption);
+                                passedLanguageFilter = config.IsLanguageTargeted(detectedLanguage);
+
+                                if (!passedLanguageFilter)
+                                {
+                                    logTextBox.AppendText($"[FILTER] ✗ Language filter failed (detected: {detectedLanguage}) - SKIPPING\r\n");
+                                }
+                            }
+                            else
+                            {
+                                // If no caption, assume language passes (can't determine)
+                                logTextBox.AppendText($"[FILTER] ℹ️ No caption found, language filter skipped\r\n");
+                            }
+
+                            // 3️⃣ COMBINED DECISION: Both must pass
+                            if (!passedNicheFilter || !passedLanguageFilter)
+                            {
                                 // ⚡ Skip IMMEDIATELY (algo signal: not interested at all)
                                 await ScrollToNextPostAsync(rand, token);
                                 postsScrolled++;
-
-                                continue; // Skip this post, go to next iteration
+                                continue;
                             }
 
-                            logTextBox.AppendText($"[FILTER] ✓ Content passed filter (female detected)\r\n");
+                            logTextBox.AppendText($"[FILTER] ✓ Content passed all filters (niche: {(config.ShouldApplyNicheFilter() ? "female" : "any")}, lang: {detectedLanguage})\r\n");
 
                             var (found, datetime, text, ageHours, isReel) = await ExtractPostInfoAsync(token);
 
@@ -1156,16 +1248,16 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             {
                                 logTextBox.AppendText($"[AGE] {ageHours:F1}h\r\n");
 
-                                if (ageHours < 24)
+                                if (ageHours <= config.MaxPostAgeHours)
                                 {
                                     shouldComment = true;
-                                    logTextBox.AppendText("[DECISION] < 24h → WILL COMMENT\r\n");
+                                    logTextBox.AppendText($"[DECISION] ≤ {config.MaxPostAgeHours}h → WILL COMMENT\r\n");
                                 }
                                 else
                                 {
                                     shouldComment = false;
                                     shouldSkip = (rand.NextDouble() < 0.80);
-                                    logTextBox.AppendText($"[DECISION] ≥ 24h → {(shouldSkip ? "SKIP (80%)" : "NO COMMENT")}\r\n");
+                                    logTextBox.AppendText($"[DECISION] > {config.MaxPostAgeHours}h → {(shouldSkip ? "SKIP (80%)" : "NO COMMENT")}\r\n");
                                 }
                             }
                             else

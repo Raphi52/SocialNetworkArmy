@@ -18,6 +18,8 @@ namespace SocialNetworkArmy.Services
         private readonly TextBox logTextBox;
         private readonly Profile profile;
         private readonly ContentFilterService contentFilter;
+        private readonly LanguageDetectionService languageDetector;
+        private readonly Models.AccountConfig config;
 
         public ScrollReelsService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -26,6 +28,8 @@ namespace SocialNetworkArmy.Services
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.form = form ?? throw new ArgumentNullException(nameof(form));
             this.contentFilter = new ContentFilterService(webView, logTextBox);
+            this.languageDetector = new LanguageDetectionService(logTextBox);
+            this.config = ConfigService.LoadConfig(profile.Name);
         }
 
         private static bool JsBoolIsTrue(string jsResult)
@@ -35,6 +39,68 @@ namespace SocialNetworkArmy.Services
             if (s.StartsWith("\"") && s.EndsWith("\""))
                 s = s.Substring(1, s.Length - 2);
             return s.Equals("true", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private async Task<string> ExtractReelCaptionAsync(CancellationToken token)
+        {
+            var captionScript = @"
+(function(){
+  try {
+    const videos = document.querySelectorAll('video');
+    let mostVisibleVideo = null;
+    let maxVisible = 0;
+
+    videos.forEach(video => {
+      const rect = video.getBoundingClientRect();
+      const visible = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      if (visible > maxVisible) {
+        maxVisible = visible;
+        mostVisibleVideo = video;
+      }
+    });
+
+    if (!mostVisibleVideo) return '';
+
+    // Navigate up to find the container with caption
+    let container = mostVisibleVideo.parentElement;
+    for (let i = 0; i < 5 && container; i++) {
+      container = container.parentElement;
+    }
+
+    if (!container) return '';
+
+    // Try to find caption text
+    // Strategy 1: Look for h1
+    const h1 = container.querySelector('h1');
+    if (h1 && h1.textContent && h1.textContent.trim().length > 0) {
+      return h1.textContent.trim();
+    }
+
+    // Strategy 2: Look for spans with caption-like content
+    const spans = container.querySelectorAll('span');
+    for (let span of spans) {
+      const text = span.textContent || '';
+      if (text.length > 20 && !text.includes('ago') && !text.includes('il y a') && !text.includes('comment')) {
+        return text.trim();
+      }
+    }
+
+    return '';
+  } catch(e) {
+    return '';
+  }
+})();";
+
+            try
+            {
+                var result = await webView.ExecuteScriptAsync(captionScript);
+                return result?.Trim('"').Trim() ?? "";
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[CAPTION ERROR] {ex.Message}\r\n");
+                return "";
+            }
         }
 
         private async Task<int> GetHumanWatchTime(Random rand)
@@ -460,12 +526,43 @@ namespace SocialNetworkArmy.Services
                             creatorName = creatorName?.Trim('"').Trim();
                             logTextBox.AppendText($"[CREATOR] {creatorName}\r\n");
 
-                            // ✅ CONTENT FILTER: Check if content is female
-                            bool isFemale = await contentFilter.IsCurrentContentFemaleAsync();
-                            if (!isFemale)
-                            {
-                                logTextBox.AppendText($"[FILTER] ✗ Content filtered (not female) - SKIPPING\r\n");
+                            // ✅ COMBINED FILTER: Niche (if enabled) && Language
+                            bool passedNicheFilter = true;
+                            bool passedLanguageFilter = true;
 
+                            // 1️⃣ NICHE FILTER (if enabled in config)
+                            if (config.ShouldApplyNicheFilter())
+                            {
+                                passedNicheFilter = await contentFilter.IsCurrentContentFemaleAsync();
+                                if (!passedNicheFilter)
+                                {
+                                    logTextBox.AppendText($"[FILTER] ✗ Niche filter failed (not female) - SKIPPING\r\n");
+                                }
+                            }
+
+                            // 2️⃣ LANGUAGE FILTER
+                            string detectedLanguage = "Unknown";
+                            string reelCaption = await ExtractReelCaptionAsync(token);
+
+                            if (!string.IsNullOrWhiteSpace(reelCaption))
+                            {
+                                detectedLanguage = await languageDetector.DetectLanguageAsync(reelCaption);
+                                passedLanguageFilter = config.IsLanguageTargeted(detectedLanguage);
+
+                                if (!passedLanguageFilter)
+                                {
+                                    logTextBox.AppendText($"[FILTER] ✗ Language filter failed (detected: {detectedLanguage}) - SKIPPING\r\n");
+                                }
+                            }
+                            else
+                            {
+                                // If no caption, assume language passes (can't determine)
+                                logTextBox.AppendText($"[FILTER] ℹ️ No caption found, language filter skipped\r\n");
+                            }
+
+                            // 3️⃣ COMBINED DECISION: Both must pass
+                            if (!passedNicheFilter || !passedLanguageFilter)
+                            {
                                 // ⚡ Skip IMMEDIATELY (algo signal: not interested at all)
                                 bool scrollSuccess = await ScrollToNextReelAsync(rand, token);
 
@@ -475,10 +572,10 @@ namespace SocialNetworkArmy.Services
                                     previousCreator = newCreator;
                                 }
 
-                                continue; // Skip this reel, go to next iteration
+                                continue;
                             }
 
-                            logTextBox.AppendText($"[FILTER] ✓ Content passed filter (female detected)\r\n");
+                            logTextBox.AppendText($"[FILTER] ✓ Content passed all filters (niche: {(config.ShouldApplyNicheFilter() ? "female" : "any")}, lang: {detectedLanguage})\r\n");
 
                             // Extract comment count
                             var commentScript = $@"
@@ -520,7 +617,7 @@ getCurrentComments();
                                 int.TryParse(digitsOnly, out comments);
                             }
 
-                            if (comments > 300 && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
+                            if (comments >= config.MinCommentsToComment && creatorName != "NO_CREATOR" && creatorName != "ERR" && creatorName != "NO_VISIBLE_VIDEO" && creatorName != "NO_PARENT3")
                             {
                                 bool alreadyExists = false;
                                 if (File.Exists(targetFile))
