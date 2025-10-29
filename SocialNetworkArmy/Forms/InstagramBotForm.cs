@@ -826,13 +826,13 @@ namespace SocialNetworkArmy.Forms
                 webView.Focus();
                 logTextBox.AppendText("[INFO] ✓ Setup complete - Bot ready\r\n");
             }
-            catch (OperationCanceledException)
+            catch (TaskCanceledException)
             {
                 // ✅ Form closed during initialization - this is normal, exit silently
                 logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
                 return;
             }
-            catch (TaskCanceledException)
+            catch (OperationCanceledException)
             {
                 // ✅ Form closed during initialization - this is normal, exit silently
                 logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
