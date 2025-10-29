@@ -127,6 +127,8 @@ Data/Profiles/
 Data/Configs/
 !Data/Icons/
 !Data/*.example.csv
+SocialNetworkArmy/Data/*.txt
+!SocialNetworkArmy/Data/*.example.txt
 
 # ===== ReSharper / Analyzers =====
 _ReSharper*/
