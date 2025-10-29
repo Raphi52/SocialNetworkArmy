@@ -53,6 +53,18 @@ namespace SocialNetworkArmy.Services
         // =============== PUBLIC ENTRY ===============
         public async Task RunAsync(string[] filePaths, string? caption = null, bool autoPublish = false, CancellationToken token = default)
         {
+            try
+            {
+                form.MaximizeWindowSafe();
+
+                // Attendre que la fenêtre soit bien maximisée et que le DOM se stabilise
+                await Task.Delay(500, token);
+            }
+            catch (Exception ex)
+            {
+                log.AppendText($"[WINDOW] Failed to maximize: {ex.Message}\r\n");
+                // Continue quand même
+            }
             // Vérifier connexion Instagram
             bool isLoggedIn = await CheckInstagramLoginAsync();
 
@@ -568,71 +580,134 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
 
         private async Task<bool> ClickPublication(CancellationToken token)
         {
-            log.AppendText("[MENU] Recherche du bouton 'Publication/Post'…\r\n");
+            log.AppendText("[MENU] Recherche du bouton 'Publication/Post' (multi-fallback)…\r\n");
 
             string js = @"
 (() => {
-  // 1) Trouver <svg><title>Publication|Post</title>
-  const titles = [...document.querySelectorAll('svg title')];
+  // ===== STRATÉGIE 1: SVG <title> EXACT =====
+  let titles = [...document.querySelectorAll('svg title')];
   let t = titles.find(n => /^(publication|post)$/i.test((n.textContent||'').trim()));
-
-  // fallback: texte visible dans un <span>
-  let span = null;
-  if (!t) {
-    span = [...document.querySelectorAll('span')]
-      .find(s => /^(publication|post)$/i.test((s.textContent||'').trim()));
-  }
-
-  const svg = t ? t.closest('svg') : null;
-
-  // 2) Déterminer l'élément cliquable
-  let btn =
-    (svg && (svg.closest('[role=""menuitem""],[role=""button""],button,a,[tabindex],div.xamitd3') || svg)) ||
-    (span && span.closest('[role=""menuitem""],[role=""button""],button,a,[tabindex],div.xamitd3'));
-
-  if (!btn) return 'NO_BTN';
-
-  btn.scrollIntoView({block:'center', inline:'center'});
-  btn.style.outline = '2px solid lime'; // debug
-
-  const r = btn.getBoundingClientRect();
-  let x = Math.round(r.left + r.width/2);
-  let y = Math.round(r.top + r.height/2);
-
-  // 3) S'assurer que le point est bien sur le bouton (overlay, etc.)
-  const isPointOnEl = (xx, yy) => {
-    const el = document.elementFromPoint(xx, yy);
-    return el === btn || (el && btn.contains(el));
-  };
-
-  if (!isPointOnEl(x, y)) {
-    const candidates = [
-      [r.left + r.width*0.5, r.top + r.height*0.5],
-      [r.left + r.width*0.2, r.top + r.height*0.5],
-      [r.left + r.width*0.8, r.top + r.height*0.5],
-      [r.left + r.width*0.5, r.top + r.height*0.3],
-      [r.left + r.width*0.5, r.top + r.height*0.7]
-    ];
-    for (const [xx, yy] of candidates) {
-      if (isPointOnEl(xx, yy)) { x = Math.round(xx); y = Math.round(yy); break; }
+  
+  if (t) {
+    const svg = t.closest('svg');
+    const btn = svg ? (svg.closest('[role=""menuitem""],[role=""button""],button,a,[tabindex],div') || svg) : null;
+    if (btn) {
+      console.log('[MENU] Found via SVG title (exact)');
+      btn.scrollIntoView({block:'center', inline:'center'});
+      const r = btn.getBoundingClientRect();
+      const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+      ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+        btn.dispatchEvent(new MouseEvent(ev, {bubbles:true, clientX:x, clientY:y, button:0}))
+      );
+      return 'SVG_EXACT';
     }
   }
 
-  // 4) Séquence d'événements souris
-  ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
-    btn.dispatchEvent(new MouseEvent(ev, {
-      bubbles:true, cancelable:true, view:window, clientX:x, clientY:y, button:0
-    }))
-  );
+  // ===== STRATÉGIE 2: SVG <title> PARTIEL (contient 'post' ou 'publication') =====
+  t = titles.find(n => /(publication|post|créer|create)/i.test((n.textContent||'').trim()));
+  if (t) {
+    const svg = t.closest('svg');
+    const btn = svg ? (svg.closest('[role=""menuitem""],[role=""button""],button,a,[tabindex],div') || svg) : null;
+    if (btn) {
+      console.log('[MENU] Found via SVG title (partial)');
+      btn.scrollIntoView({block:'center', inline:'center'});
+      const r = btn.getBoundingClientRect();
+      const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+      ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+        btn.dispatchEvent(new MouseEvent(ev, {bubbles:true, clientX:x, clientY:y, button:0}))
+      );
+      return 'SVG_PARTIAL';
+    }
+  }
 
-  return 'CLICK_OK';
+  // ===== STRATÉGIE 3: SPAN EXACT =====
+  let span = [...document.querySelectorAll('span')]
+    .find(s => /^(publication|post)$/i.test((s.textContent||'').trim()));
+  
+  if (span) {
+    const btn = span.closest('[role=""menuitem""],[role=""button""],button,a,[tabindex],div');
+    if (btn) {
+      console.log('[MENU] Found via SPAN (exact)');
+      btn.scrollIntoView({block:'center', inline:'center'});
+      const r = btn.getBoundingClientRect();
+      const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+      ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+        btn.dispatchEvent(new MouseEvent(ev, {bubbles:true, clientX:x, clientY:y, button:0}))
+      );
+      return 'SPAN_EXACT';
+    }
+  }
+
+  // ===== STRATÉGIE 4: ARIA-LABEL =====
+  const ariaBtn = [...document.querySelectorAll('[aria-label]')]
+    .find(el => /(publication|post|créer|create|nouveau|new)/i.test(el.getAttribute('aria-label')||''));
+  
+  if (ariaBtn) {
+    console.log('[MENU] Found via aria-label');
+    ariaBtn.scrollIntoView({block:'center', inline:'center'});
+    const r = ariaBtn.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+      ariaBtn.dispatchEvent(new MouseEvent(ev, {bubbles:true, clientX:x, clientY:y, button:0}))
+    );
+    return 'ARIA_LABEL';
+  }
+
+  // ===== STRATÉGIE 5: TEXTE DANS MENUITEM/BUTTON =====
+  const menuBtn = [...document.querySelectorAll('[role=""menuitem""],[role=""button""],button,a')]
+    .find(el => /(publication|post|créer|create)/i.test(el.textContent||''));
+  
+  if (menuBtn) {
+    console.log('[MENU] Found via menuitem text');
+    menuBtn.scrollIntoView({block:'center', inline:'center'});
+    const r = menuBtn.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+      menuBtn.dispatchEvent(new MouseEvent(ev, {bubbles:true, clientX:x, clientY:y, button:0}))
+    );
+    return 'MENUITEM_TEXT';
+  }
+
+  // ===== STRATÉGIE 6: POSITION MENU (3ème élément du menu) =====
+  // Instagram place souvent 'Publication' en 3ème position: Home, Recherche, Publication, Reels...
+  const navItems = [...document.querySelectorAll('nav [role=""menuitem""], nav a, nav [role=""button""]')];
+  if (navItems.length >= 3) {
+    const thirdItem = navItems[2]; // Index 2 = 3ème élément
+    console.log('[MENU] Trying 3rd menu item (positional fallback)');
+    thirdItem.scrollIntoView({block:'center', inline:'center'});
+    const r = thirdItem.getBoundingClientRect();
+    const x = Math.round(r.left + r.width/2), y = Math.round(r.top + r.height/2);
+    ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(ev =>
+      thirdItem.dispatchEvent(new MouseEvent(ev, {bubbles:true, clientX:x, clientY:y, button:0}))
+    );
+    return 'POSITION_3RD';
+  }
+
+  return 'NO_BTN';
 })();
 ";
 
             var res = Trim(await webView.CoreWebView2.ExecuteScriptAsync(js));
-            log.AppendText("[MENU/CLICK_POST] " + res + "\r\n");
+            log.AppendText($"[MENU/CLICK_POST] Result: {res}\r\n");
+
+            if (res == "NO_BTN")
+            {
+                // Log détaillé pour debugging
+                log.AppendText("[MENU] ✗ ÉCHEC - Diagnostic du DOM:\r\n");
+                var debug = await webView.CoreWebView2.ExecuteScriptAsync(@"
+(() => {
+  const svgTitles = [...document.querySelectorAll('svg title')].map(t => t.textContent).slice(0, 10);
+  const spans = [...document.querySelectorAll('span')].map(s => s.textContent?.trim()).filter(t => t && t.length < 30).slice(0, 10);
+  const ariaLabels = [...document.querySelectorAll('[aria-label]')].map(el => el.getAttribute('aria-label')).filter(t => t).slice(0, 10);
+  return JSON.stringify({svgTitles, spans, ariaLabels});
+})()");
+                log.AppendText($"[MENU] Debug info: {debug}\r\n");
+                await Task.Delay(1500, token);
+                return false;
+            }
+
             await Task.Delay(1500, token);
-            return res == "CLICK_OK";
+            return true;
         }
         private async Task<bool> SetFilesViaJsAsync(string[] files, CancellationToken token)
         {
@@ -1036,6 +1111,8 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
 
         private async Task Slow(CancellationToken ct) =>
             await Task.Delay(rng.Next(2000, 5000), ct); // 3–5s pour simuler l’humain
+                                                        // Dans PublishService.cs, remplacer la méthode TryApplyScheduleCsv par :
+
         private bool TryApplyScheduleCsv(ref string[] filePaths, ref string? caption, out string info)
         {
             info = string.Empty;
@@ -1064,17 +1141,28 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 log.AppendText($"[SCHEDULE]   - Account: {currentAccount}\r\n");
                 log.AppendText($"[SCHEDULE]   - Activity: publish\r\n");
 
-                // ✅ UTILISER LA LOGIQUE CENTRALISÉE
+                // ✅ FIX CRITIQUE: PASSER LE TEXTBOX POUR LES LOGS DÉTAILLÉS
                 var match = ScheduleHelper.GetTodayMediaForAccount(
                     currentAccount,
                     "Instagram",
-                    "publish"
+                    "publish",
+                    targetDate: null,
+                    log: log  // ⬅️ AJOUT MANQUANT!
                 );
 
                 if (match == null)
                 {
                     info = $"No publish scheduled today for {currentAccount} → manual mode.";
                     log.AppendText("[SCHEDULE] ✗ " + info + "\r\n");
+                    log.AppendText("[SCHEDULE] ========================================\r\n");
+                    return true; // Continue en mode manuel
+                }
+
+                // ✅ VALIDATION DU FICHIER TROUVÉ
+                if (!File.Exists(match.MediaPath))
+                {
+                    info = $"File not found: {match.MediaPath}";
+                    log.AppendText($"[SCHEDULE] ✗ ERROR: {info}\r\n");
                     log.AppendText("[SCHEDULE] ========================================\r\n");
                     return true; // Continue en mode manuel
                 }
@@ -1105,6 +1193,7 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
             {
                 info = $"Schedule error: {ex.Message}";
                 log.AppendText("[SCHEDULE] ✗ ERROR: " + info + "\r\n");
+                log.AppendText($"[SCHEDULE] Stack: {ex.StackTrace}\r\n");
                 log.AppendText("[SCHEDULE] ========================================\r\n");
                 return true; // Continue en mode manuel en cas d'erreur
             }

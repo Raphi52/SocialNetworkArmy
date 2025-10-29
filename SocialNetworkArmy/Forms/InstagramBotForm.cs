@@ -1518,6 +1518,28 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 System.Diagnostics.Debug.WriteLine($"ForceClose error: {ex.Message}");
             }
         }
+        public void MaximizeWindowSafe()
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(() => MaximizeWindowSafe()));
+                return;
+            }
+
+            try
+            {
+                if (this.WindowState != FormWindowState.Maximized)
+                {
+                    logTextBox.AppendText("[WINDOW] ⛶ Maximizing for better button visibility...\r\n");
+                    this.WindowState = FormWindowState.Maximized;
+                    this.Update(); // Force UI refresh
+                }
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[WINDOW] Maximize failed: {ex.Message}\r\n");
+            }
+        }
         protected override void Dispose(bool disposing)
         {
             if (isDisposing) return;

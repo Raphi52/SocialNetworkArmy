@@ -214,7 +214,7 @@ namespace SocialNetworkArmy.Forms
                 Font = Sergoe,
                 FlatStyle = FlatStyle.Flat
             };
-            platformComboBox.Items.AddRange(new object[] { "Instagram", "TikTok" });
+            platformComboBox.Items.AddRange(new object[] { "Instagram", "TikTouk" });
             modernToolTip.SetToolTip(platformComboBox, "Select platform");
 
             // Profile Name TextBox

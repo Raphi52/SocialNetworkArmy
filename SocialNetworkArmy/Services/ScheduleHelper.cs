@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Windows.Forms;
 
 namespace SocialNetworkArmy.Services
 {
@@ -19,78 +20,133 @@ namespace SocialNetworkArmy.Services
             public string Activity { get; set; }
             public bool IsGroup { get; set; }
             public string AccountOrGroup { get; set; }
-            public DateTime ScheduledTime { get; set; } // ✅ NEW: Store the scheduled time
+            public DateTime ScheduledTime { get; set; }
         }
 
         public static ScheduleMatch GetTodayMediaForAccount(
             string accountName,
             string platform,
             string activity,
-            DateTime? targetDate = null)
+            DateTime? targetDate = null,
+            TextBox log = null)
         {
-            Console.WriteLine($"\n========== SCHEDULE SEARCH ==========");
-            Console.WriteLine($"Looking for:");
-            Console.WriteLine($"  Account: '{accountName}'");
-            Console.WriteLine($"  Platform: '{platform}'");
-            Console.WriteLine($"  Activity: '{activity}'");
+            void Log(string message)
+            {
+                Console.WriteLine(message);
+                log?.Invoke((Action)(() => log.AppendText(message + "\r\n")));
+            }
 
-            // ✅ TOUJOURS utiliser DateTime.Today.Date (ignorer l'heure complètement)
+            Log($"╔══════════════════════════════════════════════════════════╗");
+            Log($"║           SCHEDULE SEARCH - DETAILED LOGS                ║");
+            Log($"╚══════════════════════════════════════════════════════════╝");
+            Log($"[PARAMS] Account: '{accountName}'");
+            Log($"[PARAMS] Platform: '{platform}'");
+            Log($"[PARAMS] Activity: '{activity}'");
+
             var searchDate = (targetDate ?? DateTime.Today).Date;
-            Console.WriteLine($"  Date: {searchDate:yyyy-MM-dd} (time ignored)");
-            Console.WriteLine($"======================================\n");
+            Log($"[PARAMS] Search Date: {searchDate:yyyy-MM-dd} (time component stripped)");
+            Log($"[PARAMS] Current Time: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 
             if (string.IsNullOrWhiteSpace(accountName))
             {
-                Console.WriteLine("[Schedule] ✗ Account name is empty");
+                Log($"[ERROR] ✗ Account name is NULL or EMPTY");
                 return null;
             }
 
-            // ✅ Chercher le CSV
+            if (string.IsNullOrWhiteSpace(platform))
+            {
+                Log($"[ERROR] ✗ Platform is NULL or EMPTY");
+                return null;
+            }
+
+            if (string.IsNullOrWhiteSpace(activity))
+            {
+                Log($"[ERROR] ✗ Activity is NULL or EMPTY");
+                return null;
+            }
+
+            Log($"");
+            Log($"[CSV] Searching for CSV file...");
+            Log($"[CSV] Default path: {CSV_PATH}");
+            Log($"[CSV] Full path: {Path.GetFullPath(CSV_PATH)}");
+
             string csvPath = CSV_PATH;
             if (!File.Exists(csvPath))
             {
+                Log($"[CSV] ✗ File not found at default location");
+
                 var dir = Path.GetDirectoryName(csvPath) ?? ".";
                 var filename = Path.GetFileName(csvPath);
 
+                Log($"[CSV] Searching in directory: {dir}");
+                Log($"[CSV] Filename pattern: {filename}");
+
                 if (Directory.Exists(dir))
                 {
+                    Log($"[CSV] ✓ Directory exists");
+                    var allFiles = Directory.GetFiles(dir, "*.*", SearchOption.TopDirectoryOnly);
+                    Log($"[CSV] Files in directory: {allFiles.Length}");
+
+                    foreach (var f in allFiles)
+                    {
+                        Log($"[CSV]   - {Path.GetFileName(f)}");
+                    }
+
                     var found = Directory.GetFiles(dir, filename, SearchOption.TopDirectoryOnly).FirstOrDefault();
                     if (found != null)
                     {
                         csvPath = found;
-                        Console.WriteLine($"[Schedule] ✓ Found CSV at: {csvPath}");
+                        Log($"[CSV] ✓ Found CSV at: {csvPath}");
                     }
                     else
                     {
-                        Console.WriteLine($"[Schedule] ✗ CSV not found in: {dir}");
+                        Log($"[CSV] ✗ CSV file '{filename}' not found in directory");
                         return null;
                     }
                 }
                 else
                 {
-                    Console.WriteLine($"[Schedule] ✗ Directory not found: {dir}");
+                    Log($"[CSV] ✗ Directory does not exist: {dir}");
                     return null;
                 }
             }
+            else
+            {
+                Log($"[CSV] ✓ File exists at default location");
+            }
 
-            Console.WriteLine($"[Schedule] ✓ CSV found, searching for: {accountName} | {platform} | {activity}");
-            Console.WriteLine($"[Schedule] Target date: {searchDate:yyyy-MM-dd}");
-
+            Log($"");
+            Log($"[PROFILES] Loading profiles from: {PROFILES_PATH}");
             var allProfiles = LoadProfiles();
-            Console.WriteLine($"[Schedule] Loaded {allProfiles.Count} profiles");
+            Log($"[PROFILES] ✓ Loaded {allProfiles.Count} profile(s)");
+
+            foreach (var p in allProfiles)
+            {
+                Log($"[PROFILES]   - Name: '{p.Name}', Group: '{p.GroupName ?? "(none)"}'");
+            }
 
             try
             {
-                var lines = File.ReadAllLines(csvPath);
-                Console.WriteLine($"[Schedule] CSV has {lines.Length} lines (including header)");
+                // ✅ FIX: Lecture avec encodage UTF-8 pour les accents
+                var lines = File.ReadAllLines(csvPath, System.Text.Encoding.UTF8);
+                Log($"");
+                Log($"[CSV] ✓ Read {lines.Length} line(s) from file (UTF-8 encoding)");
 
                 if (lines.Length < 2)
                 {
-                    Console.WriteLine("[Schedule] ✗ CSV is empty (no data rows)");
+                    Log($"[CSV] ✗ CSV is empty (only header or no data rows)");
                     return null;
                 }
 
+                Log($"");
+                Log($"[HEADER] Parsing header row...");
                 var headers = SplitCsvLine(lines[0]);
+                Log($"[HEADER] Detected {headers.Length} column(s):");
+                for (int h = 0; h < headers.Length; h++)
+                {
+                    Log($"[HEADER]   [{h}] '{headers[h]}'");
+                }
+
                 int iDate = IndexOfHeader(headers, "Date");
                 int iPlatform = IndexOfHeader(headers, "Plateform", "Platform");
                 int iAccount = IndexOfHeader(headers, "Account/Group", "Account", "Group", "Compte");
@@ -98,116 +154,147 @@ namespace SocialNetworkArmy.Services
                 int iPath = IndexOfHeader(headers, "Path", "Media", "MediaPath");
                 int iDesc = IndexOfHeader(headers, "Post Description", "Description", "Caption");
 
+                Log($"");
+                Log($"[HEADER] Column indices:");
+                Log($"[HEADER]   Date: {iDate}");
+                Log($"[HEADER]   Platform: {iPlatform}");
+                Log($"[HEADER]   Account/Group: {iAccount}");
+                Log($"[HEADER]   Activity: {iActivity}");
+                Log($"[HEADER]   Path: {iPath}");
+                Log($"[HEADER]   Description: {iDesc}");
+
                 if (iDate < 0 || iPlatform < 0 || iAccount < 0 || iActivity < 0 || iPath < 0)
                 {
-                    Console.WriteLine("[Schedule] ✗ Missing required columns");
+                    Log($"[HEADER] ✗ MISSING REQUIRED COLUMNS!");
+                    Log($"[HEADER] Required: Date, Platform/Plateform, Account/Group, Activity, Path");
                     return null;
                 }
 
-                // ✅ NEW: Collect ALL matching tasks instead of returning the first one
+                Log($"[HEADER] ✓ All required columns found");
+
                 var candidateMatches = new List<ScheduleMatch>();
+                int dataRowCount = 0;
 
                 for (int i = 1; i < lines.Length; i++)
                 {
                     var line = lines[i];
-                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        Log($"");
+                        Log($"[LINE {i}] ⊘ Empty line, skipping");
+                        continue;
+                    }
+
+                    Log($"");
+                    Log($"[LINE {i}] ╔═══════════════════════════════════════════════════════╗");
+                    Log($"[LINE {i}] ║ Processing data row #{++dataRowCount}");
+                    Log($"[LINE {i}] ╚═══════════════════════════════════════════════════════╝");
+                    Log($"[LINE {i}] Raw: {line}");
 
                     var cols = SplitCsvLine(line);
-                    if (cols.Length <= Math.Max(Math.Max(iDate, iPlatform), Math.Max(iAccount, iActivity)))
+                    Log($"[LINE {i}] Parsed into {cols.Length} column(s)");
+
+                    int maxRequiredIndex = Math.Max(Math.Max(iDate, iPlatform), Math.Max(iAccount, iActivity));
+                    if (cols.Length <= maxRequiredIndex)
+                    {
+                        Log($"[LINE {i}] ✗ SKIP: Insufficient columns (has {cols.Length}, needs {maxRequiredIndex + 1})");
                         continue;
+                    }
 
-                    Console.WriteLine($"\n[Schedule] ========== LINE {i} ==========");
-                    Console.WriteLine($"[Schedule] Raw: {line}");
-
-                    // ✅ PARSE FULL DATE + TIME
                     string dateTimeStr = cols[iDate].Trim();
-                    Console.WriteLine($"[Schedule] DateTime string: '{dateTimeStr}'");
+                    string csvPlatform = cols[iPlatform].Trim();
+                    string accountOrGroup = cols[iAccount].Trim();
+                    string csvActivity = cols[iActivity].Trim();
+                    string mediaPath = iPath < cols.Length ? cols[iPath].Trim() : "";
 
+                    Log($"[LINE {i}] VALUES:");
+                    Log($"[LINE {i}]   Date/Time: '{dateTimeStr}'");
+                    Log($"[LINE {i}]   Platform: '{csvPlatform}'");
+                    Log($"[LINE {i}]   Account/Group: '{accountOrGroup}'");
+                    Log($"[LINE {i}]   Activity: '{csvActivity}'");
+                    Log($"[LINE {i}]   Path: '{mediaPath}'");
+
+                    Log($"[LINE {i}] Parsing datetime: '{dateTimeStr}'");
                     DateTime parsedDateTime;
 
-                    // Try to parse full datetime (yyyy-MM-dd HH:mm)
                     if (!DateTime.TryParseExact(dateTimeStr, "yyyy-MM-dd HH:mm",
                         CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDateTime))
                     {
-                        // Fallback: Try just date (yyyy-MM-dd) and use midnight
+                        Log($"[LINE {i}] ⚠ Failed to parse as 'yyyy-MM-dd HH:mm', trying date-only");
                         string dateOnly = dateTimeStr.Contains(" ") ? dateTimeStr.Split(' ')[0] : dateTimeStr;
+                        Log($"[LINE {i}] Extracted date part: '{dateOnly}'");
 
                         if (!DateTime.TryParseExact(dateOnly, "yyyy-MM-dd",
                             CultureInfo.InvariantCulture, DateTimeStyles.None, out parsedDateTime))
                         {
-                            Console.WriteLine($"[Schedule] ✗ DateTime parse FAILED");
+                            Log($"[LINE {i}] ✗ SKIP: DateTime parse FAILED completely");
                             continue;
                         }
+                        Log($"[LINE {i}] ✓ Parsed as date-only (midnight assumed)");
+                    }
+                    else
+                    {
+                        Log($"[LINE {i}] ✓ Parsed as full datetime");
                     }
 
-                    Console.WriteLine($"[Schedule] CSV datetime: {parsedDateTime:yyyy-MM-dd HH:mm}");
-                    Console.WriteLine($"[Schedule] Search date: {searchDate:yyyy-MM-dd}");
+                    Log($"[LINE {i}] Parsed DateTime: {parsedDateTime:yyyy-MM-dd HH:mm:ss}");
+                    Log($"[LINE {i}] Search Date:    {searchDate:yyyy-MM-dd HH:mm:ss}");
 
-                    // ✅ Compare ONLY dates for filtering (but keep time for later sorting)
                     if (parsedDateTime.Date != searchDate)
                     {
-                        Console.WriteLine($"[Schedule] ✗ DATE MISMATCH - SKIP (CSV: {parsedDateTime:yyyy-MM-dd} vs Search: {searchDate:yyyy-MM-dd})");
+                        Log($"[LINE {i}] ✗ SKIP: DATE MISMATCH");
+                        Log($"[LINE {i}]   CSV date: {parsedDateTime.Date:yyyy-MM-dd}");
+                        Log($"[LINE {i}]   Target:   {searchDate:yyyy-MM-dd}");
                         continue;
                     }
+                    Log($"[LINE {i}] ✓ Date matches!");
 
-                    Console.WriteLine($"[Schedule] ✓ Date matches! (both are {searchDate:yyyy-MM-dd})");
-
-                    // ✅ Vérifier platform
-                    string csvPlatform = cols[iPlatform].Trim();
-                    Console.WriteLine($"[Schedule] Platform: '{csvPlatform}' vs '{platform}'");
+                    Log($"[LINE {i}] Comparing platforms:");
+                    Log($"[LINE {i}]   CSV: '{csvPlatform}'");
+                    Log($"[LINE {i}]   Search: '{platform}'");
 
                     if (!csvPlatform.Equals(platform, StringComparison.OrdinalIgnoreCase))
                     {
-                        Console.WriteLine($"[Schedule] ✗ PLATFORM MISMATCH - SKIP");
+                        Log($"[LINE {i}] ✗ SKIP: PLATFORM MISMATCH");
                         continue;
                     }
+                    Log($"[LINE {i}] ✓ Platform matches!");
 
-                    Console.WriteLine($"[Schedule] ✓ Platform matches!");
-
-                    // ✅ Vérifier activity
-                    string csvActivity = cols[iActivity].Trim();
-                    Console.WriteLine($"[Schedule] Activity: '{csvActivity}' vs '{activity}'");
+                    Log($"[LINE {i}] Comparing activities:");
+                    Log($"[LINE {i}]   CSV: '{csvActivity}'");
+                    Log($"[LINE {i}]   Search: '{activity}'");
 
                     if (!csvActivity.Equals(activity, StringComparison.OrdinalIgnoreCase))
                     {
-                        Console.WriteLine($"[Schedule] ✗ ACTIVITY MISMATCH - SKIP");
+                        Log($"[LINE {i}] ✗ SKIP: ACTIVITY MISMATCH");
                         continue;
                     }
+                    Log($"[LINE {i}] ✓ Activity matches!");
 
-                    Console.WriteLine($"[Schedule] ✓ Activity matches!");
+                    Log($"[LINE {i}] Comparing account/group:");
+                    Log($"[LINE {i}]   CSV: '{accountOrGroup}'");
+                    Log($"[LINE {i}]   Search: '{accountName}'");
 
-                    // ✅ Vérifier account/group
-                    string accountOrGroup = cols[iAccount].Trim();
-                    Console.WriteLine($"[Schedule] Account/Group: '{accountOrGroup}' vs '{accountName}'");
-
-                    // ✅ NOUVELLE LOGIQUE: Comparaison directe d'abord, puis groupes
-
-                    // 1) ✅ MATCH DIRECT: Comparer directement le CSV avec le compte actuel
                     if (accountOrGroup.Equals(accountName, StringComparison.OrdinalIgnoreCase))
                     {
-                        Console.WriteLine($"[Schedule] ✓✓ DIRECT MATCH! Account name matches!");
-
-                        string mediaPath = iPath < cols.Length && cols[iPath] != null
-                            ? cols[iPath].Trim()
-                            : null;
-
-                        Console.WriteLine($"[Schedule] Media path: '{mediaPath}'");
+                        Log($"[LINE {i}] ✓✓ DIRECT ACCOUNT MATCH!");
 
                         if (string.IsNullOrWhiteSpace(mediaPath))
                         {
-                            Console.WriteLine($"[Schedule] ⚠ Empty media path for {accountName}");
+                            Log($"[LINE {i}] ✗ SKIP: Empty media path");
                             continue;
                         }
 
+                        Log($"[LINE {i}] Checking file existence: {mediaPath}");
                         if (!File.Exists(mediaPath))
                         {
-                            Console.WriteLine($"[Schedule] ✗ File not found: {mediaPath}");
+                            Log($"[LINE {i}] ✗ SKIP: File not found: {mediaPath}");
                             continue;
                         }
 
-                        Console.WriteLine($"[Schedule] ✓✓✓ MATCH FOUND! → {Path.GetFileName(mediaPath)} at {parsedDateTime:HH:mm}");
+                        Log($"[LINE {i}] ✓ File exists!");
+                        Log($"[LINE {i}] ★★★ MATCH FOUND (DIRECT) ★★★");
 
-                        // ✅ ADD to candidates instead of returning immediately
                         candidateMatches.Add(new ScheduleMatch
                         {
                             MediaPath = mediaPath,
@@ -217,65 +304,63 @@ namespace SocialNetworkArmy.Services
                             AccountOrGroup = accountOrGroup,
                             ScheduledTime = parsedDateTime
                         });
-
-                        // ✅ Continue searching for more matches on the same day
                         continue;
                     }
 
-                    // 2) ✅ GROUP MATCH: Vérifier si c'est un groupe contenant le compte actuel
-                    Console.WriteLine($"[Schedule] No direct match, checking if '{accountOrGroup}' is a group...");
-
+                    Log($"[LINE {i}] No direct match, checking groups...");
                     var groupProfiles = allProfiles
                         .Where(p => !string.IsNullOrWhiteSpace(p.Name) &&
                                    !string.IsNullOrWhiteSpace(p.GroupName) &&
                                    p.GroupName.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase))
                         .ToList();
 
-                    Console.WriteLine($"[Schedule] Found {groupProfiles.Count} profiles in group '{accountOrGroup}'");
+                    Log($"[LINE {i}] Found {groupProfiles.Count} profile(s) in group '{accountOrGroup}'");
 
                     if (groupProfiles.Any())
                     {
+                        foreach (var gp in groupProfiles)
+                        {
+                            Log($"[LINE {i}]   - {gp.Name}");
+                        }
+
                         var matchingProfile = groupProfiles.FirstOrDefault(p =>
                             !string.IsNullOrWhiteSpace(p.Name) &&
                             p.Name.Equals(accountName, StringComparison.OrdinalIgnoreCase));
 
                         if (matchingProfile != null)
                         {
-                            Console.WriteLine($"[Schedule] ✓ Found account in group: {matchingProfile.Name}");
+                            Log($"[LINE {i}] ✓ Found account '{matchingProfile.Name}' in group!");
 
-                            string baseMediaPath = iPath < cols.Length && cols[iPath] != null
-                                ? cols[iPath].Trim()
-                                : null;
-
-                            if (string.IsNullOrWhiteSpace(baseMediaPath))
+                            if (string.IsNullOrWhiteSpace(mediaPath))
                             {
-                                Console.WriteLine($"[Schedule] ⚠ Empty media path for group {accountOrGroup}");
+                                Log($"[LINE {i}] ✗ SKIP: Empty base media path for group");
                                 continue;
                             }
 
                             string accountMediaPath = GetAccountSpecificPath(
-                                baseMediaPath,
+                                mediaPath,
                                 groupProfiles,
                                 matchingProfile);
 
-                            Console.WriteLine($"[Schedule] Base path: {baseMediaPath}");
-                            Console.WriteLine($"[Schedule] Mapped path: {accountMediaPath}");
+                            Log($"[LINE {i}] Path mapping:");
+                            Log($"[LINE {i}]   Base: {mediaPath}");
+                            Log($"[LINE {i}]   Mapped: {accountMediaPath}");
 
                             if (!File.Exists(accountMediaPath))
                             {
-                                Console.WriteLine($"[Schedule] ⚠ Mapped file not found: {accountMediaPath}");
-                                accountMediaPath = baseMediaPath;
+                                Log($"[LINE {i}] ⚠ Mapped file not found, trying base path");
+                                accountMediaPath = mediaPath;
                             }
 
                             if (!File.Exists(accountMediaPath))
                             {
-                                Console.WriteLine($"[Schedule] ✗ No valid file found for {accountName}");
+                                Log($"[LINE {i}] ✗ SKIP: No valid file found");
                                 continue;
                             }
 
-                            Console.WriteLine($"[Schedule] ✓✓✓ GROUP MATCH FOUND! → {Path.GetFileName(accountMediaPath)} at {parsedDateTime:HH:mm}");
+                            Log($"[LINE {i}] ✓ File exists!");
+                            Log($"[LINE {i}] ★★★ MATCH FOUND (GROUP) ★★★");
 
-                            // ✅ ADD to candidates instead of returning immediately
                             candidateMatches.Add(new ScheduleMatch
                             {
                                 MediaPath = accountMediaPath,
@@ -285,40 +370,48 @@ namespace SocialNetworkArmy.Services
                                 AccountOrGroup = accountOrGroup,
                                 ScheduledTime = parsedDateTime
                             });
-
-                            // ✅ Continue searching for more matches on the same day
                             continue;
                         }
                         else
                         {
-                            Console.WriteLine($"[Schedule] ✗ Account '{accountName}' not found in group '{accountOrGroup}'");
+                            Log($"[LINE {i}] ✗ Account '{accountName}' not found in group");
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"[Schedule] ✗ '{accountOrGroup}' is neither the current account nor a group containing it");
+                        Log($"[LINE {i}] ✗ '{accountOrGroup}' is not a known group");
                     }
                 }
 
-                // ✅ NEW: Process all candidate matches and find the closest one by time
+                Log($"");
+                Log($"╔══════════════════════════════════════════════════════════╗");
+                Log($"║                    FINAL RESULTS                         ║");
+                Log($"╚══════════════════════════════════════════════════════════╝");
+                Log($"[RESULT] Processed {dataRowCount} data row(s)");
+                Log($"[RESULT] Found {candidateMatches.Count} candidate match(es)");
+
                 if (candidateMatches.Count == 0)
                 {
-                    Console.WriteLine($"[Schedule] ✗ No match found");
+                    Log($"[RESULT] ✗ NO MATCH FOUND");
+                    Log($"[RESULT] Double-check:");
+                    Log($"[RESULT]   - Account name: '{accountName}'");
+                    Log($"[RESULT]   - Platform: '{platform}'");
+                    Log($"[RESULT]   - Activity: '{activity}'");
+                    Log($"[RESULT]   - Date: {searchDate:yyyy-MM-dd}");
                     return null;
                 }
 
-                Console.WriteLine($"\n[Schedule] ========================================");
-                Console.WriteLine($"[Schedule] Found {candidateMatches.Count} candidate(s) for today:");
-
                 var now = DateTime.Now;
-                foreach (var candidate in candidateMatches.OrderBy(c => c.ScheduledTime))
+                Log($"");
+                Log($"[SELECTION] Current time: {now:HH:mm:ss}");
+                Log($"[SELECTION] Candidates:");
+
+                foreach (var c in candidateMatches.OrderBy(x => x.ScheduledTime))
                 {
-                    Console.WriteLine($"[Schedule]   - {candidate.ScheduledTime:HH:mm} → {Path.GetFileName(candidate.MediaPath)}");
+                    var status = c.ScheduledTime <= now ? "PAST" : "FUTURE";
+                    Log($"[SELECTION]   - {c.ScheduledTime:HH:mm} [{status}] → {Path.GetFileName(c.MediaPath)}");
                 }
 
-                // ✅ Find the closest task by time:
-                // Priority 1: The most recent task that has passed (scheduled time <= now)
-                // Priority 2: If no past tasks, take the next upcoming one
                 var pastTasks = candidateMatches
                     .Where(c => c.ScheduledTime <= now)
                     .OrderByDescending(c => c.ScheduledTime)
@@ -328,25 +421,31 @@ namespace SocialNetworkArmy.Services
 
                 if (pastTasks.Any())
                 {
-                    // Take the most recent task that should have been executed
                     bestMatch = pastTasks.First();
-                    Console.WriteLine($"[Schedule] ✓ Selected MOST RECENT past task: {bestMatch.ScheduledTime:HH:mm}");
+                    Log($"[SELECTION] ✓ Selected MOST RECENT past task: {bestMatch.ScheduledTime:HH:mm}");
                 }
                 else
                 {
-                    // All tasks are in the future, take the earliest one
                     bestMatch = candidateMatches.OrderBy(c => c.ScheduledTime).First();
-                    Console.WriteLine($"[Schedule] ✓ Selected NEXT upcoming task: {bestMatch.ScheduledTime:HH:mm}");
+                    Log($"[SELECTION] ✓ Selected NEXT upcoming task: {bestMatch.ScheduledTime:HH:mm}");
                 }
 
-                Console.WriteLine($"[Schedule] ✓✓✓ FINAL SELECTION: {Path.GetFileName(bestMatch.MediaPath)} (scheduled {bestMatch.ScheduledTime:HH:mm})");
-                Console.WriteLine($"[Schedule] ========================================\n");
+                Log($"");
+                Log($"[FINAL] ★★★ SELECTED ★★★");
+                Log($"[FINAL]   File: {bestMatch.MediaPath}");
+                Log($"[FINAL]   Time: {bestMatch.ScheduledTime:HH:mm}");
+                Log($"[FINAL]   Type: {(bestMatch.IsGroup ? "Group" : "Direct")}");
+                Log($"[FINAL]   Account/Group: {bestMatch.AccountOrGroup}");
+                Log($"═══════════════════════════════════════════════════════════");
 
                 return bestMatch;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[Schedule] Error: {ex.Message}");
+                Log($"");
+                Log($"[EXCEPTION] ✗ ERROR: {ex.Message}");
+                Log($"[EXCEPTION] Stack trace:");
+                Log(ex.StackTrace);
                 return null;
             }
         }
@@ -398,7 +497,7 @@ namespace SocialNetworkArmy.Services
                 if (!File.Exists(PROFILES_PATH))
                     return new List<Profile>();
 
-                var json = File.ReadAllText(PROFILES_PATH);
+                var json = File.ReadAllText(PROFILES_PATH, System.Text.Encoding.UTF8);
                 var profiles = System.Text.Json.JsonSerializer.Deserialize<List<Profile>>(json)
                               ?? new List<Profile>();
 

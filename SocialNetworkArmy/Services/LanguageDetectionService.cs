@@ -13,12 +13,9 @@ namespace SocialNetworkArmy.Services
     {
         private readonly HttpClient httpClient;
         private readonly TextBox logTextBox;
-        private static string HUGGINGFACE_TOKEN = null;
+        private const string LIBRETRANSLATE_URL = "https://libretranslate.com/detect";
 
-        // Free HuggingFace model for language detection
-        private const string HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/papluca/xlm-roberta-base-language-detection";
-
-        // ✅ AMÉLIORATION: Cache pour éviter les appels API redondants
+        // Cache pour éviter les appels API redondants
         private static readonly Dictionary<string, (string language, DateTime timestamp)> languageCache = new Dictionary<string, (string, DateTime)>();
         private static readonly TimeSpan CACHE_DURATION = TimeSpan.FromMinutes(30);
 
@@ -41,27 +38,6 @@ namespace SocialNetworkArmy.Services
             catch { }
         }
 
-        private void LoadHuggingFaceToken()
-        {
-            try
-            {
-                string configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "huggingface_token.txt");
-
-                if (System.IO.File.Exists(configPath))
-                {
-                    HUGGINGFACE_TOKEN = System.IO.File.ReadAllText(configPath).Trim();
-                }
-                else
-                {
-                    HUGGINGFACE_TOKEN = "";
-                }
-            }
-            catch
-            {
-                HUGGINGFACE_TOKEN = "";
-            }
-        }
-
         public async Task<string> DetectLanguageAsync(string text)
         {
             try
@@ -79,19 +55,7 @@ namespace SocialNetworkArmy.Services
                     return localDetection;
                 }
 
-                // Lazy load token
-                if (HUGGINGFACE_TOKEN == null)
-                {
-                    LoadHuggingFaceToken();
-                }
-
-                if (string.IsNullOrEmpty(HUGGINGFACE_TOKEN))
-                {
-                    Log($"[LangDetect] ⚠️ Token missing");
-                    return "Unknown";
-                }
-
-                // ✅ AMÉLIORATION: Optimiser la taille du texte (plus court = plus rapide)
+                // Optimiser la taille du texte (plus court = plus rapide)
                 string truncatedText = text.Length > 200 ? text.Substring(0, 200) : text;
 
                 // ✅ STEP 2: Check cache (30min duration)
@@ -109,52 +73,16 @@ namespace SocialNetworkArmy.Services
                     }
                 }
 
-                // Create request payload
-                var payload = new
+                // ✅ STEP 3: LibreTranslate API (free, no key required)
+                string libretranslateResult = await DetectLanguageLibreTranslate(truncatedText);
+                if (libretranslateResult != "Unknown")
                 {
-                    inputs = truncatedText
-                };
-
-                string jsonPayload = JsonSerializer.Serialize(payload);
-                var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-
-                var request = new HttpRequestMessage(HttpMethod.Post, HUGGINGFACE_API_URL);
-                request.Headers.Add("Authorization", $"Bearer {HUGGINGFACE_TOKEN}");
-                request.Content = content;
-
-                var response = await httpClient.SendAsync(request);
-                var jsonResponse = await response.Content.ReadAsStringAsync();
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    Log($"[LangDetect] ⚠️ API error: {response.StatusCode}");
-                    return "Unknown";
+                    languageCache[cacheKey] = (libretranslateResult, DateTime.Now);
+                    Log($"[LangDetect] ✓ LibreTranslate: {libretranslateResult}");
+                    return libretranslateResult;
                 }
 
-                // Parse response
-                // Expected format: [[{"label":"en","score":0.99},...]]
-                var result = JsonDocument.Parse(jsonResponse);
-
-                if (result.RootElement.ValueKind == JsonValueKind.Array && result.RootElement.GetArrayLength() > 0)
-                {
-                    var firstArray = result.RootElement[0];
-                    if (firstArray.ValueKind == JsonValueKind.Array && firstArray.GetArrayLength() > 0)
-                    {
-                        var topPrediction = firstArray[0];
-                        string label = topPrediction.GetProperty("label").GetString();
-                        double score = topPrediction.GetProperty("score").GetDouble();
-
-                        // Map language codes to full names
-                        string languageName = MapLanguageCode(label);
-
-                        // ✅ Store in cache for 30min
-                        languageCache[cacheKey] = (languageName, DateTime.Now);
-
-                        Log($"[LangDetect] ✓ API call: {languageName} ({score:P0} confidence)");
-                        return languageName;
-                    }
-                }
-
+                Log($"[LangDetect] ⚠️ All methods failed");
                 return "Unknown";
             }
             catch (Exception ex)
@@ -164,7 +92,44 @@ namespace SocialNetworkArmy.Services
             }
         }
 
-        // ✅ IMPROVED: Enhanced local detection with more keywords and scoring
+        private async Task<string> DetectLanguageLibreTranslate(string text)
+        {
+            try
+            {
+                var payload = new { q = text };
+                var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+                var response = await httpClient.PostAsync(LIBRETRANSLATE_URL, content);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return "Unknown";
+                }
+
+                var jsonResponse = await response.Content.ReadAsStringAsync();
+                var result = JsonDocument.Parse(jsonResponse);
+
+                // Format: [{"confidence":0.99,"language":"fr"}]
+                if (result.RootElement.ValueKind == JsonValueKind.Array && result.RootElement.GetArrayLength() > 0)
+                {
+                    string langCode = result.RootElement[0].GetProperty("language").GetString();
+                    double confidence = result.RootElement[0].GetProperty("confidence").GetDouble();
+
+                    string languageName = MapLanguageCode(langCode);
+                    Log($"[LangDetect] LibreTranslate: {languageName} ({confidence:P0} confidence)");
+                    return languageName;
+                }
+
+                return "Unknown";
+            }
+            catch (Exception ex)
+            {
+                Log($"[LangDetect] LibreTranslate error: {ex.Message}");
+                return "Unknown";
+            }
+        }
+
+        // ✅ ENHANCED: Vocabulaire enrichi x5 pour Français et Anglais
         private string DetectLanguageLocally(string text)
         {
             if (string.IsNullOrWhiteSpace(text) || text.Length < 10)
@@ -176,36 +141,82 @@ namespace SocialNetworkArmy.Services
             if (totalWords < 3)
                 return null;
 
-            // ✅ ENHANCED: More keywords + character-based detection + scoring system
             var languageScores = new Dictionary<string, int>();
 
-            // English detection (common words + no accents)
-            var englishKeywords = new[] { " the ", " and ", " is ", " are ", " you ", " for ", " with ", " this ", " that ", " have ", " was ", " were ", " from ", " your ", " can ", " will ", " not ", " but ", " all ", " out ", " get ", " like ", " love ", " just ", " more ", " what ", " when ", " good ", " new ", " day ", " time ", " life " };
+            // ✅ ENGLISH - Vocabulaire enrichi x5 (150+ mots-clés)
+            var englishKeywords = new[] { 
+                // Articles & prépositions
+                " the ", " a ", " an ", " and ", " or ", " but ", " if ", " of ", " to ", " in ", " on ", " at ", " by ", " for ", " with ", " from ", " about ", " into ", " through ", " during ", " before ", " after ", " above ", " below ", " between ", " among ", " under ", " over ",
+                // Verbes courants
+                " is ", " are ", " was ", " were ", " be ", " been ", " being ", " have ", " has ", " had ", " do ", " does ", " did ", " will ", " would ", " should ", " could ", " can ", " may ", " might ", " must ", " shall ", " get ", " go ", " going ", " come ", " came ", " make ", " making ", " take ", " give ", " see ", " know ", " think ", " look ", " want ", " use ", " find ", " tell ", " ask ", " work ", " feel ", " try ", " leave ", " call ",
+                // Pronoms
+                " i ", " you ", " he ", " she ", " it ", " we ", " they ", " me ", " him ", " her ", " us ", " them ", " my ", " your ", " his ", " her ", " its ", " our ", " their ", " mine ", " yours ", " this ", " that ", " these ", " those ", " who ", " what ", " which ", " where ", " when ", " why ", " how ",
+                // Mots fréquents
+                " not ", " no ", " yes ", " all ", " any ", " some ", " many ", " much ", " more ", " most ", " other ", " such ", " only ", " own ", " same ", " so ", " than ", " too ", " very ", " just ", " now ", " then ", " here ", " there ", " where ", " way ", " well ", " also ", " back ", " even ", " still ", " just ", " like ", " love ", " need ", " right ", " good ", " great ", " new ", " first ", " last ", " long ", " little ", " own ", " old ", " different ", " small ", " large ", " next ", " early ", " young ", " important ", " few ", " public ", " bad ", " able ", " free ",
+                // Expressions
+                " i'm ", " you're ", " he's ", " she's ", " it's ", " we're ", " they're ", " i've ", " you've ", " we've ", " they've ", " don't ", " doesn't ", " didn't ", " won't ", " wouldn't ", " can't ", " couldn't ", " shouldn't ", " isn't ", " aren't ", " wasn't ", " weren't ", " haven't ", " hasn't ", " hadn't "
+            };
             languageScores["English"] = CountMatches(lowerText, englishKeywords);
 
-            // French detection (avec accents!)
-            var frenchKeywords = new[] { " le ", " la ", " les ", " de ", " je ", " tu ", " il ", " elle ", " nous ", " vous ", " est ", " sont ", " pour ", " avec ", " dans ", " sur ", " par ", " un ", " une ", " des ", " mon ", " ma ", " mes ", " ton ", " ta ", " son ", " sa ", " ce ", " cette ", " qui ", " que ", " pas ", " plus ", " tout ", " très ", " bien ", " faire ", " été ", " merci ", " j'ai ", " c'est ", " n'est ", " aujourd'hui ", "être", "avoir", "français", "française" };
+            // ✅ FRENCH - Vocabulaire enrichi x5 (150+ mots-clés)
+            var frenchKeywords = new[] { 
+                // Articles & prépositions
+                " le ", " la ", " les ", " un ", " une ", " des ", " de ", " du ", " d'", " au ", " aux ", " à ", " en ", " dans ", " sur ", " sous ", " avec ", " sans ", " pour ", " par ", " chez ", " vers ", " depuis ", " pendant ", " avant ", " après ", " devant ", " derrière ", " entre ", " parmi ",
+                // Verbes courants
+                " est ", " sont ", " était ", " étaient ", " été ", " être ", " avoir ", " a ", " ai ", " as ", " ont ", " avait ", " avaient ", " eu ", " sera ", " seront ", " serait ", " seraient ", " faire ", " fait ", " fais ", " font ", " faisait ", " aller ", " va ", " vais ", " allait ", " allé ", " venir ", " vient ", " venu ", " pouvoir ", " peut ", " peuvent ", " pouvait ", " pu ", " vouloir ", " veut ", " veux ", " voulait ", " voulu ", " devoir ", " doit ", " doivent ", " devait ", " dû ", " savoir ", " sait ", " savait ", " su ", " voir ", " voit ", " voyait ", " vu ", " dire ", " dit ", " disait ", " prendre ", " prend ", " prenait ", " pris ", " donner ", " donne ", " donnait ", " donné ", " mettre ", " met ", " mettait ", " mis ",
+                // Pronoms
+                " je ", " tu ", " il ", " elle ", " on ", " nous ", " vous ", " ils ", " elles ", " me ", " te ", " se ", " le ", " la ", " lui ", " leur ", " moi ", " toi ", " mon ", " ma ", " mes ", " ton ", " ta ", " tes ", " son ", " sa ", " ses ", " notre ", " nos ", " votre ", " vos ", " leur ", " leurs ", " ce ", " cet ", " cette ", " ces ", " qui ", " que ", " quoi ", " dont ", " où ", " quand ", " comment ", " pourquoi ", " quel ", " quelle ", " quels ", " quelles ",
+                // Mots fréquents
+                " pas ", " plus ", " tout ", " tous ", " toute ", " toutes ", " très ", " bien ", " bon ", " bonne ", " mal ", " mauvais ", " petit ", " grand ", " grande ", " autre ", " même ", " tel ", " telle ", " aussi ", " encore ", " déjà ", " jamais ", " toujours ", " souvent ", " parfois ", " maintenant ", " alors ", " donc ", " car ", " mais ", " ou ", " et ", " si ", " comme ", " beaucoup ", " peu ", " assez ", " trop ", " plusieurs ", " chaque ", " quelque ", " certain ", " divers ", " différent ", " nouveau ", " nouvelle ", " vieux ", " vieille ", " jeune ", " premier ", " première ", " dernier ", " dernière ", " seul ", " seule ", " ici ", " là ", " partout ", " nulle ", " quelque ",
+                // Expressions typiques
+                " c'est ", " c'était ", " n'est ", " n'était ", " j'ai ", " j'avais ", " j'étais ", " t'es ", " qu'il ", " qu'elle ", " qu'on ", " d'un ", " d'une ", " l'on ", " s'il ", " aujourd'hui ", " parce que ", " puisque ", " jusqu'à ", " merci ", " bonjour ", " salut ", " oui ", " non ", " peut-être ", " voilà ", " voici "
+            };
             languageScores["French"] = CountMatches(lowerText, frenchKeywords);
-            if (lowerText.Contains("é") || lowerText.Contains("à") || lowerText.Contains("è") || lowerText.Contains("ç") || lowerText.Contains("ê"))
-                languageScores["French"] += 3; // Bonus pour accents français
 
-            // Spanish detection (con acentos!)
+            // Bonus pour accents français
+            if (lowerText.Contains("é") || lowerText.Contains("è") || lowerText.Contains("ê") ||
+                lowerText.Contains("à") || lowerText.Contains("â") || lowerText.Contains("ù") ||
+                lowerText.Contains("û") || lowerText.Contains("î") || lowerText.Contains("ô") ||
+                lowerText.Contains("ç") || lowerText.Contains("ï") || lowerText.Contains("ë"))
+                languageScores["French"] += 5; // Bonus renforcé
+
+            // Spanish detection (vocabulaire original)
             var spanishKeywords = new[] { " el ", " la ", " los ", " las ", " de ", " que ", " es ", " son ", " para ", " con ", " por ", " en ", " un ", " una ", " del ", " al ", " mi ", " tu ", " su ", " este ", " esta ", " como ", " más ", " muy ", " todo ", " todos ", " bien ", " estar ", " hacer ", " hoy ", " día ", " vida ", " gracias ", " español ", " española ", " qué ", " cómo ", " dónde ", " cuándo ", " está ", " están " };
             languageScores["Spanish"] = CountMatches(lowerText, spanishKeywords);
             if (lowerText.Contains("ñ") || lowerText.Contains("á") || lowerText.Contains("é") || lowerText.Contains("í") || lowerText.Contains("ó") || lowerText.Contains("ú") || lowerText.Contains("¿") || lowerText.Contains("¡"))
-                languageScores["Spanish"] += 3; // Bonus pour caractères espagnols
+                languageScores["Spanish"] += 3;
 
-            // Portuguese detection (com acentos!)
+            // Portuguese detection (vocabulaire original)
             var portugueseKeywords = new[] { " o ", " a ", " os ", " as ", " de ", " que ", " é ", " são ", " para ", " com ", " não ", " em ", " um ", " uma ", " do ", " da ", " dos ", " das ", " por ", " no ", " na ", " meu ", " minha ", " seu ", " sua ", " este ", " esta ", " como ", " mais ", " muito ", " tudo ", " bem ", " estar ", " fazer ", " hoje ", " dia ", " vida ", " obrigado ", " obrigada ", " português ", " portuguesa ", " você ", " está ", " estão ", " português", " até ", " também " };
             languageScores["Portuguese"] = CountMatches(lowerText, portugueseKeywords);
             if (lowerText.Contains("ã") || lowerText.Contains("õ") || lowerText.Contains("ç"))
-                languageScores["Portuguese"] += 3; // Bonus pour accents portugais
+                languageScores["Portuguese"] += 3;
 
-            // German detection (mit Umlauten!)
+            // German detection (vocabulaire original)
             var germanKeywords = new[] { " der ", " die ", " das ", " und ", " ist ", " sind ", " für ", " mit ", " auf ", " den ", " dem ", " des ", " ein ", " eine ", " ich ", " du ", " er ", " sie ", " wir ", " ihr ", " nicht ", " auch ", " aus ", " bei ", " nach ", " von ", " zu ", " im ", " am ", " vom ", " zum ", " wie ", " was ", " wann ", " gut ", " sehr ", " haben ", " sein ", " werden ", " deutsch ", " deutsche " };
             languageScores["German"] = CountMatches(lowerText, germanKeywords);
             if (lowerText.Contains("ä") || lowerText.Contains("ö") || lowerText.Contains("ü") || lowerText.Contains("ß"))
-                languageScores["German"] += 3; // Bonus pour umlauts
+                languageScores["German"] += 3;
+
+            // ✅ Chinese detection (caractères chinois)
+            int chineseCharCount = 0;
+            foreach (char c in text)
+            {
+                // Plages Unicode pour caractères chinois (CJK Unified Ideographs)
+                if ((c >= 0x4E00 && c <= 0x9FFF) ||   // CJK Unified Ideographs (commun)
+                    (c >= 0x3400 && c <= 0x4DBF) ||   // CJK Unified Ideographs Extension A
+                    (c >= 0x20000 && c <= 0x2A6DF) || // CJK Unified Ideographs Extension B
+                    (c >= 0xF900 && c <= 0xFAFF))     // CJK Compatibility Ideographs
+                {
+                    chineseCharCount++;
+                }
+            }
+
+            // Si au moins 2 caractères chinois détectés, c'est du chinois
+            if (chineseCharCount >= 2)
+            {
+                languageScores["Chinese"] = chineseCharCount * 2; // Score élevé pour privilégier le chinois
+            }
 
             // Find highest score
             var bestMatch = languageScores.OrderByDescending(kvp => kvp.Value).FirstOrDefault();
@@ -232,10 +243,9 @@ namespace SocialNetworkArmy.Services
 
         private string MapLanguageCode(string code)
         {
-            // ✅ AMÉLIORATION: Plus de langues supportées
             switch (code.ToLower())
             {
-                // Langues principales (ConfigForm)
+                // Langues principales
                 case "en": return "English";
                 case "fr": return "French";
                 case "es": return "Spanish";
@@ -276,7 +286,7 @@ namespace SocialNetworkArmy.Services
                 case "gl": return "Galician";
                 case "eu": return "Basque";
 
-                default: return code.ToUpper(); // Return code if unknown
+                default: return code.ToUpper();
             }
         }
     }

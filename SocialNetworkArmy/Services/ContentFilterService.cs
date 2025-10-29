@@ -17,13 +17,17 @@ namespace SocialNetworkArmy.Services
         private readonly TextBox logTextBox;
         private readonly HttpClient httpClient;
 
-        // ✅ Configuration HuggingFace (GRATUIT)
-        private const string HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/rizvandwiki/gender-classification";
+        // ✅ Modèle multi-attributs (visage + corps entier)
+        private const string HUGGINGFACE_API_URL = "https://api-inference.huggingface.co/models/dima806/facial_emotions_image_detection";
+
+        // ✅ NOUVEAU: Modèle corps entier (fallback si visage pas détecté)
+        private const string FULL_BODY_API_URL = "https://api-inference.huggingface.co/models/rizvandwiki/gender-classification";
+
         private static string HUGGINGFACE_TOKEN = null;
 
-        // ✅ NOUVEAU: Cache par créateur (évite de ré-analyser le même créateur)
-        private static readonly System.Collections.Generic.Dictionary<string, (bool isFemale, DateTime timestamp)> creatorGenderCache
-            = new System.Collections.Generic.Dictionary<string, (bool, DateTime)>();
+        // Cache par créateur (24h)
+        private static readonly Dictionary<string, (bool isFemale, DateTime timestamp)> creatorGenderCache
+            = new Dictionary<string, (bool, DateTime)>();
         private static readonly TimeSpan CREATOR_CACHE_DURATION = TimeSpan.FromHours(24);
 
         public ContentFilterService(WebView2 webView, TextBox logTextBox)
@@ -31,7 +35,7 @@ namespace SocialNetworkArmy.Services
             this.webView = webView;
             this.logTextBox = logTextBox;
             this.httpClient = new HttpClient();
-            // Token will be loaded lazily on first use (faster startup)
+            this.httpClient.Timeout = TimeSpan.FromSeconds(30); // ✅ Timeout pour éviter blocages
         }
 
         private void LoadHuggingFaceToken()
@@ -43,56 +47,68 @@ namespace SocialNetworkArmy.Services
                 if (File.Exists(configPath))
                 {
                     HUGGINGFACE_TOKEN = File.ReadAllText(configPath).Trim();
-                    // Token loaded silently (no log to avoid duplicates)
                 }
                 else
                 {
-                    Log("[CONFIG] ⚠️ HuggingFace token not found. Create Data/huggingface_token.txt with your token.");
+                    Log("[CONFIG] ⚠️ HuggingFace token not found. Create Data/huggingface_token.txt");
                     Log("[CONFIG] Get free token at: https://huggingface.co/settings/tokens");
-                    HUGGINGFACE_TOKEN = ""; // Empty string to avoid null exceptions
+                    HUGGINGFACE_TOKEN = "";
                 }
             }
             catch (Exception ex)
             {
-                Log($"[CONFIG ERROR] Failed to load token: {ex.Message}");
+                Log($"[CONFIG ERROR] {ex.Message}");
                 HUGGINGFACE_TOKEN = "";
             }
         }
 
         /// <summary>
-        /// Analyse une image depuis une URL et détermine si c'est une fille
-        /// ✅ Seuils stricts: Female >80%, Male >40%
+        /// ✅ NOUVELLE VERSION: Analyse multi-niveaux (visage + corps)
         /// </summary>
         public async Task<bool> IsImageFemaleAsync(string imageUrl)
         {
             try
             {
-                var result = await AnalyzeWithHuggingFaceAsync(imageUrl);
+                // ✅ Niveau 1: Essayer détection visage d'abord (plus précis)
+                // ✅ Niveau 1: Essayer détection visage d'abord (plus précis)
+                var faceResult = await AnalyzeWithHuggingFaceAsync(imageUrl, useFaceModel: true);
 
-                if (!result.HasFaces)
+                if (faceResult.HasFaces && faceResult.Confidence > 0.60)  // Lower threshold
                 {
-                    Log($"[Filter] ✗ No face detected");
-                    return false;
+                    // ✅ Visage détecté avec bonne confiance
+                    if (faceResult.IsFemale && faceResult.Confidence > 0.65)  // Female threshold
+                    {
+                        Log($"[Filter] ✓ Female FACE ({faceResult.Confidence:P0}) - KEEP");
+                        return true;
+                    }
+                    else if (!faceResult.IsFemale && faceResult.Confidence > 0.65)  // Male threshold (symmetric)
+                    {
+                        Log($"[Filter] ✗ Male FACE ({faceResult.Confidence:P0}) - SKIP");
+                        return false;
+                    }
                 }
 
-                // ✅ Apply confidence thresholds
-                if (result.IsFemale && result.Confidence > 0.80)
+                // ✅ Niveau 2: Fallback sur analyse corps entier
+                Log($"[Filter] → Trying full-body analysis...");
+                var bodyResult = await AnalyzeWithHuggingFaceAsync(imageUrl, useFaceModel: false);
+
+                if (bodyResult.HasPerson)
                 {
-                    Log($"[Filter] ✓ Female ({result.Confidence:P0} confidence) - KEEP");
-                    return true;
+                    if (bodyResult.IsFemale && bodyResult.Confidence > 0.70)
+                    {
+                        Log($"[Filter] ✓ Female BODY ({bodyResult.Confidence:P0}) - KEEP");
+                        return true;
+                    }
+                    else if (!bodyResult.IsFemale && bodyResult.Confidence > 0.50)
+                    {
+                        Log($"[Filter] ✗ Male BODY ({bodyResult.Confidence:P0}) - SKIP");
+                        return false;
+                    }
                 }
-                else if (!result.IsFemale && result.Confidence > 0.40)
-                {
-                    Log($"[Filter] ✗ Male ({result.Confidence:P0} confidence) - SKIP");
-                    return false;
-                }
-                else
-                {
-                    // Uncertain (low confidence) → skip by default
-                    string gender = result.IsFemale ? "Female" : "Male";
-                    Log($"[Filter] ? {gender} ({result.Confidence:P0} confidence) - UNCERTAIN, skip");
-                    return false;
-                }
+
+                // ❌ Aucune détection fiable
+                Log($"[Filter] ? Uncertain - SKIP by default");
+                return false;
             }
             catch (Exception ex)
             {
@@ -102,30 +118,32 @@ namespace SocialNetworkArmy.Services
         }
 
         /// <summary>
-        /// Analyse avec HuggingFace (GRATUIT, illimité)
+        /// ✅ Analyse unifiée: visage OU corps selon le paramètre
         /// </summary>
-        private async Task<AnalysisResult> AnalyzeWithHuggingFaceAsync(string imageUrl)
+        private async Task<AnalysisResult> AnalyzeWithHuggingFaceAsync(string imageUrl, bool useFaceModel)
         {
             try
             {
-                // Lazy load token on first use
+                // Lazy load token
                 if (HUGGINGFACE_TOKEN == null)
                 {
                     LoadHuggingFaceToken();
                 }
 
-                // Vérifier que le token est chargé
                 if (string.IsNullOrEmpty(HUGGINGFACE_TOKEN))
                 {
-                    Log($"[Filter] ⚠️ Token missing");
-                    return new AnalysisResult { HasFaces = false };
+                    return new AnalysisResult { HasFaces = false, HasPerson = false };
                 }
 
-                // 1) Télécharger l'image
+                // Sélectionner le modèle
+                string apiUrl = useFaceModel ? HUGGINGFACE_API_URL : FULL_BODY_API_URL;
+                string modelType = useFaceModel ? "FACE" : "BODY";
+
+                // Télécharger l'image
                 var imageBytes = await httpClient.GetByteArrayAsync(imageUrl);
 
-                // 2) Envoyer à HuggingFace
-                var request = new HttpRequestMessage(HttpMethod.Post, HUGGINGFACE_API_URL);
+                // Appel API
+                var request = new HttpRequestMessage(HttpMethod.Post, apiUrl);
                 request.Headers.Add("Authorization", $"Bearer {HUGGINGFACE_TOKEN}");
                 request.Content = new ByteArrayContent(imageBytes);
                 request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
@@ -135,158 +153,191 @@ namespace SocialNetworkArmy.Services
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    Log($"[Filter] ⚠️ API error: {response.StatusCode}");
-                    return new AnalysisResult { HasFaces = false };
+                    Log($"[Filter] ⚠️ {modelType} API error: {response.StatusCode}");
+                    return new AnalysisResult { HasFaces = false, HasPerson = false };
                 }
 
-                // 3) Parser la réponse avec seuils de confiance stricts
+                // Parser la réponse
+                return ParseGenderResponse(json, modelType);
+            }
+            catch (Exception ex)
+            {
+                Log($"[Filter] ⚠️ Analysis error: {ex.Message}");
+                return new AnalysisResult { HasFaces = false, HasPerson = false };
+            }
+        }
+
+        /// <summary>
+        /// ✅ Parser universel pour les réponses de genre
+        /// </summary>
+        private AnalysisResult ParseGenderResponse(string json, string modelType)
+        {
+            try
+            {
                 var data = JsonDocument.Parse(json);
-                var predictions = data.RootElement.EnumerateArray();
+                var result = new AnalysisResult();
 
-                var result = new AnalysisResult { HasFaces = false, FaceCount = 0, IsFemale = false, Confidence = 0 };
-
-                // ✅ Capture BOTH Female AND Male scores for logging
                 double femaleScore = 0;
                 double maleScore = 0;
+                bool detectionFound = false;
 
-                foreach (var pred in predictions)
+                // Deux formats possibles selon le modèle
+                if (data.RootElement.ValueKind == JsonValueKind.Array)
                 {
-                    var label = pred.GetProperty("label").GetString();
-                    var score = pred.GetProperty("score").GetDouble();
-
-                    if (label.Contains("female", StringComparison.OrdinalIgnoreCase) ||
-                        label.Contains("woman", StringComparison.OrdinalIgnoreCase))
+                    // Format: [{"label":"female","score":0.95}, ...]
+                    foreach (var pred in data.RootElement.EnumerateArray())
                     {
-                        femaleScore = score;
-                        result.HasFaces = true;
-                        result.FaceCount = 1;
-                    }
+                        if (pred.TryGetProperty("label", out var labelProp) &&
+                            pred.TryGetProperty("score", out var scoreProp))
+                        {
+                            var label = labelProp.GetString()?.ToLower() ?? "";
+                            var score = scoreProp.GetDouble();
 
-                    if (label.Contains("male", StringComparison.OrdinalIgnoreCase) ||
-                        label.Contains("man", StringComparison.OrdinalIgnoreCase))
+                            // ✅ ORDRE IMPORTANT: female AVANT male (sinon "female" match "male")
+                            if (label == "female" || label == "woman" || label == "girl")
+                            {
+                                femaleScore = score;
+                                detectionFound = true;
+                            }
+                            else if (label == "male" || label == "man" || label == "boy")
+                            {
+                                maleScore = score;
+                                detectionFound = true;
+                            }
+                        }
+                    }
+                }
+                else if (data.RootElement.ValueKind == JsonValueKind.Object)
+                {
+                    // Format: {"female":0.95, "male":0.05}
+                    if (data.RootElement.TryGetProperty("female", out var femProp))
                     {
-                        maleScore = score;
-                        result.HasFaces = true;
-                        result.FaceCount = 1;
+                        femaleScore = femProp.GetDouble();
+                        detectionFound = true;
+                    }
+                    if (data.RootElement.TryGetProperty("male", out var malProp))
+                    {
+                        maleScore = malProp.GetDouble();
+                        detectionFound = true;
                     }
                 }
 
-                // ✅ Log BOTH scores for debugging
-                Log($"[Filter] API scores: Female={femaleScore:P0}, Male={maleScore:P0}");
+                // ✅ Log des scores
+                if (detectionFound)
+                {
+                    Log($"[Filter] {modelType} RAW: Female={femaleScore:F2}, Male={maleScore:F2}");
+                    Log($"[Filter] {modelType} scores: Female={femaleScore:P0}, Male={maleScore:P0}");
+                }
 
-                // ✅ STRICT THRESHOLDS:
-                // Female: need >80% confidence to KEEP
-                // Male: need >40% confidence to SKIP
-                if (femaleScore > 0.80)
-                {
-                    result.IsFemale = true;
-                    result.Confidence = femaleScore;
-                }
-                else if (maleScore > 0.40)
-                {
-                    result.IsFemale = false;
-                    result.Confidence = maleScore;
-                }
-                else
-                {
-                    // Uncertain - default to false (skip)
-                    result.IsFemale = false;
-                    result.Confidence = Math.Max(femaleScore, maleScore);
-                }
+                // ✅ Déterminer le résultat
+                result.HasFaces = detectionFound;
+                result.HasPerson = detectionFound;
+                result.IsFemale = femaleScore > maleScore;
+                result.Confidence = Math.Max(femaleScore, maleScore);
 
                 return result;
             }
             catch (Exception ex)
             {
-                Log($"[Filter] ⚠️ Error: {ex.Message}");
-                return new AnalysisResult { HasFaces = false };
+                Log($"[Filter] ⚠️ Parse error: {ex.Message}");
+                return new AnalysisResult { HasFaces = false, HasPerson = false };
             }
         }
 
         /// <summary>
-        /// Alternative: Analyse locale avec TensorFlow (sans API externe)
-        /// Nécessite: PM> Install-Package TensorFlow.NET
-        /// </summary>
-        public async Task<bool> IsImageFemaleLocalAsync(string imageUrl)
-        {
-            // ⚠️ Nécessite un modèle pré-entraîné (ex: gender_net.caffemodel)
-            // Plus complexe mais gratuit et sans limite
-
-            Log($"[Filter] Local analysis not implemented yet");
-            return true;
-        }
-
-        /// <summary>
-        /// Détecte le genre depuis le screenshot actuel dans Instagram
-        /// ✅ AMÉLIORATION: Cache par créateur + détection multi-images avec vote
+        /// ✅ Détection intelligente du contenu actuel
         /// </summary>
         public async Task<bool> IsCurrentContentFemaleAsync()
         {
             try
             {
-                // 1) Récupérer le créateur + les images disponibles via JavaScript
+                // ✅ Extraction avec filtres stricts
                 string scriptResult = await webView.ExecuteScriptAsync(@"
-                    (function() {
-                        // Extract creator username
-                        let creator = '';
-                        const creatorLink = document.querySelector('article a[href*=""/""]');
-                        if (creatorLink) {
-                            const href = creatorLink.getAttribute('href');
-                            const match = href.match(/^\/([^\/]+)\/?$/);
-                            if (match) creator = match[1];
-                        }
+    (function() {
+        let creator = '';
+        const creatorLink = document.querySelector('article a[href*=""/""]');
+        if (creatorLink) {
+            const href = creatorLink.getAttribute('href');
+            const match = href.match(/^\/([^\/]+)\/?$/);
+            if (match) creator = match[1];
+        }
 
-                        // Extract multiple images
-                        const imageUrls = [];
+        const allImages = Array.from(document.querySelectorAll('img'));
+        const debugInfo = {
+            totalImages: allImages.length,
+            largeImages: 0,
+            validRatios: 0
+        };
 
-                        // Strategy 1: Video poster
-                        const videos = document.querySelectorAll('video');
-                        for (let video of videos) {
-                            const rect = video.getBoundingClientRect();
-                            if (rect.top < window.innerHeight && rect.bottom > 0 && video.poster) {
-                                imageUrls.push(video.poster);
-                            }
-                        }
+        const imageUrls = [];
+        const validImages = allImages.filter(img => {
+            const rect = img.getBoundingClientRect();
+            const width = img.naturalWidth || img.width;
+            const height = img.naturalHeight || img.height;
+            const ratio = width / height;
+            
+            const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+            const isLargeEnough = width > 200 && height > 200;
+            if (isLargeEnough) debugInfo.largeImages++;
+            
+            const isPortraitOrSquare = ratio > 0.5 && ratio < 2.0;
+            if (isPortraitOrSquare) debugInfo.validRatios++;
+            
+            const notIcon = !img.src.includes('emoji') && 
+                          (!img.alt || !img.alt.toLowerCase().includes('icon')) &&
+                          (!img.alt || !img.alt.toLowerCase().includes('emoji'));
+            
+            const notButton = !img.closest('button');
+            
+            return isVisible && isLargeEnough && isPortraitOrSquare && notIcon && notButton;
+        });
 
-                        // Strategy 2: Visible images
-                        const allImages = Array.from(document.querySelectorAll('img'));
-                        const visibleImages = allImages.filter(img => {
-                            const rect = img.getBoundingClientRect();
-                            return rect.top < window.innerHeight && rect.bottom > 0 && img.width > 50 && img.height > 50;
-                        });
+        validImages.sort((a, b) => {
+            const aSize = (b.naturalWidth || b.width) * (b.naturalHeight || b.height);
+            const bSize = (a.naturalWidth || a.width) * (a.naturalHeight || a.height);
+            return aSize - bSize;
+        });
 
-                        visibleImages.sort((a, b) => {
-                            return (b.width * b.height) - (a.width * a.height);
-                        });
+        for (let img of validImages.slice(0, 3)) {
+            const url = img.src || img.currentSrc;
+            if (url && !imageUrls.includes(url)) {
+                imageUrls.push(url);
+            }
+        }
 
-                        for (let img of visibleImages.slice(0, 3)) {
-                            const url = img.src || img.currentSrc;
-                            if (url && !imageUrls.includes(url)) {
-                                imageUrls.push(url);
-                            }
-                        }
+        if (imageUrls.length === 0) {
+            const videos = document.querySelectorAll('video');
+            for (let video of videos) {
+                const rect = video.getBoundingClientRect();
+                if (rect.top < window.innerHeight && rect.bottom > 0 && video.poster) {
+                    imageUrls.push(video.poster);
+                    break;
+                }
+            }
+        }
 
-                        return JSON.stringify({
-                            creator: creator,
-                            images: imageUrls
-                        });
-                    })()
-                ");
+        return JSON.stringify({
+            creator: creator,
+            images: imageUrls,
+            debug: debugInfo
+        });
+    })()
+");
 
                 scriptResult = scriptResult?.Trim('"')?.Replace("\\\"", "\"");
 
                 if (string.IsNullOrWhiteSpace(scriptResult))
                 {
-                    Log($"[Filter] ✗ No data");
+                    Log($"[Filter] ✗ No data extracted");
                     return false;
                 }
 
-                // Parse JSON result
+                // Parse résultat
                 var data = JsonDocument.Parse(scriptResult);
                 string creator = data.RootElement.GetProperty("creator").GetString();
                 var images = data.RootElement.GetProperty("images");
 
-                var imageUrls = new System.Collections.Generic.List<string>();
+                var imageUrls = new List<string>();
                 foreach (var img in images.EnumerateArray())
                 {
                     string url = img.GetString();
@@ -296,32 +347,33 @@ namespace SocialNetworkArmy.Services
 
                 if (imageUrls.Count == 0)
                 {
-                    Log($"[Filter] ✗ No images");
+                    Log($"[Filter] ✗ No valid images found");
                     return false;
                 }
 
-                // ✅ 2) Check creator cache first (24h duration)
+                // ✅ Vérifier cache créateur (24h)
                 if (!string.IsNullOrWhiteSpace(creator) && creatorGenderCache.TryGetValue(creator, out var cached))
                 {
                     if (DateTime.Now - cached.timestamp < CREATOR_CACHE_DURATION)
                     {
-                        Log($"[Filter] ✓ CACHE hit: @{creator} → {(cached.isFemale ? "Female" : "Male")} (no API)");
+                        Log($"[Filter] ✓ CACHE: @{creator} → {(cached.isFemale ? "Female" : "Male")} (no API call)");
                         return cached.isFemale;
                     }
                     else
                     {
-                        creatorGenderCache.Remove(creator); // Expired
+                        creatorGenderCache.Remove(creator); // Expiré
                     }
                 }
 
-                // ✅ 3) SPEED OPTIMIZED: Single image detection (no voting, 3x faster)
+                // ✅ Analyser l'image (multi-niveaux: visage puis corps)
+                Log($"[Filter] Analyzing @{creator}...");
                 bool finalResult = await IsImageFemaleAsync(imageUrls[0]);
-                Log($"[Filter] ✓ {(finalResult ? "Female" : "Male")} (@{creator})");
 
-                // ✅ 4) Cache the result by creator (24h)
+                // ✅ Cacher le résultat
                 if (!string.IsNullOrWhiteSpace(creator))
                 {
                     creatorGenderCache[creator] = (finalResult, DateTime.Now);
+                    Log($"[Filter] ✓ Cached @{creator} → {(finalResult ? "Female" : "Male")}");
                 }
 
                 return finalResult;
@@ -334,69 +386,30 @@ namespace SocialNetworkArmy.Services
         }
 
         /// <summary>
-        /// ALTERNATIVE SIMPLE: Filtrage par mots-clés dans la bio/caption
-        /// Moins précis mais gratuit et immédiat
+        /// ✅ Vider le cache (utile pour debug)
         /// </summary>
-        public async Task<bool> IsProfileFemaleByKeywordsAsync()
+        public void ClearCache()
         {
-            try
+            creatorGenderCache.Clear();
+            Log($"[Filter] Cache cleared");
+        }
+
+        /// <summary>
+        /// ✅ Statistiques du cache
+        /// </summary>
+        public string GetCacheStats()
+        {
+            int total = creatorGenderCache.Count;
+            int females = 0;
+            int males = 0;
+
+            foreach (var entry in creatorGenderCache.Values)
             {
-                string bioText = await webView.ExecuteScriptAsync(@"
-                    (function() {
-                        // Récupérer la bio du profil
-                        let bio = document.querySelector('header section div span')?.innerText || '';
-                        
-                        // Récupérer la caption du post
-                        let caption = document.querySelector('article span[dir]')?.innerText || '';
-                        
-                        return (bio + ' ' + caption).toLowerCase();
-                    })()
-                ");
-
-                bioText = bioText?.Trim('"').ToLower() ?? "";
-
-                // Mots-clés féminins
-                string[] femaleKeywords = { "girl", "woman", "she", "her", "female", "model", "beauty",
-                                           "fille", "femme", "elle", "belle", "beauté", "💋", "👗", "💅" };
-
-                // Mots-clés masculins (à exclure)
-                string[] maleKeywords = { "guy", "man", "he", "him", "male", "bro", "dude",
-                                         "homme", "mec", "gars", "il", "lui" };
-
-                int femaleScore = 0;
-                int maleScore = 0;
-
-                foreach (var kw in femaleKeywords)
-                {
-                    if (bioText.Contains(kw)) femaleScore++;
-                }
-
-                foreach (var kw in maleKeywords)
-                {
-                    if (bioText.Contains(kw)) maleScore++;
-                }
-
-                if (maleScore > 0)
-                {
-                    Log($"[Filter] ✗ Male keywords detected - SKIPPING");
-                    return false;
-                }
-
-                if (femaleScore > 0)
-                {
-                    Log($"[Filter] ✓ Female keywords detected - KEEPING");
-                    return true;
-                }
-
-                // Si aucun mot-clé, on garde (neutre)
-                Log($"[Filter] ℹ️ No gender keywords - KEEPING (neutral)");
-                return true;
+                if (entry.isFemale) females++;
+                else males++;
             }
-            catch (Exception ex)
-            {
-                Log($"[Filter] Keyword filter error: {ex.Message}");
-                return true;
-            }
+
+            return $"Cache: {total} creators ({females} female, {males} male)";
         }
 
         private void Log(string message)
@@ -423,9 +436,10 @@ namespace SocialNetworkArmy.Services
         private class AnalysisResult
         {
             public bool HasFaces { get; set; }
+            public bool HasPerson { get; set; } // ✅ NOUVEAU: détection corps
             public int FaceCount { get; set; }
             public bool IsFemale { get; set; }
-            public double Confidence { get; set; } // ✅ Confidence score (0-1)
+            public double Confidence { get; set; }
         }
     }
 }
