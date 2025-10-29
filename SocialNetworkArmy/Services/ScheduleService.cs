@@ -220,8 +220,18 @@ namespace SocialNetworkArmy.Services
                         return;
                     }
 
-                    var lines = File.ReadAllLines(CSV_PATH)
-                                    .Skip(1)
+                    var allLines = File.ReadAllLines(CSV_PATH);
+                    if (allLines.Length == 0)
+                    {
+                        LogToUI("[Schedule] CSV file is empty.");
+                        return;
+                    }
+
+                    // ✅ DÉTECTION AUTO DU SÉPARATEUR (support Excel ";")
+                    char separator = DetectCSVSeparator(allLines[0]);
+                    LogToUI($"[Schedule] CSV separator detected: '{separator}'");
+
+                    var lines = allLines.Skip(1)
                                     .Where(l => !string.IsNullOrWhiteSpace(l))
                                     .ToList();
 
@@ -230,7 +240,7 @@ namespace SocialNetworkArmy.Services
                     {
                         try
                         {
-                            var parts = SplitCSVLine(line);
+                            var parts = SplitCSVLine(line, separator);
                             if (parts.Length < 4)
                             {
                                 LogToUI($"[Schedule] Line {lineNumber} skipped: insufficient columns");
@@ -249,7 +259,7 @@ namespace SocialNetworkArmy.Services
                             }
 
                             string platform = parts[1].Trim();
-                            string accountOrGroup = parts[2].Trim();
+                            string accountOrGroupRaw = parts[2].Trim();
                             string activity = parts[3].Trim().ToLowerInvariant();
                             string mediaPath = parts.Length > 4 ? parts[4].Trim() : "";
                             string description = parts.Length > 5 ? parts[5].Trim() : "";
@@ -262,8 +272,29 @@ namespace SocialNetworkArmy.Services
                                 continue;
                             }
 
-                            // ✅ DÉTECTION AUTOMATIQUE : Compte ou Groupe
+                            // ✅ SUPPORT DU SÉPARATEUR "|" pour plusieurs comptes/groupes
+                            var accountsOrGroups = accountOrGroupRaw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+                                .Select(x => x.Trim())
+                                .Where(x => !string.IsNullOrWhiteSpace(x))
+                                .ToList();
+
+                            if (accountsOrGroups.Count == 0)
+                            {
+                                LogToUI($"[Schedule] Line {lineNumber} skipped: empty account/group");
+                                lineNumber++;
+                                continue;
+                            }
+
+                            if (accountsOrGroups.Count > 1)
+                            {
+                                LogToUI($"[Schedule] Line {lineNumber}: Multiple accounts/groups detected ({accountsOrGroups.Count}): {string.Join(", ", accountsOrGroups)}");
+                            }
+
+                            // ✅ TRAITER CHAQUE COMPTE/GROUPE
                             var profiles = profileService.LoadProfiles();
+
+                            foreach (var accountOrGroup in accountsOrGroups)
+                            {
 
                             // D'abord chercher un compte exact
                             var singleProfile = profiles.FirstOrDefault(p =>
@@ -383,6 +414,7 @@ namespace SocialNetworkArmy.Services
                                     accountIndex++;
                                 }
                             }
+                            } // ✅ FIN DE LA BOUCLE foreach accountOrGroup
                         }
                         catch (Exception exLine)
                         {
@@ -1041,19 +1073,28 @@ namespace SocialNetworkArmy.Services
         {
             var key = $"{platform}_{account}".ToLowerInvariant();
 
+            // ✅ CHANGEMENT: Fermer le form existant au lieu de le réutiliser
             Form existing = null;
             lock (_lockObj)
             {
                 if (_activeForms.TryGetValue(key, out existing) && existing != null && !existing.IsDisposed)
                 {
-                    RunOnUiThread(() =>
-                    {
-                        if (existing.WindowState == FormWindowState.Minimized)
-                            existing.WindowState = FormWindowState.Normal;
-                        existing.BringToFront();
-                    });
-                    return existing;
+                    LogToUI($"[Schedule] Form already open for {key}, closing it first...");
                 }
+            }
+
+            // Si un form existe, arrêter l'activité et le fermer
+            if (existing != null && !existing.IsDisposed)
+            {
+                // Arrêter l'activité en cours si elle existe
+                await TryStopActivityBeforeStartAsync(key);
+                await Task.Delay(1000); // Attendre que le stop se termine
+
+                // Fermer le form
+                await CloseFormForKeyAsync(key);
+                await Task.Delay(500); // Attendre que la fermeture soit complète
+
+                LogToUI($"[Schedule] ✓ Previous form closed for {key}");
             }
 
             var profiles = profileService.LoadProfiles();
@@ -1116,19 +1157,23 @@ namespace SocialNetworkArmy.Services
         {
             var key = $"{platform}_{account}_story".ToLowerInvariant();
 
+            // ✅ CHANGEMENT: Fermer le form existant au lieu de le réutiliser
             Form existing = null;
             lock (_lockObj)
             {
                 if (_activeForms.TryGetValue(key, out existing) && existing != null && !existing.IsDisposed)
                 {
-                    RunOnUiThread(() =>
-                    {
-                        if (existing.WindowState == FormWindowState.Minimized)
-                            existing.WindowState = FormWindowState.Normal;
-                        existing.BringToFront();
-                    });
-                    return existing;
+                    LogToUI($"[Schedule] Story form already open for {key}, closing it first...");
                 }
+            }
+
+            // Si un form existe, le fermer
+            if (existing != null && !existing.IsDisposed)
+            {
+                await CloseFormForKeyAsync(key);
+                await Task.Delay(500); // Attendre que la fermeture soit complète
+
+                LogToUI($"[Schedule] ✓ Previous story form closed for {key}");
             }
 
             var profiles = profileService.LoadProfiles();
@@ -1382,7 +1427,7 @@ namespace SocialNetworkArmy.Services
         // ---------------------------
         // Utils
         // ---------------------------
-        private string[] SplitCSVLine(string line)
+        private string[] SplitCSVLine(string line, char separator = ',')
         {
             var result = new List<string>();
             var current = "";
@@ -1391,7 +1436,7 @@ namespace SocialNetworkArmy.Services
             foreach (char c in line)
             {
                 if (c == '"') inQuotes = !inQuotes;
-                else if (c == ',' && !inQuotes) { result.Add(current); current = ""; }
+                else if (c == separator && !inQuotes) { result.Add(current); current = ""; }
                 else current += c;
             }
             result.Add(current);

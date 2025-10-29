@@ -29,7 +29,7 @@ namespace SocialNetworkArmy.Forms
         private TextBox groupNameTextBox;  // ✅ AJOUT
         private Label statusLabel;
         private TextBox scheduleLogTextBox;
-        private ComboBox dataFilesComboBox;
+        // ✅ SUPPRIMÉ: private ComboBox dataFilesComboBox;
         private Panel logPanel;
         private ToolTip modernToolTip;
         private Point hoveredCell = new Point(-1, -1);
@@ -61,7 +61,7 @@ namespace SocialNetworkArmy.Forms
             scheduleService = new ScheduleService(scheduleLogTextBox, profileService);
 
             PopulateProfilesList();
-            LoadDataFiles();
+            // ✅ SUPPRIMÉ: LoadDataFiles(); (plus de combobox)
         }
 
         private void InitializeComponent()
@@ -334,45 +334,21 @@ namespace SocialNetworkArmy.Forms
                 BackColor = Color.FromArgb(50, 50, 50)
             };
 
-            // Data Files Section
-            Label dataLabel = new Label
+            // ✅ CHANGEMENT: Bouton direct pour ouvrir le dossier Data (pas de combobox)
+            Button openDataFolderButton = new Button
             {
-                Text = "📁 Files:",
+                Text = "📂 Open Data Folder",
                 Location = new Point(723, 220),
-                Size = new Size(70, 34),
-                ForeColor = Color.FromArgb(180, 180, 180),
-                Font = Sergoe,
-                TextAlign = ContentAlignment.MiddleLeft,
-                BackColor = Color.Transparent
-            };
-
-            dataFilesComboBox = new ComboBox
-            {
-                Location = new Point(796, 225),
-                Size = new Size(96, 34),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                BackColor = Color.FromArgb(35, 35, 35),
-                ForeColor = Color.White,
-                Font = Sergoe,
-                DropDownWidth = 300,
-                FlatStyle = FlatStyle.Flat
-            };
-            modernToolTip.SetToolTip(dataFilesComboBox, "Select data file to open");
-
-            Button openDataFileButton = new Button
-            {
-                Text = "📂",
-                Location = new Point(897, 220),
-                Size = new Size(75, 34),
+                Size = new Size(249, 34),
                 BackColor = Color.FromArgb(96, 125, 139),
                 ForeColor = Color.White,
-                Font = new Font("Segoe UI Emoji", 11f),
+                Font = Sergoe,
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand
             };
-            openDataFileButton.FlatAppearance.BorderSize = 0;
-            openDataFileButton.Click += OpenDataFileButton_Click;
-            modernToolTip.SetToolTip(openDataFileButton, "Open selected file");
+            openDataFolderButton.FlatAppearance.BorderSize = 0;
+            openDataFolderButton.Click += OpenDataFolderButton_Click;
+            modernToolTip.SetToolTip(openDataFolderButton, "Open Data folder in Windows Explorer");
 
             // Buttons Row
             int buttonY = 262;
@@ -472,9 +448,7 @@ namespace SocialNetworkArmy.Forms
             this.Controls.Add(groupNameTextBox);  // ✅ AJOUT
             this.Controls.Add(createButton);
             this.Controls.Add(separator);
-            this.Controls.Add(dataLabel);
-            this.Controls.Add(dataFilesComboBox);
-            this.Controls.Add(openDataFileButton);
+            this.Controls.Add(openDataFolderButton); // ✅ CHANGEMENT: Nouveau bouton
             this.Controls.Add(launchButton);
             this.Controls.Add(scheduleButton);
             this.Controls.Add(openPhone);
@@ -558,35 +532,20 @@ namespace SocialNetworkArmy.Forms
             proxyTextBox.Top = controlsY;
             groupNameTextBox.Top = controlsY;  // ✅ AJOUT
 
-            int filesX = formWidth - 224;
-            dataFilesComboBox.Left = filesX;
-            dataFilesComboBox.Top = controlsY;
-
-            int openButtonX = formWidth - 87;
-
+            // ✅ CHANGEMENT: Positionner le nouveau bouton Data folder
             foreach (Control ctrl in this.Controls)
             {
                 if (ctrl is Button btn)
                 {
-                    if (btn.Text == "📂")
+                    if (btn.Text == "📂 Open Data Folder")
                     {
-                        btn.Left = openButtonX;
+                        btn.Left = formWidth - 261;
                         btn.Top = controlsY - 5;
                     }
                     else if (btn.Text == "➕ Create")
                     {
                         btn.Top = controlsY - 5;
                     }
-                }
-                else if (ctrl is Label lbl && lbl.Text == "📁 Files:")
-                {
-                    lbl.Left = filesX - 73;
-                    lbl.Top = controlsY - 5;
-                }
-                else if (ctrl is Panel panel && panel.Size.Width == 2)
-                {
-                    panel.Left = filesX - 83;
-                    panel.Top = controlsY - 3;
                 }
             }
 
@@ -1132,39 +1091,30 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
-        private void OpenDataFileButton_Click(object sender, EventArgs e)
+        // ✅ CHANGEMENT: Ouvrir le dossier Data directement dans l'explorateur
+        private void OpenDataFolderButton_Click(object sender, EventArgs e)
         {
             try
             {
-                if (dataFilesComboBox.SelectedItem == null ||
-                    dataFilesComboBox.SelectedItem.ToString() == "(No files)")
-                {
-                    MessageBox.Show("No file selected!", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                string fileName = dataFilesComboBox.SelectedItem.ToString();
                 string dataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
-                string fullPath = Path.Combine(dataPath, fileName);
 
-                if (!File.Exists(fullPath))
+                if (!Directory.Exists(dataPath))
                 {
-                    MessageBox.Show($"File not found: {fileName}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    LoadDataFiles();
-                    return;
+                    Directory.CreateDirectory(dataPath);
                 }
 
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
-                    FileName = fullPath,
-                    UseShellExecute = true
+                    FileName = dataPath,
+                    UseShellExecute = true,
+                    Verb = "open"
                 });
 
-                statusLabel.Text = $"📂 Opened: {fileName}";
+                statusLabel.Text = "📂 Data folder opened";
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error opening file: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Error opening Data folder: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

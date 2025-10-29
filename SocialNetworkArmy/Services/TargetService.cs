@@ -21,6 +21,7 @@ namespace SocialNetworkArmy.Services
         private readonly Profile profile;
         private readonly Random rand = new Random();
         private readonly HumanBehaviorSimulator humanBehavior;
+        private readonly Models.AccountConfig config; // ✅ AJOUT: Config pour MaxPostAgeHours
 
         public TargetService(WebView2 webView, TextBox logTextBox, Profile profile, InstagramBotForm form)
         {
@@ -30,6 +31,7 @@ namespace SocialNetworkArmy.Services
             this.form = form ?? throw new ArgumentNullException(nameof(form));
             this.navigationService = new NavigationService(webView, logTextBox);
             this.humanBehavior = new HumanBehaviorSimulator(webView);
+            this.config = ConfigService.LoadConfig(profile.Name); // ✅ AJOUT: Charger la config
         }
 
 
@@ -928,18 +930,18 @@ namespace SocialNetworkArmy.Services
 
                                             logTextBox.AppendText($"[AGE] {ageHours:F1}h\r\n");
 
-                                            // ✅ LOGIQUE CLAIRE ET STRICTE
-                                            if (ageHours < 24)
+                                            // ✅ UTILISER LA CONFIG (MaxPostAgeHours au lieu de 24 hardcodé)
+                                            if (ageHours <= config.MaxPostAgeHours)
                                             {
                                                 shouldComment = true;
                                                 shouldSkip = false;
-                                                logTextBox.AppendText("[DECISION] < 24h → COMMENTER\r\n");
+                                                logTextBox.AppendText($"[DECISION] ≤ {config.MaxPostAgeHours}h → COMMENTER\r\n");
                                             }
-                                            else  // ≥ 24h
+                                            else  // > MaxPostAgeHours
                                             {
                                                 shouldComment = false;
                                                 shouldSkip = (rand.NextDouble() < 0.80);  // 80% de skip
-                                                logTextBox.AppendText($"[DECISION] ≥ 24h → {(shouldSkip ? "SKIP (80%)" : "NO COMMENT (like 9%)")}\r\n");
+                                                logTextBox.AppendText($"[DECISION] > {config.MaxPostAgeHours}h → {(shouldSkip ? "SKIP (80%)" : "NO COMMENT (like 9%)")}\r\n");
                                             }
                                         }
                                     }
