@@ -1015,9 +1015,9 @@ getCurrentComments();
                             int watchTime;
                             if (isPerfectMatch)
                             {
-                                // 🎯 Perfect match (Female + target language): 10-25s watch
-                                watchTime = rand.Next(10000, 25001);
-                                logTextBox.AppendText($"[WATCH] 🎯 Perfect match → {watchTime / 1000}s\r\n");
+                                // 🎯 Perfect match (Female + target language): 15-30s watch (longer for double match)
+                                watchTime = rand.Next(15000, 30001);
+                                logTextBox.AppendText($"[WATCH] 🎯 Perfect match (both criteria) → {watchTime / 1000}s\r\n");
 
                                 // Expand caption (20% chance)
                                 if (!string.IsNullOrWhiteSpace(reelCaption) && reelCaption.Length > 100 && rand.NextDouble() < 0.20)
@@ -1054,8 +1054,8 @@ getCurrentComments();
                                 // No delay at all - skip immediately
                             }
 
-                            // ✅ Like logic (only for perfect matches)
-                            bool shouldLike = isPerfectMatch && rand.NextDouble() < GetLikeProbability(watchTime, comments);
+                            // ✅ Like logic (only for perfect matches) - 19% chance when both criteria match
+                            bool shouldLike = isPerfectMatch && rand.NextDouble() < 0.19;
 
                             if (shouldLike)
                             {

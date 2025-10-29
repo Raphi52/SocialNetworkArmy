@@ -1076,13 +1076,13 @@ namespace SocialNetworkArmy.Services
         {
             var key = $"{platform}_{account}".ToLowerInvariant();
 
-            // ✅ RÉUTILISER LE FORM EXISTANT (arrêter activité mais garder le form)
+            // ✅ ÉTAPE 1: Chercher dans le dictionnaire du schedule
             Form existing = null;
             lock (_lockObj)
             {
                 if (_activeForms.TryGetValue(key, out existing) && existing != null && !existing.IsDisposed)
                 {
-                    LogToUI($"[Schedule] ✓ Form already open for {key}, reusing it");
+                    LogToUI($"[Schedule] ✓ Form already tracked for {key}, reusing it");
 
                     RunOnUiThread(() =>
                     {
@@ -1094,6 +1094,79 @@ namespace SocialNetworkArmy.Services
                     return existing;
                 }
             }
+
+            // ✅ ÉTAPE 2: Chercher dans TOUS les forms ouverts (forms ouverts manuellement)
+            Form manualForm = null;
+            try
+            {
+                foreach (Form openForm in Application.OpenForms)
+                {
+                    if (openForm is InstagramBotForm ibf && !openForm.IsDisposed)
+                    {
+                        // Vérifier si c'est le bon compte via reflection
+                        var profileField = ibf.GetType().GetField("profile",
+                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+                        if (profileField?.GetValue(ibf) is Profile profile)
+                        {
+                            if (profile.Name.Equals(account, StringComparison.OrdinalIgnoreCase) &&
+                                profile.Platform.Equals(platform, StringComparison.OrdinalIgnoreCase))
+                            {
+                                manualForm = openForm;
+                                LogToUI($"[Schedule] ✓ Found manually opened form for {key}, reusing it!");
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (manualForm != null && !manualForm.IsDisposed)
+                {
+                    // Enregistrer ce form dans le dictionnaire pour les prochaines fois
+                    lock (_lockObj)
+                    {
+                        _activeForms[key] = manualForm;
+                        LogToUI($"[Schedule] ✓ Registered manual form '{key}' (total forms: {_activeForms.Count})");
+                    }
+
+                    // S'assurer que le FormClosed handler est attaché
+                    bool alreadyAttached = false;
+                    foreach (Delegate d in manualForm.FormClosed.GetInvocationList())
+                    {
+                        if (d.Target == this) alreadyAttached = true;
+                    }
+
+                    if (!alreadyAttached)
+                    {
+                        manualForm.FormClosed += (s, e) =>
+                        {
+                            lock (_lockObj)
+                            {
+                                if (_activeForms.ContainsKey(key))
+                                {
+                                    _activeForms.Remove(key);
+                                    LogToUI($"[Schedule] Bot window closed: {key}");
+                                }
+                            }
+                        };
+                    }
+
+                    RunOnUiThread(() =>
+                    {
+                        if (manualForm.WindowState == FormWindowState.Minimized)
+                            manualForm.WindowState = FormWindowState.Normal;
+                        manualForm.BringToFront();
+                    });
+
+                    return manualForm;
+                }
+            }
+            catch (Exception ex)
+            {
+                LogToUI($"[Schedule] Error checking manual forms: {ex.Message}");
+            }
+
+            // ✅ ÉTAPE 3: Aucun form trouvé, en créer un nouveau
 
             var profiles = profileService.LoadProfiles();
             var profile = profiles.FirstOrDefault(p => p.Name.Equals(account, StringComparison.OrdinalIgnoreCase));
