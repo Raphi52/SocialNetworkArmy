@@ -771,6 +771,9 @@ namespace SocialNetworkArmy.Services
 
         private async Task ExecuteStandardBotTaskAsync(ScheduledTask task, string baseKey, CancellationToken token)
         {
+            // ✅ AJOUT: Arrêter l'activité en cours avant de lancer publish
+            await TryStopActivityBeforeStartAsync(baseKey);
+
             var botForm = await GetOrCreateBotFormAsync(task.Platform, task.Account);
             if (botForm == null)
             {

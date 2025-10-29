@@ -494,11 +494,12 @@ namespace SocialNetworkArmy.Forms
                     buttonColor = DarkenColor(buttonColor, 30);
                 }
 
+                // ✅ CHANGEMENT: Boutons prennent toute la largeur (marges réduites à 2px)
                 Rectangle buttonRect = new Rectangle(
-                    e.CellBounds.X + 8,
-                    e.CellBounds.Y + 6,
-                    e.CellBounds.Width - 16,
-                    e.CellBounds.Height - 12
+                    e.CellBounds.X + 2,
+                    e.CellBounds.Y + 4,
+                    e.CellBounds.Width - 4,
+                    e.CellBounds.Height - 8
                 );
 
                 e.Graphics.FillRectangle(new SolidBrush(buttonColor), buttonRect);
