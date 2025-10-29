@@ -675,10 +675,10 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
                 webView.CoreWebView2.Settings.UserAgent = userAgent;
 
-                // ✅ 10. INJECT ADVANCED FINGERPRINT STEALTH (10/10)
-                var stealthScript = fingerprintService.GenerateJSSpoof(fingerprint);
+                // ✅ 10. INJECT LIGHT STEALTH (non-intrusive for publish)
+                var stealthScript = fingerprintService.GenerateJSSpoofLight(fingerprint);
                 await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
-                logTextBox.AppendText("[INFO] ✓ Advanced fingerprint stealth injected (10/10)\r\n");
+                logTextBox.AppendText("[INFO] ✓ Light stealth injected (publish-safe)\r\n");
 
                 // ✅ 11. SET EXTRA HEADERS
                 await webView.CoreWebView2.CallDevToolsProtocolMethodAsync(

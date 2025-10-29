@@ -443,5 +443,79 @@ namespace SocialNetworkArmy.Services
 
             return js;
         }
+
+        /// <summary>
+        /// ✅ LIGHT MODE: Stealth basique pour publish (evite detection mais pas trop agressif)
+        /// Garde: UA, platform, webdriver masking
+        /// Enlève: Canvas/Audio/WebGL spoofing (trop agressif pour upload Instagram)
+        /// </summary>
+        public string GenerateJSSpoofLight(Fingerprint fingerprint)
+        {
+            string uaJs = JsonConvert.SerializeObject(fingerprint.UserAgent ?? "");
+            string platformJs = JsonConvert.SerializeObject(fingerprint.Platform ?? "");
+            string vendorJs = JsonConvert.SerializeObject(fingerprint.Vendor ?? "");
+            string languagesJs = JsonConvert.SerializeObject(fingerprint.Languages ?? new List<string>());
+            string timezoneJs = JsonConvert.SerializeObject(fingerprint.Timezone ?? "");
+            int hwConcurrency = fingerprint.HardwareConcurrency;
+            int maxTouch = fingerprint.MaxTouchPoints;
+            string screenRes = JsonConvert.SerializeObject(fingerprint.ScreenResolution ?? "1920x1080");
+
+            var js = $@"
+(function() {{
+    // ---------- Basic navigator overrides (NON-INTRUSIVE) ----------
+    Object.defineProperty(navigator, 'userAgent', {{ get: () => {uaJs}, configurable: true }});
+    Object.defineProperty(navigator, 'platform', {{ get: () => {platformJs}, configurable: true }});
+    Object.defineProperty(navigator, 'vendor', {{ get: () => {vendorJs}, configurable: true }});
+    Object.defineProperty(navigator, 'languages', {{ get: () => {languagesJs}, configurable: true }});
+    Object.defineProperty(navigator, 'hardwareConcurrency', {{ get: () => {hwConcurrency}, configurable: true }});
+    Object.defineProperty(navigator, 'maxTouchPoints', {{ get: () => {maxTouch}, configurable: true }});
+
+    // Timezone (simple override)
+    try {{
+        const _Intl = Intl.DateTimeFormat;
+        Intl.DateTimeFormat = function() {{
+            const inst = new _Intl(...arguments);
+            const ro = inst.resolvedOptions();
+            const patched = function() {{ return Object.assign(ro, {{ timeZone: {timezoneJs} }}); }};
+            inst.resolvedOptions = patched;
+            return inst;
+        }};
+    }} catch(e){{}}
+
+    // Screen resolution (simple)
+    try {{
+        const [w,h] = {screenRes}.replace(/['""]/g,'').split('x').map(Number);
+        if (!isNaN(w)) Object.defineProperty(screen, 'width', {{ get: () => w, configurable: true }});
+        if (!isNaN(h)) Object.defineProperty(screen, 'height', {{ get: () => h, configurable: true }});
+    }} catch(e){{}}
+
+    // ---------- WebView2 Detection Masking (CRITICAL) ----------
+    try {{ Object.defineProperty(navigator, 'webdriver', {{ get: () => undefined, configurable: true }}); }} catch(e){{}}
+    try {{ delete navigator.__proto__.webdriver; }} catch(e){{}}
+
+    try {{
+        if (window.chrome && window.chrome.webview) {{
+            delete window.chrome.webview;
+        }}
+    }} catch(e){{}}
+
+    // Mask automation props
+    try {{ delete window.__playwright; }} catch(e){{}}
+    try {{ delete window.__puppeteer; }} catch(e){{}}
+    try {{ delete window.__selenium; }} catch(e){{}}
+    try {{ delete window.callPhantom; }} catch(e){{}}
+    try {{ delete window._phantom; }} catch(e){{}}
+
+    // Chrome runtime (make it look real)
+    try {{
+        if (!window.chrome) window.chrome = {{}};
+        if (!window.chrome.runtime) window.chrome.runtime = {{}};
+    }} catch(e){{}}
+
+}})();
+";
+
+            return js;
+        }
     }
 }
