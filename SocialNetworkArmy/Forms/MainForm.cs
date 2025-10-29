@@ -1046,52 +1046,9 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
-        private void LoadDataFiles()
-        {
-            try
-            {
-                dataFilesComboBox.Items.Clear();
+        // ✅ SUPPRIMÉ: LoadDataFiles() - plus besoin avec le nouveau bouton
 
-                string dataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
-
-                if (!Directory.Exists(dataPath))
-                {
-                    Directory.CreateDirectory(dataPath);
-                    dataFilesComboBox.Items.Add("(No files)");
-                    return;
-                }
-
-                string[] extensions = { "*.txt", "*.csv" };
-                var files = new List<string>();
-
-                foreach (var ext in extensions)
-                {
-                    files.AddRange(Directory.GetFiles(dataPath, ext));
-                }
-
-                if (files.Count == 0)
-                {
-                    dataFilesComboBox.Items.Add("(No files)");
-                    return;
-                }
-
-                foreach (var file in files.OrderBy(f => f))
-                {
-                    dataFilesComboBox.Items.Add(Path.GetFileName(file));
-                }
-
-                if (dataFilesComboBox.Items.Count > 0)
-                {
-                    dataFilesComboBox.SelectedIndex = 0;
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error loading Data files: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        // ✅ CHANGEMENT: Ouvrir le dossier Data directement dans l'explorateur
+        // ✅ Ouvrir le dossier Data directement dans l'explorateur
         private void OpenDataFolderButton_Click(object sender, EventArgs e)
         {
             try

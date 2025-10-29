@@ -1073,28 +1073,23 @@ namespace SocialNetworkArmy.Services
         {
             var key = $"{platform}_{account}".ToLowerInvariant();
 
-            // ✅ CHANGEMENT: Fermer le form existant au lieu de le réutiliser
+            // ✅ RÉUTILISER LE FORM EXISTANT (arrêter activité mais garder le form)
             Form existing = null;
             lock (_lockObj)
             {
                 if (_activeForms.TryGetValue(key, out existing) && existing != null && !existing.IsDisposed)
                 {
-                    LogToUI($"[Schedule] Form already open for {key}, closing it first...");
+                    LogToUI($"[Schedule] ✓ Form already open for {key}, reusing it");
+
+                    RunOnUiThread(() =>
+                    {
+                        if (existing.WindowState == FormWindowState.Minimized)
+                            existing.WindowState = FormWindowState.Normal;
+                        existing.BringToFront();
+                    });
+
+                    return existing;
                 }
-            }
-
-            // Si un form existe, arrêter l'activité et le fermer
-            if (existing != null && !existing.IsDisposed)
-            {
-                // Arrêter l'activité en cours si elle existe
-                await TryStopActivityBeforeStartAsync(key);
-                await Task.Delay(1000); // Attendre que le stop se termine
-
-                // Fermer le form
-                await CloseFormForKeyAsync(key);
-                await Task.Delay(500); // Attendre que la fermeture soit complète
-
-                LogToUI($"[Schedule] ✓ Previous form closed for {key}");
             }
 
             var profiles = profileService.LoadProfiles();
@@ -1157,23 +1152,23 @@ namespace SocialNetworkArmy.Services
         {
             var key = $"{platform}_{account}_story".ToLowerInvariant();
 
-            // ✅ CHANGEMENT: Fermer le form existant au lieu de le réutiliser
+            // ✅ RÉUTILISER LE FORM EXISTANT
             Form existing = null;
             lock (_lockObj)
             {
                 if (_activeForms.TryGetValue(key, out existing) && existing != null && !existing.IsDisposed)
                 {
-                    LogToUI($"[Schedule] Story form already open for {key}, closing it first...");
+                    LogToUI($"[Schedule] ✓ Story form already open for {key}, reusing it");
+
+                    RunOnUiThread(() =>
+                    {
+                        if (existing.WindowState == FormWindowState.Minimized)
+                            existing.WindowState = FormWindowState.Normal;
+                        existing.BringToFront();
+                    });
+
+                    return existing;
                 }
-            }
-
-            // Si un form existe, le fermer
-            if (existing != null && !existing.IsDisposed)
-            {
-                await CloseFormForKeyAsync(key);
-                await Task.Delay(500); // Attendre que la fermeture soit complète
-
-                LogToUI($"[Schedule] ✓ Previous story form closed for {key}");
             }
 
             var profiles = profileService.LoadProfiles();
