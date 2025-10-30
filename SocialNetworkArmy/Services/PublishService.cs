@@ -1170,9 +1170,20 @@ return {ok:true, x:Math.round(r.left + r.width * (0.2 + Math.random() * 0.6)), y
                 // ✅ APPLIQUER LE MATCH
                 filePaths = new[] { match.MediaPath };
 
-                if (!string.IsNullOrWhiteSpace(match.Description))
+                // ✅ CHARGER LA DESCRIPTION ICI (au moment du publish)
+                string description = MappingService.GetDescriptionForMedia(
+                    match.MediaPath,
+                    msg => log.AppendText($"[MAPPING] {msg}\r\n")
+                );
+
+                if (!string.IsNullOrWhiteSpace(description))
                 {
-                    caption = match.Description;
+                    caption = description;
+                    log.AppendText($"[SCHEDULE] ✓ Caption loaded from mapping: {description.Substring(0, Math.Min(50, description.Length))}...\r\n");
+                }
+                else
+                {
+                    log.AppendText($"[SCHEDULE] ⚠ No description found in mapping file\r\n");
                 }
 
                 info = $"✓ Match: {DateTime.Today:yyyy-MM-dd} / {match.AccountOrGroup} / Instagram → {Path.GetFileName(match.MediaPath)}";

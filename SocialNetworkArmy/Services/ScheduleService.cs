@@ -159,9 +159,9 @@ namespace SocialNetworkArmy.Services
                 LogToUI($"[Schedule] CSV not found at {csvPath}. Creating template...");
                 Directory.CreateDirectory(Path.GetDirectoryName(csvPath) ?? ".");
 
-                string csvTemplate = @"Date,Plateform,Account/Group,Activity,Path,Post Description
-2025-10-26 14:30,Instagram,alice_account,target,,Example: single account
-2025-10-26 15:00,Instagram,marketing_team,publish,,Example: group (all accounts in group)
+                string csvTemplate = @"Date,Plateform,Account/Group,Activity,Path
+2025-10-26 14:30,Instagram,alice_account,target,C:\path\to\file.jpg
+2025-10-26 15:00,Instagram,marketing_team,publish,C:\path\to\Account 1\Account 1 Photo 1.jpg
 ";
                 File.WriteAllText(csvPath, csvTemplate);
                 LogToUI("[Schedule] ✓ Template created with examples.");
@@ -262,7 +262,7 @@ namespace SocialNetworkArmy.Services
                             string accountOrGroupRaw = parts[2].Trim();
                             string activity = parts[3].Trim().ToLowerInvariant();
                             string mediaPath = parts.Length > 4 ? parts[4].Trim() : "";
-                            string description = parts.Length > 5 ? parts[5].Trim() : "";
+                            // ✅ SUPPRESSION: Description vient maintenant du fichier mapping, pas du CSV
 
                             var valid = new[] { "publish", "reels", "home", "target", "dm", "download", "story", "stop", "close" };
                             if (!valid.Contains(activity))
@@ -295,126 +295,128 @@ namespace SocialNetworkArmy.Services
 
                             foreach (var accountOrGroup in accountsOrGroups)
                             {
+                                // D'abord chercher un compte exact
+                                var singleProfile = profiles.FirstOrDefault(p =>
+                                    p.Name.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase));
 
-                            // D'abord chercher un compte exact
-                            var singleProfile = profiles.FirstOrDefault(p =>
-                                p.Name.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase));
-
-                            if (singleProfile != null)
-                            {
-                                // ✅ C'EST UN COMPTE INDIVIDUEL
-                                var task = new ScheduledTask
+                                if (singleProfile != null)
                                 {
-                                    Date = date,
-                                    Platform = platform,
-                                    Account = accountOrGroup,
-                                    Activity = activity,
-                                    MediaPath = mediaPath,
-                                    Description = description,
-                                    Executed = false
-                                };
-                                newTasks.Add(task);
-                            }
-                            else
-                            {
-                                // ✅ CHERCHER UN GROUPE
-                                var groupProfiles = profiles
-                                    .Where(p => !string.IsNullOrWhiteSpace(p.GroupName) &&
-                                               p.GroupName.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase))
-                                    .ToList();
+                                    // ✅ C'EST UN COMPTE INDIVIDUEL
 
-                                if (!groupProfiles.Any())
-                                {
-                                    LogToUI($"[Schedule] Line {lineNumber} skipped: no account or group found for '{accountOrGroup}'");
-                                    lineNumber++;
-                                    continue;
-                                }
-
-                                LogToUI($"[Schedule] Line {lineNumber}: Expanding group '{accountOrGroup}' → {groupProfiles.Count} accounts");
-
-                                // ✅ DÉTECTER LE PATTERN DU PATH
-                                string baseMediaPath = mediaPath;
-                                string accountPattern = null;
-
-                                if (!string.IsNullOrWhiteSpace(baseMediaPath) && File.Exists(baseMediaPath))
-                                {
-                                    // Chercher un pattern "compte X" dans le path
-                                    var match = System.Text.RegularExpressions.Regex.Match(
-               baseMediaPath,
-               @"(compte|account)\s+(\d+)",
-               System.Text.RegularExpressions.RegexOptions.IgnoreCase
-           );
-
-                                    if (match.Success)
-                                    {
-                                        accountPattern = match.Groups[1].Value; // ex: "compte 1"
-                                        LogToUI($"[Schedule] Detected pattern '{accountPattern}'");
-                                    }
-                                }
-
-                                // Créer une tâche par compte du groupe avec offset automatique
-                                int accountIndex = 0;
-                                var random = new Random();
-
-                                foreach (var profile in groupProfiles.OrderBy(p => p.Name))
-                                {
-                                    // Ajouter un offset de 2-5 minutes pour chaque compte après le premier
-                                    var taskDate = accountIndex == 0
-                                        ? date
-                                        : date.AddMinutes(accountIndex * random.Next(2, 6));
-
-                                    // ✅ CALCULER LE PATH SPÉCIFIQUE AU COMPTE
-                                    string accountMediaPath = mediaPath;
-
-                                    if (accountIndex > 0 && !string.IsNullOrWhiteSpace(accountPattern))
-                                    {
-                                        string targetPattern = $"compte {accountIndex + 1}";
-
-                                        // Remplacer TOUTES les occurrences de "compte X" par "compte Y"
-                                        // Cela gère à la fois le dossier ET le nom de fichier
-                                        // Ex: Destination\LunaChica\compte 1\compte 1 photo7.jpg
-                                        //  → Destination\LunaChica\compte 2\compte 2 photo7.jpg
-                                        accountMediaPath = System.Text.RegularExpressions.Regex.Replace(
-                                            baseMediaPath,
-                                            System.Text.RegularExpressions.Regex.Escape(accountPattern),
-                                            targetPattern,
-                                            System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                                        );
-
-                                        // Vérifier que le fichier existe
-                                        if (!File.Exists(accountMediaPath))
-                                        {
-                                            LogToUI($"[Schedule]   ⚠ File not found for {profile.Name}: {accountMediaPath}");
-                                            LogToUI($"[Schedule]   → Using original path: {baseMediaPath}");
-                                            accountMediaPath = baseMediaPath;
-                                        }
-                                        else
-                                        {
-                                            LogToUI($"[Schedule]   ✓ Mapped to: {Path.GetFileName(accountMediaPath)}");
-                                        }
-                                    }
+                                    // ✅ NOUVEAU: Lire la description depuis le fichier mapping
+                                   
 
                                     var task = new ScheduledTask
                                     {
-                                        Date = taskDate,
+                                        Date = date,
                                         Platform = platform,
-                                        Account = profile.Name,
+                                        Account = accountOrGroup,
                                         Activity = activity,
-                                        MediaPath = accountMediaPath,
-                                        Description = description,
+                                        MediaPath = mediaPath,
+                                        Description = null, // ✅ Description du mapping
                                         Executed = false
                                     };
                                     newTasks.Add(task);
+                                }
+                                else
+                                {
+                                    // ✅ CHERCHER UN GROUPE
+                                    var groupProfiles = profiles
+                                        .Where(p => !string.IsNullOrWhiteSpace(p.GroupName) &&
+                                                   p.GroupName.Equals(accountOrGroup, StringComparison.OrdinalIgnoreCase))
+                                        .ToList();
 
-                                    if (accountIndex > 0)
+                                    if (!groupProfiles.Any())
                                     {
-                                        LogToUI($"[Schedule]   → {profile.Name} scheduled at {taskDate:HH:mm} (+{(taskDate - date).TotalMinutes:F0}min)");
+                                        LogToUI($"[Schedule] Line {lineNumber} skipped: no account or group found for '{accountOrGroup}'");
+                                        continue;
                                     }
 
-                                    accountIndex++;
+                                    LogToUI($"[Schedule] Line {lineNumber}: Expanding group '{accountOrGroup}' → {groupProfiles.Count} accounts");
+
+                                    // ✅ DÉTECTER LE PATTERN DU PATH
+                                    string baseMediaPath = mediaPath;
+                                    string accountPattern = null;
+
+                                    if (!string.IsNullOrWhiteSpace(baseMediaPath) && File.Exists(baseMediaPath))
+                                    {
+                                        // Chercher un pattern "compte X" dans le path
+                                        var match = System.Text.RegularExpressions.Regex.Match(
+                                            baseMediaPath,
+                                            @"(compte|account)\s+(\d+)",
+                                            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                                        );
+
+                                        if (match.Success)
+                                        {
+                                            accountPattern = match.Groups[0].Value; // ex: "compte 1"
+                                            LogToUI($"[Schedule] Detected pattern '{accountPattern}'");
+                                        }
+                                    }
+
+                                    // Créer une tâche par compte du groupe avec offset automatique
+                                    int accountIndex = 0;
+                                    var random = new Random();
+
+                                    foreach (var accountProfile in groupProfiles.OrderBy(p => p.Name))
+                                    {
+                                        // Ajouter un offset de 2-5 minutes pour chaque compte après le premier
+                                        var taskDate = accountIndex == 0
+                                            ? date
+                                            : date.AddMinutes(accountIndex * random.Next(2, 6));
+
+                                        // ✅ CALCULER LE PATH SPÉCIFIQUE AU COMPTE
+                                        string accountMediaPath = mediaPath;
+
+                                        if (accountIndex > 0 && !string.IsNullOrWhiteSpace(accountPattern))
+                                        {
+                                            string targetPattern = $"compte {accountIndex + 1}";
+
+                                            // Remplacer TOUTES les occurrences de "compte X" par "compte Y"
+                                            accountMediaPath = System.Text.RegularExpressions.Regex.Replace(
+                                                baseMediaPath,
+                                                System.Text.RegularExpressions.Regex.Escape(accountPattern),
+                                                targetPattern,
+                                                System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                                            );
+
+                                            // Vérifier que le fichier existe
+                                            if (!File.Exists(accountMediaPath))
+                                            {
+                                                LogToUI($"[Schedule]   ⚠ File not found for {accountProfile.Name}: {accountMediaPath}");
+                                                LogToUI($"[Schedule]   → Using original path: {baseMediaPath}");
+                                                accountMediaPath = baseMediaPath;
+                                            }
+                                            else
+                                            {
+                                                LogToUI($"[Schedule]   ✓ Mapped to: {Path.GetFileName(accountMediaPath)}");
+                                            }
+                                        }
+
+                                      
+                                        
+                                      
+                                        var task = new ScheduledTask
+                                        {
+                                            Date = taskDate,
+                                            Platform = platform,
+                                            Account = accountProfile.Name,
+                                            Activity = activity,
+                                            MediaPath = accountMediaPath,
+                                            Description = null, // ✅ Description du mapping
+                                            Executed = false
+                                        };
+                                        newTasks.Add(task);
+
+                                        if (accountIndex > 0)
+                                        {
+                                            LogToUI($"[Schedule]   → {accountProfile.Name} scheduled at {taskDate:HH:mm} (+{(taskDate - date).TotalMinutes:F0}min)");
+                                        }
+
+                                        accountIndex++;
+                                    }
                                 }
                             }
-                            } // ✅ FIN DE LA BOUCLE foreach accountOrGroup
                         }
                         catch (Exception exLine)
                         {
@@ -458,7 +460,6 @@ namespace SocialNetworkArmy.Services
                 }
             }
         }
-
         // ✅ NOUVELLE MÉTHODE: Appliquer les offsets automatiques
         private void ApplyGroupOffsets(List<ScheduledTask> tasks)
         {
@@ -1107,10 +1108,10 @@ namespace SocialNetworkArmy.Services
                         var profileField = ibf.GetType().GetField("profile",
                             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-                        if (profileField?.GetValue(ibf) is Profile profile)
+                        if (profileField?.GetValue(ibf) is Profile foundProfile)
                         {
-                            if (profile.Name.Equals(account, StringComparison.OrdinalIgnoreCase) &&
-                                profile.Platform.Equals(platform, StringComparison.OrdinalIgnoreCase))
+                            if (foundProfile.Name.Equals(account, StringComparison.OrdinalIgnoreCase) &&
+                                foundProfile.Platform.Equals(platform, StringComparison.OrdinalIgnoreCase))
                             {
                                 manualForm = openForm;
                                 LogToUI($"[Schedule] ✓ Found manually opened form for {key}, reusing it!");
@@ -1129,27 +1130,9 @@ namespace SocialNetworkArmy.Services
                         LogToUI($"[Schedule] ✓ Registered manual form '{key}' (total forms: {_activeForms.Count})");
                     }
 
-                    // S'assurer que le FormClosed handler est attaché
-                    bool alreadyAttached = false;
-                    foreach (Delegate d in manualForm.FormClosed.GetInvocationList())
-                    {
-                        if (d.Target == this) alreadyAttached = true;
-                    }
-
-                    if (!alreadyAttached)
-                    {
-                        manualForm.FormClosed += (s, e) =>
-                        {
-                            lock (_lockObj)
-                            {
-                                if (_activeForms.ContainsKey(key))
-                                {
-                                    _activeForms.Remove(key);
-                                    LogToUI($"[Schedule] Bot window closed: {key}");
-                                }
-                            }
-                        };
-                    }
+                    // ✅ CORRECTION: Détacher puis rattacher le handler
+                    manualForm.FormClosed -= OnManualFormClosed;
+                    manualForm.FormClosed += OnManualFormClosed;
 
                     RunOnUiThread(() =>
                     {
@@ -1223,7 +1206,22 @@ namespace SocialNetworkArmy.Services
 
             return await tcs.Task;
         }
-
+        // ✅ AJOUT: Handler pour les forms fermés manuellement
+        private void OnManualFormClosed(object sender, FormClosedEventArgs e)
+        {
+            if (sender is Form form)
+            {
+                lock (_lockObj)
+                {
+                    var keyToRemove = _activeForms.FirstOrDefault(kvp => kvp.Value == form).Key;
+                    if (keyToRemove != null)
+                    {
+                        _activeForms.Remove(keyToRemove);
+                        LogToUI($"[Schedule] Bot window closed: {keyToRemove}");
+                    }
+                }
+            }
+        }
         private async Task<Form> GetOrCreateStoryFormAsync(string platform, string account)
         {
             var key = $"{platform}_{account}_story".ToLowerInvariant();

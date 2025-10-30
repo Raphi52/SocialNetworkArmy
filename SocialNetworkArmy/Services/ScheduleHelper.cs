@@ -127,7 +127,7 @@ namespace SocialNetworkArmy.Services
 
             try
             {
-                // ✅ FIX: Lecture avec encodage UTF-8 pour les accents
+                // ✅ Lecture avec encodage UTF-8
                 var lines = File.ReadAllLines(csvPath, System.Text.Encoding.UTF8);
                 Log($"");
                 Log($"[CSV] ✓ Read {lines.Length} line(s) from file (UTF-8 encoding)");
@@ -138,9 +138,15 @@ namespace SocialNetworkArmy.Services
                     return null;
                 }
 
+                // ✅ AJOUT: Détection automatique du séparateur
+                char separator = DetectCSVSeparator(lines[0]);
+                Log($"[CSV] Detected separator: '{separator}'");
+
                 Log($"");
                 Log($"[HEADER] Parsing header row...");
-                var headers = SplitCsvLine(lines[0]);
+
+                // ✅ Utiliser le séparateur détecté au lieu de SplitCsvLine (qui utilise ',')
+                var headers = SplitCSVLine(lines[0], separator);
                 Log($"[HEADER] Detected {headers.Length} column(s):");
                 for (int h = 0; h < headers.Length; h++)
                 {
@@ -152,7 +158,7 @@ namespace SocialNetworkArmy.Services
                 int iAccount = IndexOfHeader(headers, "Account/Group", "Account", "Group", "Compte");
                 int iActivity = IndexOfHeader(headers, "Activity", "Activité");
                 int iPath = IndexOfHeader(headers, "Path", "Media", "MediaPath");
-                int iDesc = IndexOfHeader(headers, "Post Description", "Description", "Caption");
+                
 
                 Log($"");
                 Log($"[HEADER] Column indices:");
@@ -161,7 +167,7 @@ namespace SocialNetworkArmy.Services
                 Log($"[HEADER]   Account/Group: {iAccount}");
                 Log($"[HEADER]   Activity: {iActivity}");
                 Log($"[HEADER]   Path: {iPath}");
-                Log($"[HEADER]   Description: {iDesc}");
+               
 
                 if (iDate < 0 || iPlatform < 0 || iAccount < 0 || iActivity < 0 || iPath < 0)
                 {
@@ -191,7 +197,7 @@ namespace SocialNetworkArmy.Services
                     Log($"[LINE {i}] ╚═══════════════════════════════════════════════════════╝");
                     Log($"[LINE {i}] Raw: {line}");
 
-                    var cols = SplitCsvLine(line);
+                    var cols = SplitCSVLine(line, separator);
                     Log($"[LINE {i}] Parsed into {cols.Length} column(s)");
 
                     int maxRequiredIndex = Math.Max(Math.Max(iDate, iPlatform), Math.Max(iAccount, iActivity));
@@ -295,15 +301,17 @@ namespace SocialNetworkArmy.Services
                         Log($"[LINE {i}] ✓ File exists!");
                         Log($"[LINE {i}] ★★★ MATCH FOUND (DIRECT) ★★★");
 
+                        // ✅ Lire la description depuis le fichier mapping
                         candidateMatches.Add(new ScheduleMatch
                         {
                             MediaPath = mediaPath,
-                            Description = iDesc < cols.Length ? cols[iDesc].Trim() : "",
+                            Description = null, // ✅ Sera chargé au moment du publish
                             Activity = csvActivity,
                             IsGroup = false,
                             AccountOrGroup = accountOrGroup,
                             ScheduledTime = parsedDateTime
                         });
+
                         continue;
                     }
 
@@ -360,11 +368,12 @@ namespace SocialNetworkArmy.Services
 
                             Log($"[LINE {i}] ✓ File exists!");
                             Log($"[LINE {i}] ★★★ MATCH FOUND (GROUP) ★★★");
-
+                            string description = MappingService.GetDescriptionForMedia(accountMediaPath,
+                               msg => log?.Invoke((Action)(() => log.AppendText(msg + "\r\n"))));
                             candidateMatches.Add(new ScheduleMatch
                             {
                                 MediaPath = accountMediaPath,
-                                Description = iDesc < cols.Length ? cols[iDesc].Trim() : "",
+                                Description = null, // ✅ Du mapping
                                 Activity = csvActivity,
                                 IsGroup = true,
                                 AccountOrGroup = accountOrGroup,
@@ -449,7 +458,42 @@ namespace SocialNetworkArmy.Services
                 return null;
             }
         }
+        private static int IndexOfHeader(string[] headers, params string[] possibleNames)
+{
+    for (int i = 0; i < headers.Length; i++)
+    {
+        foreach (var name in possibleNames)
+        {
+            if (headers[i].Equals(name, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+    }
+    return -1;
+}
+        // ✅ AJOUTER CETTE MÉTHODE
+        private static char DetectCSVSeparator(string firstLine)
+        {
+            // Compter les virgules et points-virgules hors guillemets
+            int commas = 0, semicolons = 0;
+            bool inQuotes = false;
 
+            foreach (char c in firstLine)
+            {
+                if (c == '"') inQuotes = !inQuotes;
+                else if (!inQuotes)
+                {
+                    if (c == ',') commas++;
+                    else if (c == ';') semicolons++;
+                }
+            }
+
+            // Retourner le séparateur le plus fréquent
+            return semicolons > commas ? ';' : ',';
+        }
+
+        
         private static string GetAccountSpecificPath(
             string basePath,
             List<Profile> groupProfiles,
@@ -509,7 +553,8 @@ namespace SocialNetworkArmy.Services
             }
         }
 
-        private static string[] SplitCsvLine(string line)
+        // ✅ MÉTHODE MODERNE (avec paramètre separator)
+        private static string[] SplitCSVLine(string line, char separator = ',')
         {
             var result = new List<string>();
             var current = "";
@@ -521,7 +566,7 @@ namespace SocialNetworkArmy.Services
                 {
                     inQuotes = !inQuotes;
                 }
-                else if (c == ',' && !inQuotes)
+                else if (c == separator && !inQuotes)
                 {
                     result.Add(current);
                     current = "";
@@ -535,20 +580,6 @@ namespace SocialNetworkArmy.Services
             return result.ToArray();
         }
 
-        private static int IndexOfHeader(string[] headers, params string[] names)
-        {
-            if (headers == null) return -1;
-
-            for (int i = 0; i < headers.Length; i++)
-            {
-                var h = (headers[i] ?? "").Trim();
-                foreach (var name in names)
-                {
-                    if (h.Equals(name, StringComparison.OrdinalIgnoreCase))
-                        return i;
-                }
-            }
-            return -1;
-        }
+       
     }
 }

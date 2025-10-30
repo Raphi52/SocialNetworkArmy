@@ -1670,13 +1670,121 @@ namespace SocialNetworkArmy.Services
                         await CloseReelModalAsync(lang, token);
 
                         logTextBox.AppendText($"[TARGET] Terminé pour {currentTarget}.\r\n");
-                       
-                        
 
                         await RandomHumanPauseAsync(token, 5000, 15000, 0.1, 30000, 120000);
-                    }
 
-                    logTextBox.AppendText("[FLOW] Tous les targets traités.\r\n");
+                        // ✅ VÉRIFIER S'IL RESTE DES TARGETS EN FIN DE BOUCLE
+                        if (pendingTargets.IndexOf(currentTarget) == pendingTargets.Count - 1)
+                        {
+                            logTextBox.AppendText("[FLOW] ========================================\r\n");
+                            logTextBox.AppendText("[FLOW] Targets.txt completed. Checking for more...\r\n");
+
+                            // ✅ RECHARGER Targets.txt (au cas où de nouveaux auraient été ajoutés)
+                            var refreshedTargets = File.ReadAllLines(targetsPath)
+                                                      .Where(line => !string.IsNullOrWhiteSpace(line))
+                                                      .Select(line => line.Trim())
+                                                      .ToList();
+
+                            var refreshedPending = refreshedTargets.Where(t => !doneTargets.Contains(t)).ToList();
+
+                            if (refreshedPending.Any())
+                            {
+                                logTextBox.AppendText($"[FLOW] ✓ Found {refreshedPending.Count} new target(s) in {Path.GetFileName(targetsPath)}\r\n");
+
+                                // ✅ APPLIQUER LE GROUPE SPLIT SI NÉCESSAIRE
+                                if (groupProfiles.Count > 1)
+                                {
+                                    var groupLock = ScheduleService.GetGroupLock(groupName);
+                                    await groupLock.WaitAsync(token);
+
+                                    try
+                                    {
+                                        int profileIndex = groupProfiles.FindIndex(p => p.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+
+                                        if (profileIndex != -1)
+                                        {
+                                            var myRefreshedTargets = refreshedPending
+                                                .Where((t, index) => index % groupProfiles.Count == profileIndex)
+                                                .ToList();
+
+                                            logTextBox.AppendText($"[GROUP SPLIT] Assigned {myRefreshedTargets.Count} new targets (interleaved)\r\n");
+                                            refreshedPending = myRefreshedTargets;
+                                        }
+                                    }
+                                    finally
+                                    {
+                                        groupLock.Release();
+                                    }
+                                }
+
+                                // ✅ AJOUTER À LA FIN DE LA LISTE ACTUELLE
+                                pendingTargets.AddRange(refreshedPending);
+                                logTextBox.AppendText($"[FLOW] ✓ Continuing with new targets...\r\n");
+                                logTextBox.AppendText("[FLOW] ========================================\r\n");
+                                continue; // Ne pas chercher dans FutureTargets
+                            }
+
+                            // ✅ SI RIEN DANS TARGETS.TXT, CHERCHER DANS FUTURETARGETS.TXT
+                            var futureTargetsPath = Path.Combine(dataDir, "FutureTargets.txt");
+
+                            if (File.Exists(futureTargetsPath))
+                            {
+                                logTextBox.AppendText($"[FLOW] No new targets in {Path.GetFileName(targetsPath)}\r\n");
+                                logTextBox.AppendText($"[FLOW] Checking FutureTargets.txt...\r\n");
+
+                                var futureTargets = File.ReadAllLines(futureTargetsPath)
+                                                        .Where(line => !string.IsNullOrWhiteSpace(line))
+                                                        .Select(line => line.Trim())
+                                                        .ToList();
+
+                                var futurePending = futureTargets.Where(t => !doneTargets.Contains(t)).ToList();
+
+                                if (futurePending.Any())
+                                {
+                                    logTextBox.AppendText($"[FLOW] ✓ Found {futurePending.Count} target(s) in FutureTargets.txt\r\n");
+
+                                    // ✅ APPLIQUER LE GROUPE SPLIT
+                                    if (groupProfiles.Count > 1)
+                                    {
+                                        var groupLock = ScheduleService.GetGroupLock(groupName);
+                                        await groupLock.WaitAsync(token);
+
+                                        try
+                                        {
+                                            int profileIndex = groupProfiles.FindIndex(p => p.Name.Equals(profile.Name, StringComparison.OrdinalIgnoreCase));
+
+                                            if (profileIndex != -1)
+                                            {
+                                                var myFutureTargets = futurePending
+                                                    .Where((t, index) => index % groupProfiles.Count == profileIndex)
+                                                    .ToList();
+
+                                                logTextBox.AppendText($"[GROUP SPLIT] Assigned {myFutureTargets.Count} future targets (interleaved)\r\n");
+                                                futurePending = myFutureTargets;
+                                            }
+                                        }
+                                        finally
+                                        {
+                                            groupLock.Release();
+                                        }
+                                    }
+
+                                    // ✅ AJOUTER À LA FIN DE LA LISTE ACTUELLE
+                                    pendingTargets.AddRange(futurePending);
+                                    logTextBox.AppendText($"[FLOW] ✓ Continuing with FutureTargets...\r\n");
+                                    logTextBox.AppendText("[FLOW] ========================================\r\n");
+                                }
+                                else
+                                {
+                                    logTextBox.AppendText($"[FLOW] FutureTargets.txt is empty or all done\r\n");
+                                }
+                            }
+                            else
+                            {
+                                logTextBox.AppendText($"[FLOW] No FutureTargets.txt found\r\n");
+                            }
+                        }
+                    }
                 }
                 catch (OperationCanceledException)
                 {

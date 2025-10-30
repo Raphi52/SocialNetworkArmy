@@ -34,7 +34,10 @@ namespace SocialNetworkArmy.Forms
         private ToolTip modernToolTip;
         private Point hoveredCell = new Point(-1, -1);
         private Font Sergoe = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-        
+
+        // ✅ CORRECTION: Déclarés comme champs de classe (pas locaux)
+        private Button openPhoneButton;
+        private Button launchButton;
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
@@ -120,7 +123,7 @@ namespace SocialNetworkArmy.Forms
 
             profilesGridView.DefaultCellStyle = new DataGridViewCellStyle
             {
-                BackColor = Color.FromArgb(220, 24, 24, 24),
+                BackColor = Color.FromArgb(20, 20, 20),
                 ForeColor = Color.White,
                 SelectionBackColor = Color.FromArgb(33, 150, 243),
                 SelectionForeColor = Color.White,
@@ -214,7 +217,7 @@ namespace SocialNetworkArmy.Forms
                 Font = Sergoe,
                 FlatStyle = FlatStyle.Flat
             };
-            platformComboBox.Items.AddRange(new object[] { "Instagram", "TikTouk" });
+            platformComboBox.Items.AddRange(new object[] { "Instagram", "TikTok" });
             modernToolTip.SetToolTip(platformComboBox, "Select platform");
 
             // Profile Name TextBox
@@ -354,7 +357,8 @@ namespace SocialNetworkArmy.Forms
             int buttonY = 262;
             int buttonSpacing = 165;
 
-            Button launchButton = new Button
+            // ✅ CORRECTION: Initialiser le champ de classe (pas une variable locale)
+            launchButton = new Button
             {
                 Text = "▶️ Open Profile",
                 Location = new Point(12, buttonY),
@@ -369,7 +373,8 @@ namespace SocialNetworkArmy.Forms
             launchButton.Click += LaunchButton_Click;
             modernToolTip.SetToolTip(launchButton, "Launch selected profile bot");
 
-            Button openPhone = new Button
+            // ✅ CORRECTION: Initialiser le champ de classe (pas une variable locale)
+            openPhoneButton = new Button
             {
                 Text = "📱 Open Phone",
                 Location = new Point(12 + buttonSpacing, buttonY),
@@ -380,9 +385,9 @@ namespace SocialNetworkArmy.Forms
                 FlatStyle = FlatStyle.Flat,
                 Cursor = Cursors.Hand
             };
-            openPhone.FlatAppearance.BorderSize = 0;
-            openPhone.Click += StoryButton_Click;
-            modernToolTip.SetToolTip(openPhone, "Open story poster for mobile");
+            openPhoneButton.FlatAppearance.BorderSize = 0;
+            openPhoneButton.Click += StoryButton_Click;
+            modernToolTip.SetToolTip(openPhoneButton, "Open story poster for mobile");
 
             scheduleButton = new Button
             {
@@ -451,7 +456,7 @@ namespace SocialNetworkArmy.Forms
             this.Controls.Add(openDataFolderButton); // ✅ CHANGEMENT: Nouveau bouton
             this.Controls.Add(launchButton);
             this.Controls.Add(scheduleButton);
-            this.Controls.Add(openPhone);
+            this.Controls.Add(openPhoneButton); // ✅ CORRECTION: Nom mis à jour
             this.Controls.Add(statusLabel);
             this.Controls.Add(logPanel);
             logPanel.Controls.Add(scheduleLogTextBox);
@@ -833,11 +838,9 @@ namespace SocialNetworkArmy.Forms
                 return;
             }
 
-            if (!IsValidProfileName(name))
-            {
-                MessageBox.Show("Invalid name! Use letters, numbers, dashes or underscores only (3-20 characters).");
+            // ✅ UTILISER LA VALIDATION CENTRALISÉE
+            if (!ValidateProfileAndGroupNames(name, groupName))
                 return;
-            }
 
             string platform = platformComboBox.SelectedItem.ToString();
             string proxy = (proxyTextBox.Text == "Proxy (optional)" || string.IsNullOrWhiteSpace(proxyTextBox.Text))
@@ -920,35 +923,6 @@ namespace SocialNetworkArmy.Forms
             return regex.IsMatch(proxy);
         }
 
-        private void LaunchButton_Click(object sender, EventArgs e)
-        {
-            if (profilesGridView.SelectedRows.Count == 0)
-            {
-                MessageBox.Show("Select a profile!");
-                return;
-            }
-
-            string name = profilesGridView.SelectedRows[0].Cells["Name"].Value.ToString();
-            var selectedProfile = profiles.FirstOrDefault(p => p.Name == name);
-            if (selectedProfile != null)
-            {
-                statusLabel.Text = $"🚀 Launching '{name}'...";
-
-                if (selectedProfile.Platform == "Instagram")
-                {
-                    var botForm = new InstagramBotForm(selectedProfile);
-                    botForm.Show();
-                    statusLabel.Text = $"✅ Bot launched for '{name}'!";
-                }
-                else if (selectedProfile.Platform == "TikTok")
-                {
-                    var botForm = new TiktokBotForm(selectedProfile);
-                    botForm.Show();
-                    statusLabel.Text = $"✅ Bot launched for '{name}'!";
-                }
-            }
-        }
-
         private void ProfilesGridView_CellMouseEnter(object sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex < 0) return;
@@ -1015,41 +989,6 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
-        private void StoryButton_Click(object sender, EventArgs e)
-        {
-            if (profilesGridView.SelectedRows.Count == 0)
-            {
-                MessageBox.Show("Select a profile first!");
-                return;
-            }
-
-            string name = profilesGridView.SelectedRows[0].Cells["Name"].Value.ToString();
-            var selectedProfile = profiles.FirstOrDefault(p => p.Name == name);
-
-            if (selectedProfile != null)
-            {
-                statusLabel.Text = $"📱 Opening Story Poster for '{name}'...";
-
-                if (selectedProfile.Platform == "Instagram")
-                {
-                    var storyForm = new StoryPosterForm(selectedProfile);
-                    storyForm.Show();
-                    statusLabel.Text = $"✅ Story Poster opened for '{name}'!";
-                }
-                else if (selectedProfile.Platform == "TikTok")
-                {
-                    MessageBox.Show("TikTok story posting coming soon!");
-                }
-                else
-                {
-                    MessageBox.Show("Platform not supported for stories.");
-                }
-            }
-        }
-
-        // ✅ SUPPRIMÉ: LoadDataFiles() - plus besoin avec le nouveau bouton
-
-        // ✅ Ouvrir le dossier Data directement dans l'explorateur
         private void OpenDataFolderButton_Click(object sender, EventArgs e)
         {
             try
@@ -1076,12 +1015,125 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
+        private async void LaunchButton_Click(object sender, EventArgs e)
+        {
+            if (profilesGridView.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Select a profile!");
+                return;
+            }
+
+            // ✅ Désactiver les boutons pendant 1 seconde
+            launchButton.Enabled = false;
+            openPhoneButton.Enabled = false;
+
+            string name = profilesGridView.SelectedRows[0].Cells["Name"].Value.ToString();
+            var selectedProfile = profiles.FirstOrDefault(p => p.Name == name);
+
+            if (selectedProfile != null)
+            {
+                statusLabel.Text = $"🚀 Launching '{name}'...";
+
+                if (selectedProfile.Platform == "Instagram")
+                {
+                    FormManager.OpenInstagramBotForm(selectedProfile);
+                    statusLabel.Text = $"✅ Bot launched for '{name}'!";
+                }
+                else if (selectedProfile.Platform == "TikTok")
+                {
+                    FormManager.OpenTikTokBotForm(selectedProfile);
+                    statusLabel.Text = $"✅ Bot launched for '{name}'!";
+                }
+            }
+
+            // ✅ Réactiver après 1 seconde
+            await Task.Delay(1000);
+            launchButton.Enabled = true;
+            openPhoneButton.Enabled = true;
+        }
+
+        private async void StoryButton_Click(object sender, EventArgs e)
+        {
+            if (profilesGridView.SelectedRows.Count == 0)
+            {
+                MessageBox.Show("Select a profile first!");
+                return;
+            }
+
+            // ✅ Désactiver les boutons pendant 1 seconde
+            launchButton.Enabled = false;
+            openPhoneButton.Enabled = false;
+
+            string name = profilesGridView.SelectedRows[0].Cells["Name"].Value.ToString();
+            var selectedProfile = profiles.FirstOrDefault(p => p.Name == name);
+
+            if (selectedProfile != null)
+            {
+                statusLabel.Text = $"📱 Opening Story Poster for '{name}'...";
+
+                if (selectedProfile.Platform == "Instagram")
+                {
+                    FormManager.OpenStoryPosterForm(selectedProfile);
+                    statusLabel.Text = $"✅ Story Poster opened for '{name}'!";
+                }
+                else if (selectedProfile.Platform == "TikTok")
+                {
+                    MessageBox.Show("TikTok story posting coming soon!");
+                }
+                else
+                {
+                    MessageBox.Show("Platform not supported for stories.");
+                }
+            }
+
+            // ✅ Réactiver après 1 seconde
+            await Task.Delay(1000);
+            launchButton.Enabled = true;
+            openPhoneButton.Enabled = true;
+        }
+
+        private bool ValidateProfileAndGroupNames(string profileName, string groupName, Profile existingProfile = null)
+        {
+            // Vérifier que le nom de profil est valide
+            if (!IsValidProfileName(profileName))
+            {
+                MessageBox.Show("Invalid name! Use letters, numbers, dashes or underscores only (3-20 characters).");
+                return false;
+            }
+
+            // Vérifier que le nom n'existe pas déjà (sauf si on édite le profil actuel)
+            if (profiles.Any(p => p.Name.Equals(profileName, StringComparison.OrdinalIgnoreCase) &&
+                                  (existingProfile == null || p.Name != existingProfile.Name)))
+            {
+                MessageBox.Show($"Profile name '{profileName}' already exists!");
+                return false;
+            }
+
+            // Vérifier que le nom du profil n'est pas utilisé comme groupe
+            if (profiles.Any(p => !string.IsNullOrWhiteSpace(p.GroupName) &&
+                                  p.GroupName.Equals(profileName, StringComparison.OrdinalIgnoreCase)))
+            {
+                MessageBox.Show($"Cannot use '{profileName}' as profile name: it's already used as a group name!");
+                return false;
+            }
+
+            // Si un groupe est spécifié, vérifier qu'il n'est pas un nom de profil existant
+            if (!string.IsNullOrWhiteSpace(groupName))
+            {
+                if (profiles.Any(p => p.Name.Equals(groupName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    MessageBox.Show($"Cannot use '{groupName}' as group name: a profile with this name already exists!");
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                Sergoe?.Dispose();
-                Sergoe?.Dispose();
                 Sergoe?.Dispose();
                 modernToolTip?.Dispose();
             }

@@ -38,5 +38,75 @@
     "cookies": null,
     "storageState": "",
     "groupName": "aze"
+  },
+  {
+    "name": "aez",
+    "platform": "Instagram",
+    "proxy": "",
+    "userDataFolderId": "a907b9cf-d81c-48dc-a94a-fdd53f67b4cd",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36\",\"Timezone\":\"America/Chicago\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1440x900\",\"Viewport\":\"1440x796\",\"WebGLVendor\":\"Apple\",\"WebGLRenderer\":\"Apple M1\",\"AudioContext\":\"noise_92946\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\",\"Georgia\",\"Calibri\",\"Segoe UI\"],\"HardwareConcurrency\":7,\"Platform\":\"MacIntel\",\"Vendor\":\"Google Inc.\",\"ScreenDepth\":32,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": "",
+    "groupName": ""
+  },
+  {
+    "name": "rezaz",
+    "platform": "Instagram",
+    "proxy": "",
+    "userDataFolderId": "5add1110-ede1-41a5-85d9-fb1539008b35",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36\",\"Timezone\":\"Australia/Sydney\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"3440x1440\",\"Viewport\":\"3440x1369\",\"WebGLVendor\":\"Google Inc.\",\"WebGLRenderer\":\"ANGLE (Intel, Intel(R) UHD Graphics 630, D3D11)\",\"AudioContext\":\"noise_17580\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\",\"Georgia\",\"Calibri\",\"Segoe UI\"],\"HardwareConcurrency\":10,\"Platform\":\"MacIntel\",\"Vendor\":\"Apple Computer, Inc.\",\"ScreenDepth\":32,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": "",
+    "groupName": ""
+  },
+  {
+    "name": "azeaze",
+    "platform": "Instagram",
+    "proxy": "",
+    "userDataFolderId": "9142c7dc-924d-4c89-9281-cd2d65df040c",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36\",\"Timezone\":\"America/Toronto\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1440x900\",\"Viewport\":\"1440x816\",\"WebGLVendor\":\"NVIDIA Corporation\",\"WebGLRenderer\":\"NVIDIA GeForce GTX 1660\",\"AudioContext\":\"noise_79492\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\",\"Georgia\",\"Calibri\",\"Segoe UI\"],\"HardwareConcurrency\":8,\"Platform\":\"Win32\",\"Vendor\":\"Google Inc.\",\"ScreenDepth\":32,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": "",
+    "groupName": ""
+  },
+  {
+    "name": "zeazeaz",
+    "platform": "Instagram",
+    "proxy": "",
+    "userDataFolderId": "2fed9b95-24bf-46ab-98d2-f8f3b7757161",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\",\"Timezone\":\"America/Los_Angeles\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"2560x1080\",\"Viewport\":\"2560x979\",\"WebGLVendor\":\"Apple\",\"WebGLRenderer\":\"Apple M2\",\"AudioContext\":\"noise_59717\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\",\"Georgia\",\"Calibri\",\"Segoe UI\"],\"HardwareConcurrency\":12,\"Platform\":\"Win32\",\"Vendor\":\"Apple Computer, Inc.\",\"ScreenDepth\":24,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": "",
+    "groupName": ""
+  },
+  {
+    "name": "treter",
+    "platform": "Instagram",
+    "proxy": "",
+    "userDataFolderId": "e24fee0a-c6fb-4a67-a7ca-7149b1526ee8",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\",\"Timezone\":\"Europe/Berlin\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1920x1080\",\"Viewport\":\"1920x1004\",\"WebGLVendor\":\"NVIDIA Corporation\",\"WebGLRenderer\":\"NVIDIA GeForce RTX 4070\",\"AudioContext\":\"noise_98190\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\",\"Georgia\",\"Calibri\",\"Segoe UI\"],\"HardwareConcurrency\":13,\"Platform\":\"MacIntel\",\"Vendor\":\"Google Inc.\",\"ScreenDepth\":24,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": "",
+    "groupName": ""
+  },
+  {
+    "name": "retret",
+    "platform": "Instagram",
+    "proxy": "",
+    "userDataFolderId": "8a0cc41f-ec18-4f4d-8987-bb2c94448f51",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36\",\"Timezone\":\"Europe/Rome\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1366x768\",\"Viewport\":\"1366x687\",\"WebGLVendor\":\"Apple\",\"WebGLRenderer\":\"Apple M2\",\"AudioContext\":\"noise_66840\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\",\"Georgia\",\"Calibri\",\"Segoe UI\"],\"HardwareConcurrency\":8,\"Platform\":\"MacIntel\",\"Vendor\":\"Google Inc.\",\"ScreenDepth\":24,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": "",
+    "groupName": ""
+  },
+  {
+    "name": "erterter",
+    "platform": "Instagram",
+    "proxy": "",
+    "userDataFolderId": "92b6b99b-e406-4f67-b455-ffff66d744f2",
+    "fingerprint": "{\"UserAgent\":\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36\",\"Timezone\":\"Europe/Paris\",\"Languages\":[\"en-US\",\"en\"],\"ScreenResolution\":\"1366x768\",\"Viewport\":\"1366x669\",\"WebGLVendor\":\"Apple\",\"WebGLRenderer\":\"Apple M1\",\"AudioContext\":\"noise_99067\",\"Fonts\":[\"Arial\",\"Times New Roman\",\"Helvetica\",\"Courier New\",\"Verdana\",\"Georgia\",\"Calibri\",\"Segoe UI\"],\"HardwareConcurrency\":14,\"Platform\":\"MacIntel\",\"Vendor\":\"Apple Computer, Inc.\",\"ScreenDepth\":24,\"MaxTouchPoints\":0,\"Plugins\":[{\"name\":\"Chrome PDF Plugin\",\"filename\":\"internal-pdf-viewer\",\"description\":\"Portable Document Format\"},{\"name\":\"Chrome PDF Viewer\",\"filename\":\"mhjfbmdgcfjbbpaeojofohoefgiehjai\",\"description\":\"PDF Viewer\"},{\"name\":\"Native Client\",\"filename\":\"internal-nacl-plugin\",\"description\":\"Native Client Executable\"}]}",
+    "cookies": null,
+    "storageState": "",
+    "groupName": ""
   }
 ]

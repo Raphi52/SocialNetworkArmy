@@ -45,6 +45,257 @@ namespace SocialNetworkArmy.Services
             return s.Equals("true", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Get humanized watch time based on content quality and type
+        /// Consistent with ScrollReelsService
+        /// </summary>
+        private int GetWatchTime(Random rand, bool isPerfectMatch, bool isReel)
+        {
+            if (isPerfectMatch)
+            {
+                if (isReel)
+                {
+                    // Perfect match reel: 10-18s (same as ScrollReels)
+                    return rand.Next(10000, 18001);
+                }
+                else
+                {
+                    // Perfect match static: 2-5s (images are quicker than videos)
+                    return rand.Next(2000, 5001);
+                }
+            }
+            else
+            {
+                // Not a match: instant skip
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Calculate like probability based on watch time and engagement
+        /// Consistent with ScrollReelsService
+        /// </summary>
+        private double GetLikeProbability(int watchTime, int comments)
+        {
+            double baseProbability = 0.15; // Base 15% for perfect matches
+
+            // Bonus for long watch time (watched >12s)
+            if (watchTime > 12000)
+            {
+                baseProbability += 0.08; // +8%
+            }
+
+            // Bonus for high engagement content (>5k comments)
+            if (comments > 5000)
+            {
+                baseProbability += 0.05; // +5%
+            }
+
+            // Cap at 30% max
+            return Math.Min(baseProbability, 0.30);
+        }
+
+        /// <summary>
+        /// Calculate profile visit probability based on watch time and engagement
+        /// Consistent with ScrollReelsService
+        /// </summary>
+        private double GetProfileVisitProbability(int watchTime, int comments)
+        {
+            double baseProbability = 0.03; // Base 3% for perfect matches
+
+            // Bonus for long watch time (watched >15s = really interested)
+            if (watchTime > 15000)
+            {
+                baseProbability += 0.05; // +5%
+            }
+
+            // Bonus for high engagement (>5k comments)
+            if (comments > 5000)
+            {
+                baseProbability += 0.04; // +4%
+            }
+
+            // Big bonus for viral content (>15k comments)
+            if (comments > 15000)
+            {
+                baseProbability += 0.08; // +8%
+            }
+
+            // Cap at 20% max (profile visits are rarer than likes)
+            return Math.Min(baseProbability, 0.20);
+        }
+
+        private async Task<bool> ShouldTakeLongPause(Random rand)
+        {
+            return rand.NextDouble() < 0.05; // 5% chance
+        }
+
+        private async Task TakeLongPauseWithVideo(Random rand, CancellationToken token)
+        {
+            try
+            {
+                logTextBox.AppendText("[PAUSE] Pausing video for extended watch...\r\n");
+
+                await webView.ExecuteScriptAsync(@"
+(function() {
+  const videos = document.querySelectorAll('video');
+  for(let v of videos) {
+    const rect = v.getBoundingClientRect();
+    const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+    if (isVisible && !v.paused) {
+      v.pause();
+      return 'PAUSED';
+    }
+  }
+  return 'NO_VIDEO_PAUSED';
+})();");
+
+                int pauseDuration = rand.Next(10000, 30001);
+                logTextBox.AppendText($"[PAUSE] Taking {pauseDuration / 1000}s break...\r\n");
+                await Task.Delay(pauseDuration, token);
+
+                await webView.ExecuteScriptAsync(@"
+(function() {
+  const videos = document.querySelectorAll('video');
+  for(let v of videos) {
+    const rect = v.getBoundingClientRect();
+    const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+    if (isVisible && v.paused) {
+      v.play();
+      return 'RESUMED';
+    }
+  }
+  return 'NO_VIDEO_RESUMED';
+})();");
+
+                logTextBox.AppendText("[PAUSE] Resuming playback...\r\n");
+                await Task.Delay(rand.Next(500, 1500), token);
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[PAUSE ERROR] {ex.Message}\r\n");
+                Logger.LogError($"TakeLongPauseWithVideo: {ex}");
+            }
+        }
+
+        /// <summary>
+        /// Visit creator's profile with realistic browsing behavior
+        /// Consistent with ScrollReelsService
+        /// </summary>
+        private async Task VisitCreatorProfileAsync(Random rand, CancellationToken token)
+        {
+            try
+            {
+                logTextBox.AppendText("[PROFILE] Visiting creator profile...\r\n");
+
+                var clickProfileScript = @"
+(function(){
+  try {
+    const articles = document.querySelectorAll('article');
+    let targetArticle = null;
+    let bestScore = -1;
+
+    for (let article of articles) {
+      const rect = article.getBoundingClientRect();
+      const visibleHeight = Math.max(0, Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0));
+      if (visibleHeight > bestScore) {
+        bestScore = visibleHeight;
+        targetArticle = article;
+      }
+    }
+
+    if (!targetArticle) return 'NO_ARTICLE';
+
+    const creatorLink = targetArticle.querySelector('a[href*=""/""][role=""link""]');
+    if (!creatorLink) return 'NO_LINK';
+
+    creatorLink.click();
+    return 'CLICKED';
+  } catch(e) {
+    return 'ERROR: ' + e.message;
+  }
+})();";
+
+                var result = await webView.ExecuteScriptAsync(clickProfileScript);
+
+                if (result.Contains("CLICKED"))
+                {
+                    // Browse profile (3-8s)
+                    int browseDuration = rand.Next(3000, 8000);
+                    logTextBox.AppendText($"[PROFILE] Browsing for {browseDuration / 1000}s...\r\n");
+                    await Task.Delay(browseDuration, token);
+
+                    // Scroll profile (realistic browsing)
+                    int scrollAmount = rand.Next(200, 600);
+                    await webView.ExecuteScriptAsync($"window.scrollBy(0, {scrollAmount});");
+                    await Task.Delay(rand.Next(2000, 4000), token);
+
+                    // Sometimes scroll more (40% chance)
+                    if (rand.NextDouble() < 0.40)
+                    {
+                        scrollAmount = rand.Next(300, 700);
+                        await webView.ExecuteScriptAsync($"window.scrollBy(0, {scrollAmount});");
+                        await Task.Delay(rand.Next(1500, 3000), token);
+                    }
+
+                    // Return to feed
+                    logTextBox.AppendText("[PROFILE] Returning to feed...\r\n");
+                    await webView.ExecuteScriptAsync(@"
+(function() {
+  try {
+    if (window.history.length > 1) {
+      window.history.back();
+      return 'BACK';
+    }
+    return 'NO_HISTORY';
+  } catch(e) {
+    return 'ERROR';
+  }
+})();");
+                    await Task.Delay(rand.Next(2000, 3500), token);
+                }
+                else
+                {
+                    logTextBox.AppendText($"[PROFILE] Could not click profile link: {result}\r\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                logTextBox.AppendText($"[PROFILE ERROR] {ex.Message}\r\n");
+                Logger.LogError($"VisitCreatorProfileAsync: {ex}");
+            }
+        }
+
+        private async Task RandomHumanNoiseAsync(CancellationToken token)
+        {
+            if (rand.NextDouble() < 0.25)
+            {
+                var noiseScript = @"
+(async function(){
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+  if (Math.random() < 0.40) {
+    const scrollUpAmount = -(Math.random() * 80 + 40);
+    window.scrollBy({
+      top: scrollUpAmount,
+      behavior: 'smooth'
+    });
+    await sleep(600 + Math.random() * 400);
+  } else {
+    const randomScroll = Math.random() * 100 - 50;
+    window.scrollBy({
+      top: randomScroll,
+      behavior: 'smooth'
+    });
+    await sleep(400);
+  }
+
+  return 'NOISE_ADDED';
+})()";
+                await webView.ExecuteScriptAsync(noiseScript);
+            }
+        }
+
         private async Task<string> ExtractPostIdAsync(CancellationToken token)
         {
             var postIdScript = @"
@@ -117,14 +368,11 @@ namespace SocialNetworkArmy.Services
 
     if (!targetArticle) return '';
 
-    // Try to find caption text
-    // Strategy 1: Look for h1 (usually contains the caption)
     const h1 = targetArticle.querySelector('h1');
     if (h1 && h1.textContent && h1.textContent.trim().length > 0) {
       return h1.textContent.trim();
     }
 
-    // Strategy 2: Look for spans with caption-like content
     const spans = targetArticle.querySelectorAll('span');
     for (let span of spans) {
       const text = span.textContent || '';
@@ -429,10 +677,8 @@ namespace SocialNetworkArmy.Services
                     return;
                 }
 
-                // ⭐ Filtre minimum commentaires (config)
                 if (comments < config.MinCommentsToAddToFutureTargets)
                 {
-                    logTextBox.AppendText($"[TARGET] ⊘ Skipped '{creator}' ({comments} comments < {config.MinCommentsToAddToFutureTargets})\r\n");
                     return;
                 }
 
@@ -452,10 +698,6 @@ namespace SocialNetworkArmy.Services
                 {
                     File.AppendAllText(targetFile, creator.Trim() + Environment.NewLine);
                     logTextBox.AppendText($"[TARGET] ✓ Added '{creator}' to FutureTargets.txt ({comments} comments)\r\n");
-                }
-                else
-                {
-                    logTextBox.AppendText($"[TARGET] ℹ️ '{creator}' already in FutureTargets.txt ({comments} comments)\r\n");
                 }
             }
             catch (Exception ex)
@@ -821,177 +1063,8 @@ namespace SocialNetworkArmy.Services
             await Task.Delay(rand.Next(1500, 2500), token);
         }
 
-        private async Task<int> GetHumanWatchTime(Random rand)
-        {
-            // ✅ OPTIMIZED FOR SPEED: Shorter watch times, bonus will extend for perfect matches
-            // 60% du temps : 5-8 secondes (engagement rapide)
-            // 25% du temps : 8-12 secondes (bon engagement)
-            // 10% du temps : 12-18 secondes (très bon engagement)
-            // 5% du temps : 18-25 secondes (excellent engagement)
-            double dice = rand.NextDouble();
-
-            if (dice < 0.60)
-            {
-                return rand.Next(5000, 8001); // 5-8s (fast scroll, algo still learns)
-            }
-            else if (dice < 0.85)
-            {
-                return rand.Next(8000, 12001); // 8-12s (good engagement)
-            }
-            else if (dice < 0.95)
-            {
-                return rand.Next(12000, 18001); // 12-18s (very good)
-            }
-            else
-            {
-                return rand.Next(18000, 25001); // 18-25s (excellent)
-            }
-        }
-
-        private async Task<bool> ShouldTakeLongPause(Random rand)
-        {
-            return rand.NextDouble() < 0.08;
-        }
-
-        private async Task TakeLongPauseWithVideo(Random rand, CancellationToken token)
-        {
-            try
-            {
-                logTextBox.AppendText("[PAUSE] Pausing video for extended watch...\r\n");
-
-                await webView.ExecuteScriptAsync(@"
-(function() {
-  const videos = document.querySelectorAll('video');
-  for(let v of videos) {
-    const rect = v.getBoundingClientRect();
-    const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
-    if (isVisible && !v.paused) {
-      v.pause();
-      return 'PAUSED';
-    }
-  }
-  return 'NO_VIDEO_PAUSED';
-})();");
-
-                int pauseDuration = rand.Next(10000, 30001);
-                logTextBox.AppendText($"[PAUSE] Taking {pauseDuration / 1000}s break...\r\n");
-                await Task.Delay(pauseDuration, token);
-
-                await webView.ExecuteScriptAsync(@"
-(function() {
-  const videos = document.querySelectorAll('video');
-  for(let v of videos) {
-    const rect = v.getBoundingClientRect();
-    const isVisible = rect.top < window.innerHeight && rect.bottom > 0;
-    if (isVisible && v.paused) {
-      v.play();
-      return 'RESUMED';
-    }
-  }
-  return 'NO_VIDEO_RESUMED';
-})();");
-
-                logTextBox.AppendText("[PAUSE] Resuming playback...\r\n");
-                await Task.Delay(rand.Next(500, 1500), token);
-            }
-            catch (Exception ex)
-            {
-                logTextBox.AppendText($"[PAUSE ERROR] {ex.Message}\r\n");
-                Logger.LogError($"TakeLongPauseWithVideo: {ex}");
-            }
-        }
-
-        private async Task RandomHumanNoiseAsync(CancellationToken token)
-        {
-            if (rand.NextDouble() < 0.35)
-            {
-                logTextBox.AppendText("[HUMAN NOISE] Adding idle scroll or hover...\r\n");
-
-                var noiseScript = @"
-(async function(){
-  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-  if (Math.random() < 0.30) {
-    const scrollUpAmount = -(Math.random() * 200 + 100);
-    window.scrollBy({
-      top: scrollUpAmount,
-      behavior: 'smooth'
-    });
-    await sleep(800 + Math.random() * 700);
-  } else {
-    window.scrollBy({
-      top: Math.random() * 150 - 75,
-      behavior: 'smooth'
-    });
-    await sleep(500);
-  }
-
-  var elements = document.querySelectorAll('a, button, div[role=""button""], article');
-  if (elements.length > 0) {
-    var randomEl = elements[Math.floor(Math.random() * Math.min(elements.length, 20))];
-    var rect = randomEl.getBoundingClientRect();
-    if (rect.top >= 0 && rect.bottom <= window.innerHeight) {
-      var x = rect.left + rect.width / 2;
-      var y = rect.top + rect.height / 2;
-      randomEl.dispatchEvent(new MouseEvent('mouseover', {bubbles: true, clientX: x, clientY: y}));
-      await sleep(Math.random() * 1500 + 500);
-      randomEl.dispatchEvent(new MouseEvent('mouseleave', {bubbles: true, clientX: x, clientY: y}));
-    }
-  }
-  return 'NOISE_ADDED';
-})()";
-                var noiseResult = await webView.ExecuteScriptAsync(noiseScript);
-                logTextBox.AppendText($"[NOISE] {noiseResult}\r\n");
-            }
-        }
-
-        private async Task RandomScrollUpAsync(CancellationToken token)
-        {
-            if (rand.NextDouble() < 0.12)
-            {
-                int scrollUpAmount = rand.Next(300, 800);
-                logTextBox.AppendText($"[SCROLL UP] Scrolling up {scrollUpAmount}px (re-checking content)...\r\n");
-
-                var scrollUpScript = $@"
-(function() {{
-  const startY = window.scrollY || window.pageYOffset;
-  const targetY = Math.max(0, startY - {scrollUpAmount});
-  const duration = 800 + Math.random() * 600;
-  const startTime = performance.now();
-
-  function scrollStep(currentTime) {{
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const easeInOut = progress < 0.5 
-      ? 2 * progress * progress 
-      : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-
-    window.scrollTo(0, startY + (targetY - startY) * easeInOut);
-
-    if (progress < 1) {{
-      requestAnimationFrame(scrollStep);
-    }}
-  }}
-
-  requestAnimationFrame(scrollStep);
-  return 'SCROLLED_UP';
-}})();";
-
-                var result = await webView.ExecuteScriptAsync(scrollUpScript);
-                logTextBox.AppendText($"[SCROLL UP] {result}\r\n");
-
-                int pauseAfterScrollUp = rand.Next(2000, 5000);
-                await Task.Delay(pauseAfterScrollUp, token);
-
-                logTextBox.AppendText("[SCROLL DOWN] Resuming feed...\r\n");
-                await ScrollToNextPostAsync(rand, token);
-            }
-        }
-
         private async Task<bool> ScrollToNextPostAsync(Random rand, CancellationToken token)
         {
-            logTextBox.AppendText("[SCROLL] Scrolling to next post...\r\n");
-
             double scrollChoice = rand.NextDouble();
             int scrollAmount;
 
@@ -1035,9 +1108,8 @@ namespace SocialNetworkArmy.Services
 ";
 
             var result = await webView.ExecuteScriptAsync(scrollScript);
-            logTextBox.AppendText($"[SCROLL] {result} ({scrollAmount}px)\r\n");
-
             await Task.Delay(rand.Next(1500, 3500), token);
+
             return true;
         }
 
@@ -1053,7 +1125,6 @@ namespace SocialNetworkArmy.Services
 
                 try
                 {
-                    var startTime = DateTime.Now;
                     logTextBox.AppendText($"[SCROLL HOME] Starting feed scroll...\r\n");
 
                     var dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data");
@@ -1157,7 +1228,7 @@ document.querySelector('article, main') ? 'true' : 'false';");
 
                         try
                         {
-                            logTextBox.AppendText($"[POST {postNum}] Analyzing...\r\n");
+                            logTextBox.AppendText($"\r\n[POST {postNum}] Analyzing...\r\n");
 
                             var postId = await ExtractPostIdAsync(token);
                             logTextBox.AppendText($"[POST {postNum}] ID: {postId}\r\n");
@@ -1170,27 +1241,26 @@ document.querySelector('article, main') ? 'true' : 'false';");
                                 int skipDelay = rand.Next(800, 2000);
                                 await Task.Delay(skipDelay, token);
                                 await RandomHumanNoiseAsync(token);
-                                await RandomScrollUpAsync(token);
                                 await ScrollToNextPostAsync(rand, token);
                                 postsScrolled++;
                                 continue;
                             }
 
-                            // ✅ COMBINED FILTER: Niche (if enabled) && Language
+                            // FILTERS: Niche + Language
                             bool passedNicheFilter = true;
                             bool passedLanguageFilter = true;
 
-                            // 1️⃣ NICHE FILTER (if enabled in config)
+                            // 1. Niche filter (if enabled)
                             if (config.ShouldApplyNicheFilter())
                             {
                                 passedNicheFilter = await contentFilter.IsCurrentContentFemaleAsync();
                                 if (!passedNicheFilter)
                                 {
-                                    logTextBox.AppendText($"[FILTER] ✗ Niche filter failed (not female) - SKIPPING\r\n");
+                                    logTextBox.AppendText($"[FILTER] ✗ Niche filter failed - SKIPPING\r\n");
                                 }
                             }
 
-                            // 2️⃣ LANGUAGE FILTER
+                            // 2. Language filter
                             string detectedLanguage = "Unknown";
                             string postCaption = await ExtractPostCaptionAsync(token);
 
@@ -1201,25 +1271,27 @@ document.querySelector('article, main') ? 'true' : 'false';");
 
                                 if (!passedLanguageFilter)
                                 {
-                                    logTextBox.AppendText($"[FILTER] ✗ Language filter failed (detected: {detectedLanguage}) - SKIPPING\r\n");
+                                    logTextBox.AppendText($"[FILTER] ✗ Language ({detectedLanguage}) - SKIPPING\r\n");
                                 }
                             }
                             else
                             {
-                                // If no caption, assume language passes (can't determine)
-                                logTextBox.AppendText($"[FILTER] ℹ️ No caption found, language filter skipped\r\n");
+                                logTextBox.AppendText($"[FILTER] ℹ️ No caption, language filter skipped\r\n");
                             }
 
-                            // 3️⃣ COMBINED DECISION: Both must pass
-                            if (!passedNicheFilter || !passedLanguageFilter)
+                            // Combined decision
+                            bool isPerfectMatch = passedNicheFilter && passedLanguageFilter;
+
+                            if (!isPerfectMatch)
                             {
-                                // ⚡ Skip IMMEDIATELY (algo signal: not interested at all)
+                                // Instant skip
+                                logTextBox.AppendText($"[SKIP] ⚡ Instant skip (filters failed)\r\n");
                                 await ScrollToNextPostAsync(rand, token);
                                 postsScrolled++;
                                 continue;
                             }
 
-                            logTextBox.AppendText($"[FILTER] ✓ Content passed all filters (niche: {(config.ShouldApplyNicheFilter() ? "female" : "any")}, lang: {detectedLanguage})\r\n");
+                            logTextBox.AppendText($"[FILTER] ✓ Perfect match (niche + language: {detectedLanguage})\r\n");
 
                             var (found, datetime, text, ageHours, isReel) = await ExtractPostInfoAsync(token);
 
@@ -1231,15 +1303,19 @@ document.querySelector('article, main') ? 'true' : 'false';");
                                 postsScrolled++;
                                 continue;
                             }
+
                             var (creator, commentCount) = await ExtractCreatorAndCommentsAsync(token);
-                            if (!string.IsNullOrWhiteSpace(creator) && creator != "NO_ARTICLE" && creator != "NO_CREATOR" && creator != "ERROR")
+                            if (!string.IsNullOrWhiteSpace(creator) &&
+                                creator != "NO_ARTICLE" &&
+                                creator != "NO_CREATOR" &&
+                                creator != "ERROR")
                             {
                                 var futureTargetsPath = Path.Combine(dataDir, "FutureTargets.txt");
                                 AddToFutureTargets(creator, commentCount, futureTargetsPath);
                             }
+
                             string postType = isReel ? "Reel" : "Static";
-                            logTextBox.AppendText($"[POST {postNum}] Type: {postType}\r\n");
-                            logTextBox.AppendText($"[DATE] datetime={datetime}, text={text}\r\n");
+                            logTextBox.AppendText($"[POST {postNum}] Type: {postType}, Comments: {commentCount}\r\n");
 
                             bool shouldComment = false;
                             bool shouldSkip = false;
@@ -1268,7 +1344,6 @@ document.querySelector('article, main') ? 'true' : 'false';");
                             if (shouldSkip)
                             {
                                 int skipDelay = rand.Next(800, 2000);
-                                logTextBox.AppendText($"[SKIP] Waiting {skipDelay}ms...\r\n");
                                 await Task.Delay(skipDelay, token);
                                 await RandomHumanNoiseAsync(token);
                                 await ScrollToNextPostAsync(rand, token);
@@ -1276,52 +1351,39 @@ document.querySelector('article, main') ? 'true' : 'false';");
                                 continue;
                             }
 
-                            // ✅ SPEED OPTIMIZED: Simple watch time logic (same as ScrollReels)
-                            bool isPerfectMatch = passedNicheFilter && passedLanguageFilter &&
-                                                  config.ShouldApplyNicheFilter() && !config.IsLanguageTargeted("Any");
+                            // Get watch time using consistent logic
+                            int watchTime = GetWatchTime(rand, isPerfectMatch, isReel);
+                            logTextBox.AppendText($"[WATCH] {(isPerfectMatch ? "🎯 Perfect match" : "⚡ Skip")} {postType} → {watchTime / 1000}s\r\n");
+                            await Task.Delay(watchTime, token);
 
-                            int watchTime;
-                            if (isPerfectMatch)
+                            // Long pause for reels (5% chance)
+                            if (isPerfectMatch && isReel && await ShouldTakeLongPause(rand))
                             {
-                                if (isReel)
-                                {
-                                    // 🎯 Perfect match reel: 10-25s
-                                    watchTime = rand.Next(10000, 25001);
-                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match reel → {watchTime / 1000}s\r\n");
-                                    await Task.Delay(watchTime, token);
-
-                                    if (await ShouldTakeLongPause(rand))
-                                    {
-                                        await TakeLongPauseWithVideo(rand, token);
-                                    }
-                                }
-                                else
-                                {
-                                    // 🎯 Perfect match static: 1-3s
-                                    watchTime = rand.Next(1000, 3001);
-                                    logTextBox.AppendText($"[WATCH] 🎯 Perfect match static → {watchTime}ms\r\n");
-                                    await Task.Delay(watchTime, token);
-                                }
-                            }
-                            else
-                            {
-                                // ⚡ NOT a match: INSTANT SKIP (0ms)
-                                watchTime = 0;
-                                logTextBox.AppendText($"[SKIP] ⚡ Instant skip\r\n");
-                                // No delay at all - skip immediately
+                                await TakeLongPauseWithVideo(rand, token);
                             }
 
-                            // ✅ Like only for perfect matches
-                            double likeChance = isPerfectMatch ? (isReel ? 0.08 : 0.03) : 0.0;
-                            if (likeChance > 0 && rand.NextDouble() < likeChance)
+                            // Calculate like probability using GetLikeProbability
+                            double likeProbability = GetLikeProbability(watchTime, commentCount);
+                            bool shouldLike = isPerfectMatch && rand.NextDouble() < likeProbability;
+
+                            logTextBox.AppendText($"[LIKE] Probability: {likeProbability:P0} → {(shouldLike ? "WILL LIKE" : "SKIP")}\r\n");
+
+                            if (shouldLike)
                             {
                                 var likeTry = await LikeCurrentPostAsync(likeSelectors, unlikeTest, token);
-                                logTextBox.AppendText($"[LIKE] {likeTry}\r\n");
+                                logTextBox.AppendText($"[LIKE] ❤️ {likeTry}\r\n");
                                 await Task.Delay(rand.Next(1500, 3000), token);
                             }
-                            else
+
+                            // Calculate profile visit probability
+                            double profileVisitProbability = GetProfileVisitProbability(watchTime, commentCount);
+                            bool shouldVisitProfile = isPerfectMatch && rand.NextDouble() < profileVisitProbability;
+
+                            logTextBox.AppendText($"[PROFILE] Probability: {profileVisitProbability:P0} → {(shouldVisitProfile ? "WILL VISIT" : "SKIP")}\r\n");
+
+                            if (shouldVisitProfile)
                             {
-                                logTextBox.AppendText($"[LIKE] Skipped (random {(likeChance * 100):F0}%)\r\n");
+                                await VisitCreatorProfileAsync(rand, token);
                             }
 
                             if (shouldComment)
@@ -1356,10 +1418,10 @@ document.querySelector('article, main') ? 'true' : 'false';");
                         }
                     }
 
-                    logTextBox.AppendText($"[SCROLL HOME] ✓ Session completed:\r\n");
+                    logTextBox.AppendText($"\r\n[SCROLL HOME] ✓ Session completed:\r\n");
                     logTextBox.AppendText($"  - Posts scrolled: {postsScrolled}\r\n");
                     logTextBox.AppendText($"  - Reels commented: {reelsInteracted}\r\n");
-                    logTextBox.AppendText($"  - Posts skipped (already commented by group): {postsSkippedAlreadyCommented}\r\n");
+                    logTextBox.AppendText($"  - Posts skipped (already commented): {postsSkippedAlreadyCommented}\r\n");
                 }
                 catch (OperationCanceledException)
                 {

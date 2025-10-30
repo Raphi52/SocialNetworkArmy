@@ -22,6 +22,7 @@ namespace SocialNetworkArmy.Forms
         private readonly Profile profile;
         private TextBox logTextBox;
         private readonly ProxyService proxyService;
+        private SharedCookiesService sharedCookiesService;
         private readonly Random random = new Random();
         private readonly string userDataFolder;
         private Button postStoryButton;
@@ -34,6 +35,7 @@ namespace SocialNetworkArmy.Forms
         private const int DEVICE_WIDTH = 360;
         private const int DEVICE_HEIGHT = 780;
         private const double DEVICE_PIXEL_RATIO = 3.0;
+
         private Font yaheiBold10 = new Font("Microsoft YaHei", 9f, FontStyle.Bold);
         private Panel bottomPanel;
 
@@ -501,14 +503,14 @@ namespace SocialNetworkArmy.Forms
         {
             this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
             this.userDataFolder = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-    "SocialNetworkArmy", "Profiles", profile.Name, "Main");
+      Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+      "SocialNetworkArmy", "Profiles", profile.Name, "Story");
             this.SetStyle(ControlStyles.AllPaintingInWmPaint |
          ControlStyles.UserPaint |
          ControlStyles.OptimizedDoubleBuffer, true);
             this.UpdateStyles();
             proxyService = new ProxyService();
-
+            sharedCookiesService = new SharedCookiesService(profile.Name);
             // ✅ NOUVEAU: Générer fingerprint mobile unique
             fingerprintService = new FingerprintService();
             fingerprint = fingerprintService.GenerateMobileFingerprint();
@@ -610,6 +612,22 @@ namespace SocialNetworkArmy.Forms
             {
                 logTextBox.AppendText("[INFO] Initializing browser...\r\n");
                 Directory.CreateDirectory(userDataFolder);
+
+                // ✅ PARTAGE DES COOKIES: Copier depuis Main vers Story
+                var storyCookiesDir = Path.Combine(userDataFolder, "Default");
+
+                // ✅ Vérifier la validité AVANT de charger
+                if (!sharedCookiesService.AreSharedCookiesValid())
+                {
+                    logTextBox.AppendText("[Cookies] ⚠️ No valid cookies found - login required\r\n");
+                }
+                else
+                {
+                    await sharedCookiesService.LoadSharedCookiesAsync(
+                        storyCookiesDir,
+                        msg => logTextBox.AppendText(msg + "\r\n")
+                    );
+                }
 
                 // ✅ AMÉLIORATION: Utiliser User-Agent du fingerprint (randomisé)
                 var options = new CoreWebView2EnvironmentOptions
@@ -808,31 +826,39 @@ namespace SocialNetworkArmy.Forms
         {
             try
             {
-                // ✅ UTILISER LA LOGIQUE CENTRALISÉE
+                logTextBox.AppendText("[Schedule] ========================================\r\n");
+                logTextBox.AppendText("[Schedule] Starting story search...\r\n");
+
+                // ✅ PASSER LE TEXTBOX POUR LES LOGS DÉTAILLÉS
                 var match = ScheduleHelper.GetTodayMediaForAccount(
                     profile.Name,
                     profile.Platform,
-                    "story"
+                    "story",
+                    targetDate: null,
+                    log: logTextBox  // ⬅️ AJOUT CRITIQUE!
                 );
 
                 if (match == null)
                 {
                     logTextBox.AppendText("[Schedule] ✗ No story scheduled for today\r\n");
+                    logTextBox.AppendText("[Schedule] ========================================\r\n");
                     return null;
                 }
 
                 logTextBox.AppendText($"[Schedule] ✓ Found {(match.IsGroup ? "group" : "account")} match: {match.AccountOrGroup}\r\n");
                 logTextBox.AppendText($"[Schedule] ✓ Media: {Path.GetFileName(match.MediaPath)}\r\n");
+                logTextBox.AppendText("[Schedule] ========================================\r\n");
 
                 return match.MediaPath;
             }
             catch (Exception ex)
             {
                 logTextBox.AppendText($"[Schedule] ✗ Error: {ex.Message}\r\n");
+                logTextBox.AppendText($"[Schedule] Stack: {ex.StackTrace}\r\n");
+                logTextBox.AppendText("[Schedule] ========================================\r\n");
                 return null;
             }
         }
-
         public async Task<bool> PostTodayStoryAsync()
         {
             if (!isWebViewReady)
@@ -1158,30 +1184,26 @@ namespace SocialNetworkArmy.Forms
         }
         private void StoryPosterForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            // Si fermeture forcée, ne pas annuler
-            if (e.CloseReason == CloseReason.WindowsShutDown ||
-                e.CloseReason == CloseReason.TaskManagerClosing)
+            if (e.CloseReason != CloseReason.WindowsShutDown &&
+                e.CloseReason != CloseReason.TaskManagerClosing &&
+                webView?.CoreWebView2 != null)
             {
-                // Forcer l'arrêt
-                isWebViewReady = false;
-                if (postStoryButton != null)
-                    postStoryButton.Enabled = false;
-                return;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(500);
+                        var storyCookiesDir = Path.Combine(userDataFolder, "Default");
+                        await sharedCookiesService.SaveSharedCookiesAsync(
+                            storyCookiesDir,
+                            msg => { }
+                        );
+                    }
+                    catch { }
+                });
             }
-
-            try
-            {
-                // Désactiver le bouton pour éviter les clicks pendant la fermeture
-                if (postStoryButton != null)
-                    postStoryButton.Enabled = false;
-
-                // Marquer comme non prêt
-                isWebViewReady = false;
-
-                logTextBox?.AppendText("[INFO] Closing form...\r\n");
-            }
-            catch { }
         }
+       
         protected override void Dispose(bool disposing)
         {
             if (isDisposing) return;

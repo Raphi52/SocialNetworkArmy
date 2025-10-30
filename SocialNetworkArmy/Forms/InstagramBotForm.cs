@@ -25,6 +25,7 @@ namespace SocialNetworkArmy.Forms
         private DirectMessageService dmService;
         private DownloadInstagramService downloadService;
         private TestService testService;
+        private SharedCookiesService sharedCookiesService;
         private readonly Profile profile;
         private readonly ProxyService proxyService;
         public string CurrentAccountName => profile?.Name;
@@ -37,7 +38,7 @@ namespace SocialNetworkArmy.Forms
         private WebView2 webView;
         private Button targetButton;
         private Button scrollButton;
-        private Button scrollHomeButton; 
+        private Button scrollHomeButton;
         private Button publishButton;
         private Button dmButton;
         private Button downloadButton;
@@ -49,7 +50,7 @@ namespace SocialNetworkArmy.Forms
         private bool isScriptRunning = false;
         private Font Sergoe = new Font("Segoe UI", 10f, FontStyle.Bold);
         private Panel bottomPanel;
-        private System.Windows.Forms.Timer closeTimer;
+        
         private CancellationTokenSource _cts;
         private CancellationTokenSource _initCts; // ✅ For initialization cancellation
         private Panel toolbarPanel;
@@ -59,10 +60,53 @@ namespace SocialNetworkArmy.Forms
         private TextBox urlTextBox;
         private bool isWebViewReady = false;
         private bool isDisposing = false;
+
+        // ✅ CONSTANTES POUR LE STEALTH SCRIPT
+        private const int DEVICE_WIDTH = 1920;
+        private const int DEVICE_HEIGHT = 1080;
+        private const double DEVICE_PIXEL_RATIO = 1.0;
+
+        // ✅ STEALTH SCRIPT TEMPLATE
+        private const string STEALTH_SCRIPT = @"
+            (function() {
+                // Override navigator properties
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => false
+                });
+                
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['en-US', 'en']
+                });
+                
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+
+                // Override screen properties
+                Object.defineProperty(screen, 'width', {
+                    get: () => __WIDTH__
+                });
+                
+                Object.defineProperty(screen, 'height', {
+                    get: () => __HEIGHT__
+                });
+                
+                Object.defineProperty(window, 'devicePixelRatio', {
+                    get: () => __DPR__
+                });
+
+                // Remove automation traces
+                delete navigator.__proto__.webdriver;
+                
+                console.log('Stealth mode activated');
+            })();
+        ";
+
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
         public InstagramBotForm(Profile profile)
         {
             this.profile = profile;
@@ -70,6 +114,7 @@ namespace SocialNetworkArmy.Forms
             cleanupService = new CleanupService();
             monitoringService = new MonitoringService();
             proxyService = new ProxyService();
+            sharedCookiesService = new SharedCookiesService(profile.Name);
             _initCts = new CancellationTokenSource(); // ✅ Initialize cancellation for async init
 
             // ✅ NOUVEAU: Générer fingerprint desktop unique pour stealth 10/10
@@ -84,44 +129,20 @@ namespace SocialNetworkArmy.Forms
             }
             this.Icon = new System.Drawing.Icon("Data\\Icons\\Insta.ico");
             targetButton.Enabled = false;
-            closeTimer = new System.Windows.Forms.Timer { Interval = 1000 };
-            closeTimer.Tick += (s, e) => { closeTimer.Stop(); this.Close(); };
+            
             this.FormClosing += OnFormClosing;
             LoadBrowserAsync();
         }
+
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
-            // ✅ Cancel initialization if still running
             try
             {
                 _initCts?.Cancel();
+                _cts?.Cancel();
+                isScriptRunning = false;
             }
             catch { }
-
-            // ✅ Autoriser fermeture système
-            if (e.CloseReason == CloseReason.WindowsShutDown ||
-                e.CloseReason == CloseReason.TaskManagerClosing)
-            {
-                try
-                {
-                    _cts?.Cancel();
-                    isScriptRunning = false;
-                }
-                catch { }
-                return;
-            }
-
-            // ✅ Si script en cours ET fermeture manuelle (pas programmée)
-            if (isScriptRunning && e.CloseReason == CloseReason.UserClosing)
-            {
-                StopScript();
-                e.Cancel = true; // Annuler la fermeture immédiate
-                closeTimer.Interval = 1000; // Attendre 1s
-                closeTimer.Start(); // Puis fermer
-                return;
-            }
-
-            // ✅ Sinon laisser fermer (cas du scheduler avec "close")
         }
         private void InitializeComponent()
         {
@@ -295,7 +316,7 @@ namespace SocialNetworkArmy.Forms
             buttonsPanel.Controls.Add(publishButton);
             buttonsPanel.Controls.Add(dmButton);
             buttonsPanel.Controls.Add(downloadButton);
-           // buttonsPanel.Controls.Add(testButton);
+            // buttonsPanel.Controls.Add(testButton);
             buttonsPanel.Controls.Add(stopButton);
 
             // Proxy Status Label
@@ -374,6 +395,7 @@ namespace SocialNetworkArmy.Forms
 
             return button;
         }
+
         private Color DarkenColor(Color color, int amount)
         {
             return Color.FromArgb(
@@ -527,30 +549,12 @@ namespace SocialNetworkArmy.Forms
                 Directory.CreateDirectory(userDataDir);
 
                 // ✅ 3. COPY COOKIES IF AVAILABLE
-                var persistentCookiesDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                    "SocialNetworkArmy", "Profiles", profile.Name, "Cookies"
+                // ✅ CHARGER LES COOKIES PARTAGÉS (Main ↔ Story sync)
+                var defaultDir = Path.Combine(userDataDir, "Default");
+                await sharedCookiesService.LoadSharedCookiesAsync(
+                    defaultDir,
+                    msg => logTextBox.AppendText(msg + "\r\n")
                 );
-
-                if (Directory.Exists(persistentCookiesDir))
-                {
-                    try
-                    {
-                        var defaultDir = Path.Combine(userDataDir, "Default");
-                        Directory.CreateDirectory(defaultDir);
-
-                        var cookiesFile = Path.Combine(persistentCookiesDir, "Cookies");
-                        if (File.Exists(cookiesFile))
-                        {
-                            File.Copy(cookiesFile, Path.Combine(defaultDir, "Cookies"), true);
-                            logTextBox.AppendText("[INFO] ✓ Cookies loaded\r\n");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logTextBox.AppendText($"[WARN] Could not copy cookies: {ex.Message}\r\n");
-                    }
-                }
 
                 // ✅ 4. CREATE ENVIRONMENT OPTIONS WITH FINGERPRINT
                 var options = new CoreWebView2EnvironmentOptions();
@@ -632,6 +636,18 @@ namespace SocialNetworkArmy.Forms
                 {
                     await webView.EnsureCoreWebView2Async(env);
                     logTextBox.AppendText("[INFO] ✓ WebView2 control initialized\r\n");
+
+                    if (!await EnsureWebViewReadyAsync())
+                    {
+                        MessageBox.Show("WebView2 failed to initialize properly", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        this.Close();
+                        return;
+                    }
+
+                    // ✅ PREPARE AND INJECT STEALTH SCRIPT
+                    var stealthScript = PrepareStealthScript();
+                    await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
+                    logTextBox.AppendText("[OK] Stealth script injected\r\n");
                 }
                 catch (Exception ex)
                 {
@@ -675,18 +691,13 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.Settings.AreDevToolsEnabled = true;
                 webView.CoreWebView2.Settings.UserAgent = userAgent;
 
-                // ✅ 10. INJECT LIGHT STEALTH (non-intrusive for publish)
-                var stealthScript = fingerprintService.GenerateJSSpoofLight(fingerprint);
-                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
-                logTextBox.AppendText("[INFO] ✓ Light stealth injected (publish-safe)\r\n");
-
-                // ✅ 11. SET EXTRA HEADERS
+                // ✅ 10. SET EXTRA HEADERS
                 await webView.CoreWebView2.CallDevToolsProtocolMethodAsync(
                     "Network.setExtraHTTPHeaders",
                     "{\"headers\": {\"Accept-Language\": \"en-US,en;q=0.9\"}}"
                 );
 
-                // ✅ 12. SETUP NAVIGATION HANDLERS (BEFORE NAVIGATE)
+                // ✅ 11. SETUP NAVIGATION HANDLERS (BEFORE NAVIGATE)
                 TaskCompletionSource<bool> navigationTcs = new TaskCompletionSource<bool>();
                 bool navigationHandled = false;
 
@@ -703,7 +714,7 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.NavigationCompleted += NavigationCompletedHandler;
                 webView.CoreWebView2.NavigationCompleted += WebView_NavigationCompleted; // For URL bar
 
-                // ✅ 13. START NAVIGATION
+                // ✅ 12. START NAVIGATION
                 logTextBox.AppendText("[INFO] Navigating to Instagram...\r\n");
 
                 try
@@ -719,11 +730,9 @@ namespace SocialNetworkArmy.Forms
                     return;
                 }
 
-                // ✅ 14. WAIT FOR NAVIGATION (WITH TIMEOUT)
+                // ✅ 13. WAIT FOR NAVIGATION (WITH TIMEOUT)
                 var timeoutTask = Task.Delay(60000); // 60 seconds (increased from 30)
                 var completedTask = await Task.WhenAny(navigationTcs.Task, timeoutTask);
-
-                
 
                 if (completedTask == timeoutTask)
                 {
@@ -769,9 +778,34 @@ namespace SocialNetworkArmy.Forms
                 else
                 {
                     logTextBox.AppendText("[INFO] ✓ Instagram loaded successfully\r\n");
+
+                    // ✅ AMÉLIORATION: Sauvegarder les cookies périodiquement pour capturer le login
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            // Premier save rapide (5 secondes après chargement)
+                            await Task.Delay(5000);
+                            await TrySaveCookiesAsync(userDataDir);
+                            SafeLog("[Cookies] First save completed");
+
+                            // Saves périodiques pour capturer le login si l'utilisateur se connecte
+                            for (int i = 0; i < 6; i++) // 6 fois sur 30 secondes
+                            {
+                                await Task.Delay(5000);
+                                await TrySaveCookiesAsync(userDataDir);
+                            }
+
+                            SafeLog("[Cookies] Periodic saves completed - Story form ready");
+                        }
+                        catch (Exception ex)
+                        {
+                            SafeLog($"[WARN] Periodic cookies save failed: {ex.Message}");
+                        }
+                    });
                 }
 
-                // ✅ 15. VERIFY PROXY (IF USED)
+                // ✅ 14. VERIFY PROXY (IF USED)
                 if (hasProxy)
                 {
                     try
@@ -797,26 +831,34 @@ namespace SocialNetworkArmy.Forms
                     }));
                 }
 
-                // ✅ 16. SAVE COOKIES ON CLOSE
-                this.FormClosing += async (s, e) =>
+                // ✅ 15. SAVE COOKIES ON CLOSE
+                // ✅ SAUVEGARDER LES COOKIES PARTAGÉS AVANT FERMETURE
+                FormClosingEventHandler cookiesSaveHandler = null;
+                
+                cookiesSaveHandler = async (s, args) =>
                 {
-                    if (!isScriptRunning && webView?.CoreWebView2 != null)
+                    if (args.CloseReason == CloseReason.WindowsShutDown ||
+                        args.CloseReason == CloseReason.TaskManagerClosing)
+                        return;
+
+                    _ = Task.Run(async () =>
                     {
                         try
                         {
-                            var cookiesSource = Path.Combine(userDataDir, "Default", "Cookies");
-                            if (File.Exists(cookiesSource))
-                            {
-                                Directory.CreateDirectory(persistentCookiesDir);
-                                File.Copy(cookiesSource, Path.Combine(persistentCookiesDir, "Cookies"), true);
-                                logTextBox.AppendText("[INFO] ✓ Cookies saved\r\n");
-                            }
+                            await Task.Delay(500);
+                            var defaultDirForSave = Path.Combine(userDataDir, "Default");
+                            await sharedCookiesService.SaveSharedCookiesAsync(
+                                defaultDirForSave,
+                                msg => SafeLog(msg)
+                            );
                         }
                         catch { }
-                    }
+                    });
                 };
 
-                // ✅ 17. INITIALIZE SERVICES
+                this.FormClosing += cookiesSaveHandler;
+
+                // ✅ 16. INITIALIZE SERVICES
                 logTextBox.AppendText("[INFO] Browser ready - initializing services...\r\n");
                 await Task.Delay(200, token); // Minimal delay for Instagram DOM to be ready
 
@@ -829,13 +871,27 @@ namespace SocialNetworkArmy.Forms
             catch (TaskCanceledException)
             {
                 // ✅ Form closed during initialization - this is normal, exit silently
-                logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
+                try
+                {
+                    if (!IsDisposed && !isDisposing && logTextBox != null && !logTextBox.IsDisposed)
+                    {
+                        logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
+                    }
+                }
+                catch { }
                 return;
             }
             catch (OperationCanceledException)
             {
                 // ✅ Form closed during initialization - this is normal, exit silently
-                logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
+                try
+                {
+                    if (!IsDisposed && !isDisposing && logTextBox != null && !logTextBox.IsDisposed)
+                    {
+                        logTextBox.AppendText("[INFO] Initialization cancelled (form closed)\r\n");
+                    }
+                }
+                catch { }
                 return;
             }
             catch (Exception ex) when (IsDisposed || isDisposing)
@@ -862,6 +918,47 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
+        private string PrepareStealthScript()
+        {
+            // ✅ VÉRIFIER QUE LES TOKENS SONT PRÉSENTS
+            if (!STEALTH_SCRIPT.Contains("__WIDTH__") ||
+                !STEALTH_SCRIPT.Contains("__HEIGHT__") ||
+                !STEALTH_SCRIPT.Contains("__DPR__"))
+            {
+                logTextBox.AppendText("[ERROR] Stealth script tokens missing!\r\n");
+                throw new InvalidOperationException("Stealth script is malformed");
+            }
+
+            var script = STEALTH_SCRIPT
+                .Replace("__WIDTH__", DEVICE_WIDTH.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Replace("__HEIGHT__", DEVICE_HEIGHT.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Replace("__DPR__", DEVICE_PIXEL_RATIO.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+            // ✅ VÉRIFIER QU'AUCUN TOKEN N'EST RESTÉ
+            if (script.Contains("__WIDTH__") || script.Contains("__HEIGHT__") || script.Contains("__DPR__"))
+            {
+                logTextBox.AppendText("[ERROR] Token replacement failed!\r\n");
+                throw new InvalidOperationException("Token replacement incomplete");
+            }
+
+            return script;
+        }
+
+        private void SafeLog(string message)
+        {
+            try
+            {
+                if (!IsDisposed && !isDisposing && logTextBox != null && !logTextBox.IsDisposed)
+                {
+                    if (logTextBox.InvokeRequired)
+                        logTextBox.Invoke(new Action(() => logTextBox.AppendText(message + "\r\n")));
+                    else
+                        logTextBox.AppendText(message + "\r\n");
+                }
+            }
+            catch { }
+        }
+
         // ✅ MÉTHODE HELPER POUR NETTOYER LE DOSSIER
         private void TryCleanUserDataFolder(string userDataDir)
         {
@@ -870,12 +967,12 @@ namespace SocialNetworkArmy.Forms
                 logTextBox.AppendText("[INFO] Attempting to clean user data folder...\r\n");
 
                 var lockFiles = new[] {
-            "Singleton Lock",
-            "lockfile",
-            "Singleton Cookie",
-            "Singleton Socket",
-            "GPUCache"
-        };
+                    "Singleton Lock",
+                    "lockfile",
+                    "Singleton Cookie",
+                    "Singleton Socket",
+                    "GPUCache"
+                };
 
                 foreach (var lockFile in lockFiles)
                 {
@@ -953,6 +1050,7 @@ namespace SocialNetworkArmy.Forms
                 }
             }
         }
+
         private bool IsProfileInUse(string profileDir)
         {
             try
@@ -976,6 +1074,7 @@ namespace SocialNetworkArmy.Forms
                 return false; // Autres erreurs = considérer comme disponible
             }
         }
+
         private async Task CopyCookiesFromMainProfile(string mainDir, string targetDir)
         {
             try
@@ -1013,12 +1112,6 @@ namespace SocialNetworkArmy.Forms
                     // Copier aussi Local Storage
                     var localStorageDir = Path.Combine(mainDir, "Default", "Local Storage");
                     var targetLocalStorageDir = Path.Combine(targetDir, "Default", "Local Storage");
-
-                    if (Directory.Exists(localStorageDir))
-                    {
-                        CopyDirectory(localStorageDir, targetLocalStorageDir);
-                        logTextBox.AppendText("[INFO] ✓ LocalStorage copied from Main session\r\n");
-                    }
                 }
                 else
                 {
@@ -1028,29 +1121,6 @@ namespace SocialNetworkArmy.Forms
             catch (Exception ex)
             {
                 logTextBox.AppendText($"[WARN] Could not copy cookies: {ex.Message}\r\n");
-            }
-        }
-
-        // ✅ AJOUTER helper pour copier dossier récursivement
-        private void CopyDirectory(string sourceDir, string targetDir)
-        {
-            Directory.CreateDirectory(targetDir);
-
-            foreach (var file in Directory.GetFiles(sourceDir))
-            {
-                var fileName = Path.GetFileName(file);
-                var targetFile = Path.Combine(targetDir, fileName);
-                try
-                {
-                    File.Copy(file, targetFile, true);
-                }
-                catch { /* Skip locked files */ }
-            }
-
-            foreach (var dir in Directory.GetDirectories(sourceDir))
-            {
-                var dirName = Path.GetFileName(dir);
-                CopyDirectory(dir, Path.Combine(targetDir, dirName));
             }
         }
 
@@ -1110,6 +1180,7 @@ namespace SocialNetworkArmy.Forms
                 urlTextBox.Text = webView.Source.ToString();
             }
         }
+
         private void BackButton_Click(object sender, EventArgs e)
         {
             if (webView.CoreWebView2.CanGoBack)
@@ -1117,6 +1188,7 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.GoBack();
             }
         }
+
         private void ForwardButton_Click(object sender, EventArgs e)
         {
             if (webView.CoreWebView2.CanGoForward)
@@ -1124,10 +1196,12 @@ namespace SocialNetworkArmy.Forms
                 webView.CoreWebView2.GoForward();
             }
         }
+
         private void RefreshButton_Click(object sender, EventArgs e)
         {
             webView.CoreWebView2.Reload();
         }
+
         private void UrlTextBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
@@ -1141,6 +1215,7 @@ namespace SocialNetworkArmy.Forms
                 e.SuppressKeyPress = true;
             }
         }
+
         private async Task<string> GetPublicIpAsync()
         {
             try
@@ -1154,6 +1229,7 @@ namespace SocialNetworkArmy.Forms
                 return null;
             }
         }
+
         private async Task<(string city, string country)> GetLocationAsync(string ip)
         {
             if (string.IsNullOrEmpty(ip))
@@ -1161,13 +1237,15 @@ namespace SocialNetworkArmy.Forms
                 logTextBox.AppendText("[Location] Invalid IP provided\r\n");
                 return ("Unknown", "Unknown");
             }
+
             var services = new[]
             {
-new { Url = $"https://ipapi.co/{ip}/json/", Name = "ipapi.co", Parser = (Func<string, (string, string)>)ParseIpApiCo },
-new { Url = $"https://ipwhois.app/json/{ip}", Name = "ipwhois.app", Parser = (Func<string, (string, string)>)ParseIpWhois },
-new { Url = $"https://freeipapi.com/api/json/{ip}", Name = "freeipapi.com", Parser = (Func<string, (string, string)>)ParseFreeIpApi },
-new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<string, (string, string)>)ParseIpApiCom }
-};
+                new { Url = $"https://ipapi.co/{ip}/json/", Name = "ipapi.co", Parser = (Func<string, (string, string)>)ParseIpApiCo },
+                new { Url = $"https://ipwhois.app/json/{ip}", Name = "ipwhois.app", Parser = (Func<string, (string, string)>)ParseIpWhois },
+                new { Url = $"https://freeipapi.com/api/json/{ip}", Name = "freeipapi.com", Parser = (Func<string, (string, string)>)ParseFreeIpApi },
+                new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<string, (string, string)>)ParseIpApiCom }
+            };
+
             foreach (var service in services)
             {
                 try
@@ -1205,6 +1283,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             logTextBox.AppendText("[Location] All services failed\r\n");
             return ("Unknown", "Unknown");
         }
+
         private async void ScrollHomeButton_Click(object sender, EventArgs e)
         {
             if (scrollHomeService == null)
@@ -1213,9 +1292,9 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 return;
             }
 
-
             await scrollHomeService.RunAsync(GetCancellationToken());
         }
+
         private (string city, string country) ParseIpApiCo(string json)
         {
             try
@@ -1236,6 +1315,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 return ("Unknown", "Unknown");
             }
         }
+
         private (string city, string country) ParseIpWhois(string json)
         {
             try
@@ -1254,6 +1334,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 return ("Unknown", "Unknown");
             }
         }
+
         private (string city, string country) ParseFreeIpApi(string json)
         {
             try
@@ -1268,6 +1349,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 return ("Unknown", "Unknown");
             }
         }
+
         private (string city, string country) ParseIpApiCom(string json)
         {
             try
@@ -1286,6 +1368,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 return ("Unknown", "Unknown");
             }
         }
+
         private string FormatLocationShort(string city, string country)
         {
             if (city != "Unknown" && country != "Unknown")
@@ -1302,7 +1385,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             }
             return "";
         }
-       
+
         public async Task StartScriptAsync(string actionName)
         {
             if (isScriptRunning)
@@ -1324,6 +1407,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             if (webView?.CoreWebView2 != null)
                 await webView.ExecuteScriptAsync("window.isRunning = true; console.log('Script started');");
         }
+
         public void StopScript()
         {
             if (!isScriptRunning) return;
@@ -1339,10 +1423,12 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 logTextBox.AppendText($"Stop error (ignored): {ex.Message}\r\n");
             }
         }
+
         public CancellationToken GetCancellationToken()
         {
             return _cts?.Token ?? CancellationToken.None;
         }
+
         public void ScriptCompleted()
         {
             isScriptRunning = false;
@@ -1356,6 +1442,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             //testButton.Enabled = true;
             logTextBox.AppendText("Script stopped successfully.\r\n");
         }
+
         private async void TargetButton_Click(object sender, EventArgs e)
         {
             if (targetService == null)
@@ -1365,6 +1452,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             }
             await targetService.RunAsync();
         }
+
         private async void ScrollButton_Click(object sender, EventArgs e)
         {
             if (scrollService == null)
@@ -1374,6 +1462,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             }
             await scrollService.RunAsync();
         }
+
         private async void PublishButton_Click(object sender, EventArgs e)
         {
             try
@@ -1382,10 +1471,10 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 string caption = null;
                 bool autoPublish = true;
                 await publishService.RunAsync(
-                Array.Empty<string>(),
-                caption: caption,
-                autoPublish: autoPublish,
-                token: GetCancellationToken());
+                    Array.Empty<string>(),
+                    caption: caption,
+                    autoPublish: autoPublish,
+                    token: GetCancellationToken());
                 logTextBox.AppendText("[Publish] Script completed.\r\n");
             }
             catch (Exception ex)
@@ -1393,6 +1482,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 logTextBox.AppendText($"[Publish] ERROR: {ex.Message}\r\n");
             }
         }
+
         private async void DmButton_Click(object sender, EventArgs e)
         {
             try
@@ -1406,6 +1496,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 logTextBox.AppendText($"[DM] ERROR: {ex.Message}\r\n");
             }
         }
+
         private void InitializeServices()
         {
             try
@@ -1465,7 +1556,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 AreServicesReady = false;
             }
         }
-       
+
         private async void DownloadButton_Click(object sender, EventArgs e)
         {
             if (downloadService == null)
@@ -1494,10 +1585,12 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
             }
             await testService.RunAsync();
         }
+
         private void StopButton_Click(object sender, EventArgs e)
         {
             StopScript();
         }
+
         public void ForceClose()
         {
             try
@@ -1518,6 +1611,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 System.Diagnostics.Debug.WriteLine($"ForceClose error: {ex.Message}");
             }
         }
+
         public void MaximizeWindowSafe()
         {
             if (this.InvokeRequired)
@@ -1540,6 +1634,68 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                 logTextBox.AppendText($"[WINDOW] Maximize failed: {ex.Message}\r\n");
             }
         }
+
+        private async Task<bool> EnsureWebViewReadyAsync(int maxWaitMs = 10000)
+        {
+            var startTime = DateTime.Now;
+
+            while ((DateTime.Now - startTime).TotalMilliseconds < maxWaitMs)
+            {
+                if (webView?.CoreWebView2 != null)
+                {
+                    try
+                    {
+                        // ✅ TESTER SI WEBVIEW2 RÉPOND
+                        var result = await webView.CoreWebView2.ExecuteScriptAsync("1+1");
+                        if (result == "2")
+                        {
+                            logTextBox.AppendText("[INFO] ✓ WebView2 is responsive\r\n");
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        // Pas encore prêt
+                    }
+                }
+
+                await Task.Delay(500);
+            }
+
+            logTextBox.AppendText("[ERROR] ✗ WebView2 timeout\r\n");
+            return false;
+        }
+        private async Task TrySaveCookiesAsync(string userDataDir)
+        {
+            try
+            {
+                var cookiesSource = Path.Combine(userDataDir, "Default", "Cookies");
+
+                // Attendre que le fichier soit stable
+                if (File.Exists(cookiesSource))
+                {
+                    long lastSize = 0;
+                    for (int i = 0; i < 6; i++) // Max 3 secondes
+                    {
+                        var currentSize = new FileInfo(cookiesSource).Length;
+                        if (currentSize == lastSize && currentSize > 0)
+                            break;
+                        lastSize = currentSize;
+                        await Task.Delay(500);
+                    }
+
+                    await sharedCookiesService.SaveSharedCookiesAsync(
+                        Path.Combine(userDataDir, "Default"),
+                        msg => SafeLog(msg)
+                    );
+                    SafeLog("[Cookies] ✓ Saved to shared location");
+                }
+            }
+            catch (Exception ex)
+            {
+                SafeLog($"[Cookies] Save failed: {ex.Message}");
+            }
+        }
         protected override void Dispose(bool disposing)
         {
             if (isDisposing) return;
@@ -1553,8 +1709,6 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
 
                     if (webView != null && !webView.IsDisposed)
                     {
-                      
-
                         try
                         {
                             webView.Dispose();
@@ -1577,7 +1731,7 @@ new { Url = $"http://ip-api.com/json/{ip}", Name = "ip-api.com", Parser = (Func<
                     _cts?.Dispose();
 
                     Sergoe?.Dispose();
-                    closeTimer?.Dispose();
+                    
                 }
                 catch (Exception ex)
                 {
