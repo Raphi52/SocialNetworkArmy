@@ -31,11 +31,9 @@ namespace SocialNetworkArmy.Forms
         // ✅ NOUVEAU: Fingerprinting pour stealth 10/10
         private readonly FingerprintService fingerprintService;
         private readonly Models.Fingerprint fingerprint;
-        // Dimensions Samsung Galaxy S23 (mode portrait)
-        private const int DEVICE_WIDTH = 360;
-        private const int DEVICE_HEIGHT = 780;
-        private const double DEVICE_PIXEL_RATIO = 3.0;
-
+        // Device dimensions extracted from fingerprint
+        private readonly int deviceWidth;
+        private readonly int deviceHeight;
         private Font yaheiBold10 = new Font("Microsoft YaHei", 9f, FontStyle.Bold);
         private Panel bottomPanel;
 
@@ -44,460 +42,6 @@ namespace SocialNetworkArmy.Forms
         private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
       
 
-        // ✅ SCRIPT STEALTH FINAL - TOUTES LES CORRECTIONS
-        // REMPLACER LA CONSTANTE STEALTH_SCRIPT dans StoryPosterForm.cs
-
-        private const string STEALTH_SCRIPT = @"
-(function() {
-    'use strict';
-    
-    // ========== 1. WEBDRIVER (RENFORCÉ) ==========
-    Object.defineProperty(navigator, 'webdriver', {
-        get: () => undefined,
-        configurable: true
-    });
-    delete navigator.__proto__.webdriver;
-    
-    const originalNavigator = navigator;
-    delete Object.getPrototypeOf(navigator).webdriver;
-
-    // ========== 2. AUTOMATION FLAGS CLEANUP (ÉTENDU) ==========
-    const automationProps = [
-        '__webdriver_evaluate', '__selenium_evaluate', '__webdriver_script_function',
-        '__driver_evaluate', '__webdriver_unwrapped', '__fxdriver_unwrapped',
-        '__webdriver_script_fn', '__selenium_unwrapped', '__driver_unwrapped',
-        'cdc_adoQpoasnfa76pfcZLmcfl_Array', 'cdc_adoQpoasnfa76pfcZLmcfl_Promise',
-        'cdc_adoQpoasnfa76pfcZLmcfl_Symbol', '$cdc_asdjflasutopfhvcZLmcfl_',
-        '$chrome_asyncScriptInfo', '__$webdriverAsyncExecutor', '_Selenium_IDE_Recorder',
-        'callSelenium', '_selenium', '__nightmare', 'domAutomation', 
-        'domAutomationController', '__fxdriver_unwrapped', '__webdriver_script_func'
-    ];
-
-    automationProps.forEach(prop => {
-        try { delete window[prop]; delete document[prop]; delete navigator[prop]; } catch(e) {}
-    });
-
-    // ========== 3. CHROME RUNTIME (MASQUÉ) ==========
-    if (window.chrome && window.chrome.runtime) {
-        delete window.chrome.runtime;
-        Object.defineProperty(window.chrome, 'runtime', {
-            get: () => undefined,
-            configurable: true
-        });
-    }
-
-    // ========== 4. PERMISSIONS API ==========
-    const originalQuery = window.navigator.permissions.query;
-    window.navigator.permissions.query = (parameters) => {
-        const fakePermissions = {
-            'notifications': 'prompt',
-            'geolocation': 'prompt',
-            'camera': 'prompt',
-            'microphone': 'prompt',
-            'persistent-storage': 'prompt'
-        };
-        return Promise.resolve({
-            state: fakePermissions[parameters.name] || 'prompt',
-            onchange: null
-        });
-    };
-
-    Object.defineProperty(Notification, 'permission', {
-        get: () => 'default',
-        configurable: true
-    });
-
-    // ========== 5. LANGUAGES ==========
-    Object.defineProperty(navigator, 'languages', {
-        get: () => ['en-US', 'en', 'fr-FR', 'fr'],
-        configurable: true
-    });
-
-    Object.defineProperty(navigator, 'language', {
-        get: () => 'en-US',
-        configurable: true
-    });
-
-    // ========== 6. PLUGINS (MOBILE RÉALISTE) ==========
-    Object.defineProperty(navigator, 'plugins', {
-        get: () => {
-            const plugins = [
-                { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' },
-                { name: 'Chromium PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }
-            ];
-            plugins.item = (index) => plugins[index] || null;
-            plugins.namedItem = (name) => plugins.find(p => p.name === name) || null;
-            plugins.refresh = () => {};
-            plugins[Symbol.iterator] = function*() { for (let p of plugins) yield p; };
-            return Object.setPrototypeOf(plugins, PluginArray.prototype);
-        },
-        configurable: true
-    });
-
-    // ========== 7. SCREEN DIMENSIONS MOBILE ==========
-    const w = __WIDTH__;
-    const h = __HEIGHT__;
-    const dpr = __DPR__;
-
-    Object.defineProperty(window, 'devicePixelRatio', {
-        get: () => dpr,
-        configurable: true
-    });
-
-    Object.defineProperty(window.screen, 'width', {
-        get: () => w,
-        configurable: true
-    });
-
-    Object.defineProperty(window.screen, 'height', {
-        get: () => h,
-        configurable: true
-    });
-
-    Object.defineProperty(window.screen, 'availWidth', {
-        get: () => w,
-        configurable: true
-    });
-
-    Object.defineProperty(window.screen, 'availHeight', {
-        get: () => h - 24,
-        configurable: true
-    });
-    
-    Object.defineProperty(screen, 'colorDepth', {
-        get: () => 24,
-        configurable: true
-    });
-    
-    Object.defineProperty(screen, 'pixelDepth', {
-        get: () => 24,
-        configurable: true
-    });
-
-    // ========== 8. TOUCH SUPPORT ==========
-    Object.defineProperty(navigator, 'maxTouchPoints', {
-        get: () => 5,
-        configurable: true
-    });
-    
-    // Ajouter touch events
-    if (!('ontouchstart' in window)) {
-        window.ontouchstart = null;
-        document.ontouchstart = null;
-    }
-
-    // ========== 9. SCREEN ORIENTATION (MOBILE) ==========
-    Object.defineProperty(window.screen, 'orientation', {
-        get: () => ({
-            type: 'portrait-primary',
-            angle: 0,
-            lock: () => Promise.resolve(),
-            unlock: () => {},
-            addEventListener: () => {},
-            removeEventListener: () => {},
-            dispatchEvent: () => true,
-            onchange: null
-        }),
-        configurable: true
-    });
-
-    // ========== 10. VIEWPORT META ==========
-    const setupViewport = () => {
-        if (document.head) {
-            let meta = document.querySelector('meta[name=viewport]');
-            if (!meta) {
-                meta = document.createElement('meta');
-                meta.name = 'viewport';
-                document.head.appendChild(meta);
-            }
-            meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
-            return true;
-        }
-        return false;
-    };
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', setupViewport);
-    } else {
-        setupViewport();
-    }
-
-    // ========== 11. CONNECTION API (4G MOBILE) ==========
-    Object.defineProperty(navigator, 'connection', {
-        get: () => ({
-            effectiveType: '4g',
-            downlink: 10,
-            rtt: 50,
-            saveData: false,
-            type: 'cellular',
-            downlinkMax: Infinity,
-            addEventListener: () => {},
-            removeEventListener: () => {},
-            dispatchEvent: () => true,
-            onchange: null
-        }),
-        configurable: true
-    });
-
-    // ========== 12. USER AGENT DATA (FIXÉ POUR MOBILE) ==========
-    if (navigator.userAgentData) {
-        Object.defineProperty(navigator.userAgentData, 'brands', {
-            get: () => [
-                { brand: 'Not A(Brand', version: '8' },
-                { brand: 'Chromium', version: '130' },
-                { brand: 'Google Chrome', version: '130' }
-            ],
-            configurable: true
-        });
-        
-        Object.defineProperty(navigator.userAgentData, 'mobile', {
-            get: () => true,
-            configurable: true
-        });
-        
-        Object.defineProperty(navigator.userAgentData, 'platform', {
-            get: () => 'Android',
-            configurable: true
-        });
-    }
-    
-    // ========== 13. PLATFORM ==========
-    Object.defineProperty(navigator, 'platform', {
-        get: () => 'Linux armv81',
-        configurable: true
-    });
-    
-    Object.defineProperty(navigator, 'vendor', {
-        get: () => 'Google Inc.',
-        configurable: true
-    });
-    
-    Object.defineProperty(navigator, 'productSub', {
-        get: () => '20030107',
-        configurable: true
-    });
-    
-    Object.defineProperty(navigator, 'vendorSub', {
-        get: () => '',
-        configurable: true
-    });
-
-    // ========== 14. CANVAS FINGERPRINT NOISE (AMÉLIORÉ) ==========
-    const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-    const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-    
-    const noisify = function(imageData) {
-        const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) {
-            const noise = Math.random() > 0.5 ? 1 : -1;
-            data[i] = data[i] + noise * Math.floor(Math.random() * 3);
-            data[i + 1] = data[i + 1] + noise * Math.floor(Math.random() * 3);
-            data[i + 2] = data[i + 2] + noise * Math.floor(Math.random() * 3);
-        }
-        return imageData;
-    };
-    
-    CanvasRenderingContext2D.prototype.getImageData = function() {
-        const imageData = originalGetImageData.apply(this, arguments);
-        return noisify(imageData);
-    };
-    
-    HTMLCanvasElement.prototype.toDataURL = function(type) {
-        if (this.width === 0 || this.height === 0) return originalToDataURL.apply(this, arguments);
-        
-        const context = this.getContext('2d');
-        if (context) {
-            const imageData = context.getImageData(0, 0, this.width, this.height);
-            noisify(imageData);
-            context.putImageData(imageData, 0, 0);
-        }
-        return originalToDataURL.apply(this, arguments);
-    };
-
-    // ========== 15. WEBGL FINGERPRINT (MOBILE GPU) ==========
-    const getParameterProxyHandler = {
-        apply: function(target, thisArg, args) {
-            const param = args[0];
-            const result = Reflect.apply(target, thisArg, args);
-            
-            if (param === 37445) { // UNMASKED_VENDOR_WEBGL
-                return 'Qualcomm';
-            }
-            if (param === 37446) { // UNMASKED_RENDERER_WEBGL
-                return 'Adreno (TM) 740';
-            }
-            
-            return result;
-        }
-    };
-    
-    const contextProxyHandler = {
-        get: function(target, prop) {
-            if (prop === 'getParameter') {
-                return new Proxy(target[prop], getParameterProxyHandler);
-            }
-            return target[prop];
-        }
-    };
-    
-    const originalGetContext = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function() {
-        const context = originalGetContext.apply(this, arguments);
-        if (arguments[0] === 'webgl' || arguments[0] === 'webgl2' || arguments[0] === 'experimental-webgl') {
-            return new Proxy(context, contextProxyHandler);
-        }
-        return context;
-    };
-
-    // ========== 16. BATTERY STATUS (MOBILE) ==========
-    if (navigator.getBattery) {
-        const originalGetBattery = navigator.getBattery;
-        navigator.getBattery = function() {
-            return originalGetBattery().then(battery => {
-                Object.defineProperties(battery, {
-                    charging: { get: () => false },
-                    chargingTime: { get: () => Infinity },
-                    dischargingTime: { get: () => 7200 + Math.random() * 3600 },
-                    level: { get: () => 0.65 + Math.random() * 0.3 }
-                });
-                return battery;
-            });
-        };
-    }
-    
-    // ========== 17. MEDIA DEVICES (MOBILE) ==========
-    if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
-        const originalEnumerateDevices = navigator.mediaDevices.enumerateDevices;
-        navigator.mediaDevices.enumerateDevices = function() {
-            return Promise.resolve([
-                {
-                    deviceId: 'default',
-                    kind: 'audioinput',
-                    label: 'Microphone',
-                    groupId: 'default'
-                },
-                {
-                    deviceId: 'default',
-                    kind: 'audiooutput',
-                    label: 'Speaker',
-                    groupId: 'default'
-                },
-                {
-                    deviceId: 'front_camera',
-                    kind: 'videoinput',
-                    label: 'Front Camera',
-                    groupId: 'camera_group'
-                },
-                {
-                    deviceId: 'back_camera',
-                    kind: 'videoinput',
-                    label: 'Back Camera',
-                    groupId: 'camera_group'
-                }
-            ]);
-        };
-    }
-    
-    // ========== 18. HEADLESS DETECTION ==========
-    Object.defineProperty(navigator, 'headless', {
-        get: () => false
-    });
-    
-    // ========== 19. OBJECT.GETOWNPROPERTYDESCRIPTOR OVERRIDE ==========
-    const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
-    Object.getOwnPropertyDescriptor = function(obj, prop) {
-        if (prop === 'webdriver') {
-            return undefined;
-        }
-        return originalGetOwnPropertyDescriptor(obj, prop);
-    };
-    
-    // ========== 20. FUNCTION TOSTRING PROTECTION ==========
-    const originalFunctionToString = Function.prototype.toString;
-    Function.prototype.toString = function() {
-        if (this === originalGetImageData || 
-            this === originalToDataURL || 
-            this === originalGetContext ||
-            this === originalQuery) {
-            return originalFunctionToString.call(Function.prototype.toString);
-        }
-        return originalFunctionToString.call(this);
-    };
-    
-    // ========== 21. IFRAME DETECTION BYPASS ==========
-    Object.defineProperty(window, 'top', {
-        get: function() {
-            return window;
-        }
-    });
-    
-    Object.defineProperty(window, 'frameElement', {
-        get: function() {
-            return null;
-        }
-    });
-    
-    // ========== 22. PERFORMANCE TIMING ==========
-    if (window.performance && window.performance.timing) {
-        const originalTiming = window.performance.timing;
-        Object.defineProperty(window.performance, 'timing', {
-            get: function() {
-                const timing = {};
-                for (let key in originalTiming) {
-                    if (typeof originalTiming[key] === 'number') {
-                        timing[key] = originalTiming[key] + Math.floor(Math.random() * 10);
-                    } else {
-                        timing[key] = originalTiming[key];
-                    }
-                }
-                return timing;
-            }
-        });
-    }
-    
-    // ========== 23. USER ACTIVATION ==========
-    if (navigator.userActivation) {
-        Object.defineProperty(navigator.userActivation, 'hasBeenActive', {
-            get: () => true
-        });
-        Object.defineProperty(navigator.userActivation, 'isActive', {
-            get: () => true
-        });
-    }
-    
-    // ========== 24. HARDWARE CONCURRENCY (MOBILE) ==========
-    Object.defineProperty(navigator, 'hardwareConcurrency', {
-        get: () => 8,
-        configurable: true
-    });
-    
-    Object.defineProperty(navigator, 'deviceMemory', {
-        get: () => 8,
-        configurable: true
-    });
-    
-    // ========== 25. DO NOT TRACK ==========
-    Object.defineProperty(navigator, 'doNotTrack', {
-        get: () => null,
-        configurable: true
-    });
-    
-    // ========== 26. CONSOLE LOG PROTECTION ==========
-    const originalConsoleLog = console.log;
-    console.log = function(...args) {
-        const message = args.join(' ');
-        if (message.includes('webdriver') || 
-            message.includes('automation') || 
-            message.includes('headless')) {
-            return;
-        }
-        return originalConsoleLog.apply(console, args);
-    };
-
-    console.log('🛡️ Instagram Story ultra-stealth mode (26 layers - MOBILE)');
-})();
-";
 
         public StoryPosterForm(Profile profile)
         {
@@ -515,6 +59,11 @@ namespace SocialNetworkArmy.Forms
             fingerprintService = new FingerprintService();
             fingerprint = fingerprintService.GenerateMobileFingerprint();
 
+            // Extract dimensions from fingerprint resolution (e.g., "360x800")
+            var resParts = fingerprint.ScreenResolution.Split('x');
+            deviceWidth = int.Parse(resParts[0]);
+            deviceHeight = int.Parse(resParts[1]);
+
             InitializeComponent();
             if (Environment.OSVersion.Version.Major >= 10)
             {
@@ -530,17 +79,17 @@ namespace SocialNetworkArmy.Forms
         {
             this.BackColor = Color.FromArgb(15, 15, 15);
             this.ForeColor = Color.White;
-            this.ClientSize = new Size(DEVICE_WIDTH + 20, DEVICE_HEIGHT + 140);
+            this.ClientSize = new Size(deviceWidth + 20, deviceHeight + 140);
             this.Text = $"📱 Story - {profile.Name}";
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.MinimumSize = new Size(DEVICE_WIDTH + 20, 700);
+            this.MinimumSize = new Size(deviceWidth + 20, 700);
 
             // WebView avec ombre
             webView = new WebView2
             {
                 Location = new Point(10, 10),
-                Size = new Size(DEVICE_WIDTH, DEVICE_HEIGHT),
+                Size = new Size(deviceWidth, deviceHeight),
                 BackColor = Color.Black,
                 Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
@@ -548,7 +97,7 @@ namespace SocialNetworkArmy.Forms
             // Bottom Panel transparent
             bottomPanel = new Panel
             {
-                Location = new Point(0, DEVICE_HEIGHT + 20),
+                Location = new Point(0, deviceHeight + 20),
                 Size = new Size(this.ClientSize.Width, 120),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent,
@@ -559,7 +108,7 @@ namespace SocialNetworkArmy.Forms
             var logPanel = new Panel
             {
                 Location = new Point(10, 10),
-                Size = new Size(DEVICE_WIDTH - 130, 100),
+                Size = new Size(deviceWidth - 130, 100),
                 BackColor = Color.Transparent
             };
 
@@ -582,7 +131,7 @@ namespace SocialNetworkArmy.Forms
             postStoryButton = new Button
             {
                 Text = "📤 Post Story",
-                Location = new Point(DEVICE_WIDTH - 110, 10),
+                Location = new Point(deviceWidth - 110, 10),
                 Size = new Size(120, 100),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(156, 39, 176),
@@ -640,7 +189,7 @@ namespace SocialNetworkArmy.Forms
                         "--no-first-run " +
                         "--no-default-browser-check " +
                         "--autoplay-policy=no-user-gesture-required " +
-                        $"--window-size={DEVICE_WIDTH},{DEVICE_HEIGHT} " +
+                        $"--window-size={deviceWidth},{deviceHeight} " +
                         $"--user-agent=\"{fingerprint.UserAgent}\""
                 };
 
@@ -659,14 +208,11 @@ namespace SocialNetworkArmy.Forms
                 await webView.EnsureCoreWebView2Async(env);
                 logTextBox.AppendText("[OK] WebView2 ready\r\n");
 
-                // ✅ FIX: Replace tokens before injecting (WIDTH, HEIGHT, DPR)
-                var stealthScript = STEALTH_SCRIPT
-                    .Replace("__WIDTH__", DEVICE_WIDTH.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                    .Replace("__HEIGHT__", DEVICE_HEIGHT.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                    .Replace("__DPR__", DEVICE_PIXEL_RATIO.ToString(System.Globalization.CultureInfo.InvariantCulture));
-
+                // ✅ USE FingerprintService full mode for stories (better stealth for media upload)
+                // Full mode includes Canvas/Audio/WebGL spoofing for maximum stealth on story uploads
+                var stealthScript = fingerprintService.GenerateJSSpoof(fingerprint);
                 await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
-                logTextBox.AppendText("[OK] Mobile stealth script injected (360x780, portrait)\r\n");
+                logTextBox.AppendText("[OK] Mobile stealth script injected (Full mode with fingerprint)\r\n");
 
                 webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
                 webView.CoreWebView2.Settings.IsScriptEnabled = true;

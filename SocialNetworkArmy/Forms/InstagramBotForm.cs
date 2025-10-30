@@ -61,47 +61,6 @@ namespace SocialNetworkArmy.Forms
         private bool isWebViewReady = false;
         private bool isDisposing = false;
 
-        // ✅ CONSTANTES POUR LE STEALTH SCRIPT
-        private const int DEVICE_WIDTH = 1920;
-        private const int DEVICE_HEIGHT = 1080;
-        private const double DEVICE_PIXEL_RATIO = 1.0;
-
-        // ✅ STEALTH SCRIPT TEMPLATE
-        private const string STEALTH_SCRIPT = @"
-            (function() {
-                // Override navigator properties
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: () => false
-                });
-                
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['en-US', 'en']
-                });
-                
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [1, 2, 3, 4, 5]
-                });
-
-                // Override screen properties
-                Object.defineProperty(screen, 'width', {
-                    get: () => __WIDTH__
-                });
-                
-                Object.defineProperty(screen, 'height', {
-                    get: () => __HEIGHT__
-                });
-                
-                Object.defineProperty(window, 'devicePixelRatio', {
-                    get: () => __DPR__
-                });
-
-                // Remove automation traces
-                delete navigator.__proto__.webdriver;
-                
-                console.log('Stealth mode activated');
-            })();
-        ";
-
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
@@ -644,10 +603,11 @@ namespace SocialNetworkArmy.Forms
                         return;
                     }
 
-                    // ✅ PREPARE AND INJECT STEALTH SCRIPT
-                    var stealthScript = PrepareStealthScript();
+                    // ✅ PREPARE AND INJECT STEALTH SCRIPT (using FingerprintService Light mode)
+                    // Light mode avoids breaking Instagram publish buttons while maintaining basic stealth
+                    var stealthScript = fingerprintService.GenerateJSSpoofLight(fingerprint);
                     await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(stealthScript);
-                    logTextBox.AppendText("[OK] Stealth script injected\r\n");
+                    logTextBox.AppendText("[OK] Stealth script injected (Light mode for stability)\r\n");
                 }
                 catch (Exception ex)
                 {
@@ -918,31 +878,7 @@ namespace SocialNetworkArmy.Forms
             }
         }
 
-        private string PrepareStealthScript()
-        {
-            // ✅ VÉRIFIER QUE LES TOKENS SONT PRÉSENTS
-            if (!STEALTH_SCRIPT.Contains("__WIDTH__") ||
-                !STEALTH_SCRIPT.Contains("__HEIGHT__") ||
-                !STEALTH_SCRIPT.Contains("__DPR__"))
-            {
-                logTextBox.AppendText("[ERROR] Stealth script tokens missing!\r\n");
-                throw new InvalidOperationException("Stealth script is malformed");
-            }
-
-            var script = STEALTH_SCRIPT
-                .Replace("__WIDTH__", DEVICE_WIDTH.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                .Replace("__HEIGHT__", DEVICE_HEIGHT.ToString(System.Globalization.CultureInfo.InvariantCulture))
-                .Replace("__DPR__", DEVICE_PIXEL_RATIO.ToString(System.Globalization.CultureInfo.InvariantCulture));
-
-            // ✅ VÉRIFIER QU'AUCUN TOKEN N'EST RESTÉ
-            if (script.Contains("__WIDTH__") || script.Contains("__HEIGHT__") || script.Contains("__DPR__"))
-            {
-                logTextBox.AppendText("[ERROR] Token replacement failed!\r\n");
-                throw new InvalidOperationException("Token replacement incomplete");
-            }
-
-            return script;
-        }
+        // ✅ PrepareStealthScript() removed - now using FingerprintService.GenerateJSSpoofLight()
 
         private void SafeLog(string message)
         {
